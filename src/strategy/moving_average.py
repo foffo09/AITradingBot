@@ -20,12 +20,16 @@ class MovingAverageStrategy:
         return series.rolling(window=self.short_window, min_periods=self.short_window).mean()
 
     def generate_signals(self, market_data: pd.DataFrame) -> pd.DataFrame:
-        if market_data.empty:
-            return market_data.copy()
-
         df = market_data.copy()
         if "close" not in df.columns:
             raise ValueError("Dataframe must include 'close' prices.")
+
+        if market_data.empty:
+            df["short_ma"] = pd.Series(index=df.index, dtype=float)
+            df["long_ma"] = pd.Series(index=df.index, dtype=float)
+            df["signal"] = pd.Series(index=df.index, dtype=int)
+            df["signal_reason"] = pd.Series(index=df.index, dtype=object)
+            return df
 
         df["short_ma"] = df["close"].rolling(window=self.short_window, min_periods=self.short_window).mean()
         df["long_ma"] = df["close"].rolling(window=self.long_window, min_periods=self.long_window).mean()
@@ -47,10 +51,29 @@ class MovingAverageStrategy:
 
     def current_signal(self, market_data: pd.DataFrame) -> dict[str, object]:
         signals = self.generate_signals(market_data)
+        if signals.empty:
+            return {
+                "signal": 0,
+                "short_ma": None,
+                "long_ma": None,
+                "reason": "insufficient data: no price bars available",
+            }
         latest = signals.iloc[-1]
+        short_ma = latest["short_ma"]
+        long_ma = latest["long_ma"]
+        if pd.isna(short_ma) or pd.isna(long_ma):
+            return {
+                "signal": 0,
+                "short_ma": None,
+                "long_ma": None,
+                "reason": (
+                    f"insufficient data: at least {self.long_window} valid price bars "
+                    "are required"
+                ),
+            }
         return {
             "signal": int(latest.get("signal", 0)),
-            "short_ma": float(latest.get("short_ma", 0.0)),
-            "long_ma": float(latest.get("long_ma", 0.0)),
+            "short_ma": float(short_ma),
+            "long_ma": float(long_ma),
             "reason": str(latest.get("signal_reason", "hold")),
         }

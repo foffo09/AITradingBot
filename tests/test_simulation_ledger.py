@@ -3,7 +3,61 @@ from datetime import datetime, timezone
 
 import pytest
 
-from src.simulation.ledger import SimulationLedger
+from src.simulation.ledger import (
+    SimulationLedger,
+    resolve_simulation_database_path,
+)
+
+
+def test_demo_database_uses_isolated_file_and_preserves_personal_ledger(tmp_path):
+    project_root = tmp_path / "project"
+    personal_database = project_root / "data" / "simulation.sqlite3"
+    personal_database.parent.mkdir(parents=True)
+    personal_database.write_bytes(b"personal ledger sentinel")
+    demo_database = tmp_path / "LocalAppData" / "AITradingBot" / "demo" / "simulation.sqlite3"
+
+    resolved_path = resolve_simulation_database_path(project_root, demo_database)
+    ledger = SimulationLedger(resolved_path)
+
+    assert resolved_path == demo_database.resolve()
+    assert ledger.database_path == resolved_path
+    assert resolved_path.is_file()
+    assert personal_database.read_bytes() == b"personal ledger sentinel"
+
+
+def test_default_database_path_remains_the_project_ledger(tmp_path):
+    assert resolve_simulation_database_path(tmp_path) == (
+        tmp_path / "data" / "simulation.sqlite3"
+    ).resolve()
+
+
+@pytest.mark.parametrize(
+    ("configured_path", "message"),
+    [
+        ("", "path is required"),
+        ("relative-demo.sqlite3", "absolute path"),
+    ],
+)
+def test_demo_database_rejects_missing_or_relative_path(
+    tmp_path, configured_path, message
+):
+    with pytest.raises(ValueError, match=message):
+        resolve_simulation_database_path(tmp_path, configured_path)
+
+
+def test_demo_database_rejects_personal_ledger_path(tmp_path):
+    personal_database = tmp_path / "data" / "simulation.sqlite3"
+
+    with pytest.raises(ValueError, match="personal simulation ledger"):
+        resolve_simulation_database_path(tmp_path, personal_database)
+
+
+def test_demo_database_rejects_directory_path(tmp_path):
+    demo_directory = tmp_path / "demo-database"
+    demo_directory.mkdir()
+
+    with pytest.raises(ValueError, match="must be a file path"):
+        resolve_simulation_database_path(tmp_path, demo_directory)
 
 
 def make_ledger(path, rate=1.1):
@@ -65,6 +119,17 @@ def test_fx_initial_capital_costs_and_partial_close_math(tmp_path):
     assert ledger.positions()[0]["quantity"] == pytest.approx(0.6)
     history = ledger.history()
     assert {row["status"] for row in history} == {"open", "closed"}
+    closed_trade = next(row for row in history if row["status"] == "closed")
+    assert closed_trade["gross_pnl"] == pytest.approx(2.0)
+    assert closed_trade["net_pnl"] == pytest.approx(
+        closed_trade["gross_pnl"]
+        - closed_trade["entry_fee_alloc"]
+        - closed_trade["exit_fee"]
+        - closed_trade["entry_spread_alloc"]
+        - closed_trade["exit_spread"]
+        - closed_trade["entry_slippage_alloc"]
+        - closed_trade["exit_slippage"]
+    )
     assert summary["fx_source"] == "test FX"
     assert summary["return_pct"] == pytest.approx(summary["total_pnl"] / 110 * 100)
 

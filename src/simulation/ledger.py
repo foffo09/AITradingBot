@@ -13,6 +13,41 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def resolve_simulation_database_path(
+    project_root: str | Path,
+    demo_database_path: str | Path | None = None,
+) -> Path:
+    """Resolve an optional demo database path without allowing the personal ledger."""
+    root = Path(project_root).resolve()
+    personal_path = (root / "data" / "simulation.sqlite3").resolve()
+    if demo_database_path is None:
+        return personal_path
+    if not str(demo_database_path).strip():
+        raise ValueError("Demo database path is required when demo isolation is configured.")
+
+    configured_path = Path(demo_database_path).expanduser()
+    if not configured_path.is_absolute():
+        raise ValueError("Demo database path must be an absolute path.")
+    try:
+        resolved_path = configured_path.resolve()
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ValueError("Demo database path could not be safely resolved.") from exc
+
+    if resolved_path == personal_path:
+        raise ValueError("Demo database path must not point to the personal simulation ledger.")
+    if resolved_path.exists() and not resolved_path.is_file():
+        raise ValueError("Demo database path must be a file path, not a directory.")
+    if resolved_path.exists() and personal_path.exists():
+        try:
+            if resolved_path.samefile(personal_path):
+                raise ValueError(
+                    "Demo database path must not alias the personal simulation ledger."
+                )
+        except OSError as exc:
+            raise ValueError("Demo database path could not be safely verified.") from exc
+    return resolved_path
+
+
 def _positive(value: float, label: str) -> float:
     number = float(value)
     if not math.isfinite(number) or number <= 0:
@@ -444,7 +479,10 @@ class SimulationLedger:
         with self._connect() as db:
             closed = db.execute(
                 """SELECT t.id, c.id AS close_id, t.symbol, t.opened_at, c.closed_at, t.direction, c.quantity,
-                          t.entry_price, c.exit_price, t.entry_reason, c.exit_reason, c.gross_pnl,
+                          t.entry_price, c.exit_price, t.entry_reason, c.exit_reason,
+                          c.gross_pnl + c.exit_spread + c.exit_slippage
+                              + t.entry_spread*c.quantity/t.quantity
+                              + t.entry_slippage*c.quantity/t.quantity AS gross_pnl,
                           c.net_pnl, c.exit_fee, c.exit_spread, c.exit_slippage,
                           t.entry_fee*c.quantity/t.quantity AS entry_fee_alloc,
                           t.entry_spread*c.quantity/t.quantity AS entry_spread_alloc,
