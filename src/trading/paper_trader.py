@@ -20,6 +20,7 @@ class PaperTrader:
         price: float,
         available_cash: float,
         current_position: float = 0.0,
+        pnl_today: float = 0.0,
     ) -> dict[str, object]:
         if self.settings.trading_mode not in {"paper", "demo"}:
             raise PermissionError("Only demo/paper mode is allowed in this bot.")
@@ -33,6 +34,7 @@ class PaperTrader:
             available_cash=available_cash,
             current_position=current_position,
             symbol=symbol,
+            pnl_today=pnl_today,
         )
         if not result.ok:
             raise RiskViolationError(result.reason)

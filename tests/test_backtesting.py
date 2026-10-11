@@ -22,5 +22,6 @@ def test_backtest_contains_drawdown_and_return_metrics():
 def test_drawdown_calculation_for_equity_curve():
     manager = RiskManager(AppSettings(trading_mode="paper", alpaca_api_key="KEY", alpaca_secret_key="SECRET", paper_trading_enabled=True))
     metrics = manager.compute_drawdown([100, 110, 95, 105, 90, 100])
-    assert metrics["max_drawdown"] >= 0
-    assert metrics["peak"] >= metrics["trough"]
+    assert metrics["max_drawdown"] == 18.18
+    assert metrics["peak"] == 110
+    assert metrics["trough"] == 90
