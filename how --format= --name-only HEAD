@@ -1,0 +1,26 @@
+[33m1090d36[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mprova-ai-locale[m[33m)[m Checkpoint before dashboard redesign
+ .env.example                       |    1 [32m+[m
+ README.md                          |   60 [32m+[m[31m-[m
+ app.py                             | 1778 [32m+++++++++++++++++++++++++++++++++[m[31m---[m
+ avvia_demo.ps1                     |  106 [32m+++[m
+ avvia_paper.ps1                    |  121 [32m+++[m
+ config/settings.py                 |   81 [32m+[m[31m-[m
+ src/backtesting/engine.py          |  320 [32m++++++[m[31m-[m
+ src/backtesting/walk_forward.py    |  192 [32m++++[m
+ src/broker/alpaca_client.py        |  255 [32m+++++[m[31m-[m
+ src/risk/risk_manager.py           |  167 [32m+++[m[31m-[m
+ src/simulation/ledger.py           |   40 [32m+[m[31m-[m
+ src/strategy/moving_average.py     |   33 [32m+[m[31m-[m
+ src/trading/paper_automation.py    |  451 [32m+++++++++[m
+ src/trading/paper_trader.py        |    2 [32m+[m
+ tests/test_backtest_execution.py   |  220 [32m++++[m[31m-[m
+ tests/test_backtesting.py          |    5 [32m+[m[31m-[m
+ tests/test_config.py               |   59 [32m+[m[31m-[m
+ tests/test_dashboard_validation.py |  859 [32m+++++++++++++++++[m
+ tests/test_paper_automation.py     |  464 [32m++++++++++[m
+ tests/test_paper_safety.py         |  500 [32m+++++++++[m[31m-[m
+ tests/test_risk_manager.py         |  174 [32m+++[m[31m-[m
+ tests/test_simulation_ledger.py    |   67 [32m+[m[31m-[m
+ tests/test_strategy.py             |   46 [32m+[m
+ tests/test_walk_forward.py         |  230 [32m+++++[m
+ 24 files changed, 5999 insertions(+), 232 deletions(-)
