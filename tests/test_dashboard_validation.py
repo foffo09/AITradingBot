@@ -339,7 +339,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
     assert app.session_state["paper_automation_active"] is False
     widget(app.button, "Verifica e aggiorna conto Alpaca Paper").click().run()
     widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
 
     assert not app.exception
     assert widget(app.button, "Avvia automazione Paper").disabled is False
@@ -428,7 +428,7 @@ def test_dashboard_starts_and_reports_unavailable_real_market_data(dashboard, mo
     assert app.session_state["paper_automation_active"] is False
     automation_button = widget(app.button, "Avvia automazione Paper")
     assert automation_button.disabled is True
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     assert not app.exception
     assert any(
         "Dati non disponibili per la selezione corrente" in item.value
@@ -481,7 +481,7 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
     widget(app.number_input, "Media mobile breve").set_value(2).run()
     widget(app.number_input, "Media mobile lunga").set_value(5).run()
     widget(app.checkbox, "Mostra RSI (14)").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
 
     assert not app.exception
     assert len(market_requests) == 2
@@ -501,9 +501,9 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
 def test_dashboard_marks_explicit_demo_prices_as_synthetic(dashboard):
     app, _, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     assert not app.exception
-    assert any("SINTETICI — SOLO DEMO" in item.value for item in app.info)
+    assert any("SINTETICI - SOLO DEMO" in item.value for item in app.info)
     assert any("Serie sintetica generata localmente" in item.value for item in app.warning)
     assert app.session_state["market_quality"] == "synthetic"
     assert app.session_state["data_availability"]["data_available"] == "unverified"
@@ -514,7 +514,7 @@ def test_dashboard_marks_explicit_demo_prices_as_synthetic(dashboard):
 def test_dashboard_rejects_invalid_strategy_windows_without_traceback(dashboard):
     app, _, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.number_input, "Media mobile breve").set_value(30).run()
     assert not app.exception
     assert any(
@@ -526,8 +526,8 @@ def test_dashboard_rejects_invalid_strategy_windows_without_traceback(dashboard)
 def test_dashboard_reports_insufficient_demo_bars_without_traceback(dashboard):
     app, _, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.selectbox, "Periodo grafico").set_value("1M").run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.selectbox, "Periodo").set_value("1M").run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.number_input, "Media mobile lunga").set_value(31).run()
 
     assert not app.exception
@@ -540,7 +540,7 @@ def test_dashboard_reports_insufficient_demo_bars_without_traceback(dashboard):
 def test_changing_market_selection_hides_prior_backtest_result(dashboard):
     app, _, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui backtest").click().run()
     assert not app.exception
     assert app.session_state["backtest_result"]
@@ -557,7 +557,7 @@ def test_changing_market_selection_hides_prior_backtest_result(dashboard):
         for metric in app.metric
     )
 
-    widget(app.selectbox, "Strumento da analizzare").set_value("QQQ").run()
+    widget(app.selectbox, "Strumento").set_value("QQQ").run()
     assert not app.exception
     assert any(
         "La selezione dei dati è cambiata" in item.value
@@ -569,16 +569,16 @@ def test_changing_market_selection_hides_prior_backtest_result(dashboard):
 def test_dashboard_backtest_invalidates_on_interval_period_and_strategy_changes(dashboard):
     app, _, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui backtest").click().run()
     assert not app.exception
     assert app.session_state["backtest_result"]
 
-    widget(app.selectbox, "Periodo grafico").set_value("6M").run()
+    widget(app.selectbox, "Periodo").set_value("6M").run()
     assert not any(metric.label == "P/L lordo realizzato" for metric in app.metric)
     assert any("La selezione dei dati è cambiata" in item.value for item in app.info)
 
-    widget(app.selectbox, "Periodo grafico").set_value("3M").run()
+    widget(app.selectbox, "Periodo").set_value("3M").run()
     widget(app.number_input, "Media mobile breve").set_value(9).run()
     assert not any(metric.label == "P/L lordo realizzato" for metric in app.metric)
     assert any("riesegui il backtest" in item.value for item in app.info)
@@ -586,7 +586,7 @@ def test_dashboard_backtest_invalidates_on_interval_period_and_strategy_changes(
     widget(app.number_input, "Media mobile breve").set_value(10).run()
     assert any(metric.label == "P/L lordo realizzato" for metric in app.metric)
 
-    widget(app.selectbox, "Intervallo dati").set_value("1Week").run()
+    widget(app.selectbox, "Intervallo").set_value("1Week").run()
     assert not any(metric.label == "P/L lordo realizzato" for metric in app.metric)
     assert any("La selezione dei dati è cambiata" in item.value for item in app.info)
 
@@ -611,14 +611,14 @@ def test_walk_forward_dashboard_uses_selected_synthetic_data_without_broker_or_l
     history_before = ledger.history()
 
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui valutazione walk-forward").click().run()
 
     assert not app.exception
     result = app.session_state["walk_forward_result"]
     assert result.data_source.startswith("synthetic:")
     assert len(result.folds) > 0
-    assert any("SINTETICI — SOLO DEMO" in item.value for item in app.info)
+    assert any("SINTETICI - SOLO DEMO" in item.value for item in app.info)
     assert any(
         "Dati OOS: synthetic · SPY · 1Day · 3M · fonte:" in item.value
         for item in app.info
@@ -647,9 +647,9 @@ def test_walk_forward_dashboard_uses_selected_synthetic_data_without_broker_or_l
 @pytest.mark.parametrize(
     ("label", "value"),
     [
-        ("Periodo grafico", "6M"),
-        ("Intervallo dati", "1Week"),
-        ("Strumento da analizzare", "QQQ"),
+        ("Periodo", "6M"),
+        ("Intervallo", "1Week"),
+        ("Strumento", "QQQ"),
     ],
 )
 def test_walk_forward_results_are_hidden_after_market_selection_changes(
@@ -657,7 +657,7 @@ def test_walk_forward_results_are_hidden_after_market_selection_changes(
 ):
     app, submitted_orders, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui valutazione walk-forward").click().run()
     assert not app.exception
     assert app.session_state["walk_forward_result"].folds
@@ -675,7 +675,7 @@ def test_walk_forward_results_are_hidden_after_market_selection_changes(
 def test_walk_forward_results_are_hidden_when_fold_parameters_change(dashboard):
     app, submitted_orders, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui valutazione walk-forward").click().run()
     assert not app.exception
     assert any(metric.label == "Fold OOS validi" for metric in app.metric)
@@ -695,7 +695,7 @@ def test_traditional_and_walk_forward_results_remain_separate_and_invalidate_ind
 ):
     app, submitted_orders, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui backtest").click().run()
     widget(app.button, "Esegui valutazione walk-forward").click().run()
 
@@ -737,7 +737,7 @@ def test_walk_forward_dashboard_blocks_insufficient_market_history(
         short_synthetic_series,
     )
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
 
     assert not app.exception
     assert any("Campione insufficiente" in item.value for item in app.warning)
@@ -766,7 +766,7 @@ def test_walk_forward_dashboard_displays_unavailable_risk_metrics_explicitly(
         constant_synthetic_series,
     )
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui valutazione walk-forward").click().run()
 
     assert not app.exception
@@ -797,7 +797,7 @@ def test_walk_forward_dashboard_shows_excluded_fold_reason(dashboard, monkeypatc
 
     monkeypatch.setattr(BacktestEngine, "run", reject_test_slices)
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.button, "Esegui valutazione walk-forward").click().run()
 
     assert not app.exception
@@ -812,7 +812,7 @@ def test_walk_forward_dashboard_shows_excluded_fold_reason(dashboard, monkeypatc
 def test_simulated_trade_persists_without_broker_submission(dashboard):
     app, submitted_orders, ledger_path = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.button, "Carica dati / applica selezione").click().run()
+    widget(app.button, "Aggiorna dati").click().run()
     widget(app.number_input, "Quantità da acquistare").set_value(0.01)
     widget(app.button, "Conferma acquisto simulato").click().run()
 
