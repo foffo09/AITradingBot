@@ -1,4 +1,20 @@
 .env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+*.sqlite-*
+*.sqlite3-*
+venv/
+.idea/
+.vscode/
+config/live_state.json
+/how --format= --name-only HEAD
+/FILE_TREE.txt
+/VERIFICATION.txt
+/HYPERLIQUID_TESTNET_VERIFICATION.txt
 .venv/
 __pycache__/
 *.pyc
@@ -10,3 +26,11 @@ data/*.sqlite3
 data/*.sqlite3-shm
 data/*.sqlite3-wal
 data/*.sqlite3-journal
+config/.omega.lock
+config/live_state.json.tmp
+config/generated/
+config/paper_live_state.json
+config/paper_live_state.json.tmp
+config/native_orders.sqlite3*
+config/feed_cache/
+data/*.sqlite3.lock
