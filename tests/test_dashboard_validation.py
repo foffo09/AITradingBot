@@ -250,6 +250,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
 
     class AutomationBroker:
         paper_client_configured = True
+        paper_client_is_paper = True
 
         def __init__(self, runtime_settings):
             self.settings = runtime_settings
@@ -282,7 +283,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
             }
 
         def verify_connection(self):
-            return {"connected": True}
+            return {"connected": True, "mode": "paper"}
 
         def is_connected(self):
             return True
@@ -360,7 +361,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
         for event in PaperAutomationLog(paper_path).recent()
     ]
     assert decisions[0] == "stopped"
-    assert "no_signal" in decisions
+    assert "NO_TRADE" in decisions
 
 
 def test_paper_path_cannot_alias_the_demo_database(monkeypatch, tmp_path):

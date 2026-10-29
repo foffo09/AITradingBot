@@ -26,7 +26,7 @@ from src.strategy.moving_average import MovingAverageStrategy
 from src.trading.paper_automation import (
     PaperAutomationError,
     PaperAutomationLog,
-    execute_paper_signal,
+    execute_auto_paper_cycle,
 )
 
 
@@ -611,10 +611,7 @@ def _paper_automation_panel(
     interval: str | None,
     quality: str | None,
     market_data: pd.DataFrame | None,
-    short_window: int,
-    long_window: int,
     automation_settings: AppSettings,
-    max_daily_orders: int,
 ) -> None:
     def record_event(event: dict) -> None:
         if paper_automation_log is None:
@@ -623,12 +620,14 @@ def _paper_automation_panel(
         try:
             paper_automation_log.record({
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-                "symbol": symbol or "N/D",
+                "symbol": event.get("symbol") or symbol or "N/D",
+                "strategy": event.get("strategy"),
                 "signal_timestamp_utc": event.get("signal_timestamp"),
                 "signal": event.get("signal", event.get("side", "N/D")),
                 "decision": event.get("status", "unknown"),
                 "side": event.get("side"),
                 "quantity": event.get("quantity"),
+                "proposed_quantity": event.get("proposed_quantity"),
                 "order_status": _model_dict(event.get("order", {})).get("status"),
                 "reason": event.get("reason", ""),
             })
@@ -660,11 +659,17 @@ def _paper_automation_panel(
 
     st.subheader("Automazione moving-average — solo Paper")
     st.caption(
-        "Ogni ciclo valuta un segnale fresco, account, posizioni e ordini; un ordine inviato "
+        "Ogni ciclo seleziona asset e parametri con validazione walk-forward, poi rivalida "
+        "account, posizioni, ordini, quotazione e rischio; un ordine inviato "
         "resta pending finché Alpaca non ne restituisce lo stato di fill. L'arresto ferma i "
         "cicli successivi ma non annulla ordini già inviati: gestiscili dal conto Paper. "
-        "Il log locale registra timestamp, segnale, decisione, stato ordine e motivazione, "
-        "senza credenziali."
+        "Il log locale registra asset, strategia, quantità proposta, decisione, stato ordine "
+        "e motivazione, senza credenziali."
+    )
+    dry_run = st.checkbox(
+        "Solo prova: mostra decisioni e quantità, senza inviare ordini",
+        value=True,
+        key="paper_auto_dry_run",
     )
     active = bool(st.session_state.get("paper_automation_active", False))
     if active:
@@ -721,23 +726,12 @@ def _paper_automation_panel(
         st.error("Prerequisito Paper/feed non valido: automazione arrestata senza inviare ordini.")
         show_history()
         return
-    if short_window >= long_window:
-        st.session_state.paper_automation_active = False
-        st.error("Parametri medie mobili non validi: automazione arrestata.")
-        show_history()
-        return
     try:
-        automation_data = current_market_data.copy()
-        automation_data.attrs["quality"] = quality
-        automation_data.attrs["interval"] = interval
-        result = execute_paper_signal(
+        result = execute_auto_paper_cycle(
             broker=broker,
             settings=automation_settings,
-            symbol=symbol,
-            market_data=automation_data,
-            short_window=short_window,
-            long_window=long_window,
-            max_daily_orders=max_daily_orders,
+            dry_run=dry_run,
+            interval=interval,
         )
         st.session_state.paper_auto_result = result
         record_event(result)
@@ -748,8 +742,16 @@ def _paper_automation_panel(
                 f"Ordine Paper inviato ({result.get('side')} {result.get('quantity')}); "
                 f"stato broker: {broker_status}. Nessun fill è presunto."
             )
-        elif result["status"] == "no_signal":
-            st.caption(f"Nessun incrocio operativo sull'ultima barra: {result['reason']}")
+        elif result["status"] == "preview":
+            st.success(
+                f"Prova — {result.get('symbol')} / {result.get('strategy')}: "
+                f"{result.get('side')}; quantità proposta "
+                f"{result.get('proposed_quantity')}, ricalcolata e validata "
+                f"{result.get('quantity')}. "
+                "Nessun ordine è stato inviato."
+            )
+        elif result["status"] == "NO_TRADE":
+            st.info(f"Selettore: NO_TRADE. {result['reason']}")
         else:
             st.info(f"Ciclo {result['status']}: {result['reason']}")
         st.caption(f"Ultimo ciclo UTC: {datetime.now(timezone.utc).isoformat()}")
@@ -1051,59 +1053,128 @@ def _plot_market_chart(
                 text=points["signal_reason"], hovertemplate="%{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
             ), row=1, col=1)
 
-    history = ledger.history()
+            history = ledger.history()
     if history:
-        trade_rows = [item for item in history if item["symbol"] == symbol]
+        trade_rows = [
+            item for item in history
+            if item["symbol"] == symbol
+        ]
+
         for item in trade_rows:
             opened = pd.to_datetime(item["opened_at"], utc=True)
-            fig.add_trace(go.Scatter(
-                x=[opened], y=[item["entry_price"]], mode="markers", name="Entry simulazione",
-                marker={"symbol": "star", "color": "#ab47bc", "size": 12},
-                text=[item["entry_reason"]],
-                hovertemplate="Entry simulazione<br>%{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
-                showlegend=False,
-            ), row=1, col=1)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[opened],
+                    y=[item["entry_price"]],
+                    mode="markers",
+                    name="Entry simulazione",
+                    marker={
+                        "symbol": "star",
+                        "color": "#ab47bc",
+                        "size": 12,
+                    },
+                    text=[item["entry_reason"]],
+                    hovertemplate=(
+                        "Entry simulazione<br>%{x}<br>$%{y:.4f}"
+                        "<br>%{text}<extra></extra>"
+                    ),
+                    showlegend=False,
+                ),
+                row=1,
+                col=1,
+            )
+
+            if item.get("closed_at") and item.get("exit_price") is not None:
+                closed = pd.to_datetime(item["closed_at"], utc=True)
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=[closed],
+                        y=[item["exit_price"]],
+                        mode="markers",
+                        name="Uscita simulazione",
+                        marker={
+                            "symbol": "x",
+                            "color": "#ff9800",
+                            "size": 11,
+                        },
+                        text=[item["exit_reason"]],
+                        hovertemplate=(
+                            "Uscita simulazione<br>%{x}<br>$%{y:.4f}"
+                            "<br>%{text}<extra></extra>"
+                        ),
+                        showlegend=False,
+                    ),
+                    row=1,
+                    col=1,
+                )
+
     for order in paper_orders or []:
         if str(order.get("symbol", "")).upper() != symbol.upper():
             continue
+
         submitted_at = order.get("submitted_at") or order.get("created_at")
+
         if submitted_at:
             submitted_time = pd.to_datetime(submitted_at, utc=True)
-            reference_index = (pd.to_datetime(data["timestamp"], utc=True) - submitted_time).abs().idxmin()
+
+            reference_index = (
+                pd.to_datetime(data["timestamp"], utc=True) - submitted_time
+            ).abs().idxmin()
+
             reference_price = float(data.loc[reference_index, "close"])
             order_status = str(order.get("status", "unknown"))
-            fig.add_trace(go.Scatter(
-            x=[submitted_time],
-            y=[reference_price],
-            mode="markers",
-            name="Ordine Paper (close barra di riferimento)",
-            marker={"symbol": "square-open", "color": "#ffca28", "size": 11},
-            text=[f"Ordine {order_status}; il prezzo mostrato è il close barra, non un fill."],
-            hovertemplate="%{x}<br>%{text}<extra></extra>",
-            showlegend=False,
-            ), row=1, col=1)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[submitted_time],
+                    y=[reference_price],
+                    mode="markers",
+                    name="Ordine Paper (close barra di riferimento)",
+                    marker={
+                        "symbol": "square-open",
+                        "color": "#ffca28",
+                        "size": 11,
+                    },
+                    text=[
+                        f"Ordine {order_status}; il prezzo mostrato è "
+                        "il close barra, non un fill."
+                    ],
+                    hovertemplate="%{x}<br>%{text}<extra></extra>",
+                    showlegend=False,
+                ),
+                row=1,
+                col=1,
+            )
+
         fill_price = order.get("filled_avg_price")
         filled_at = order.get("filled_at")
+
         if fill_price is not None and filled_at:
-            fig.add_trace(go.Scatter(
-            x=[pd.to_datetime(filled_at, utc=True)],
-            y=[float(fill_price)],
-            mode="markers",
-            name="Fill Paper confermato",
-            marker={"symbol": "circle", "color": "#00e676", "size": 11},
-            text=[f"Quantità fill: {order.get('filled_qty', 'n/d')}"],
-            hovertemplate="Fill Paper %{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
-            showlegend=False,
-            ), row=1, col=1)
-            if item["closed_at"] and item["exit_price"] is not None:
-                closed = pd.to_datetime(item["closed_at"], utc=True)
-                fig.add_trace(go.Scatter(
-                    x=[closed], y=[item["exit_price"]], mode="markers", name="Uscita simulazione",
-                    marker={"symbol": "x", "color": "#ff9800", "size": 11},
-                    text=[item["exit_reason"]],
-                    hovertemplate="Uscita simulazione<br>%{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
+            fig.add_trace(
+                go.Scatter(
+                    x=[pd.to_datetime(filled_at, utc=True)],
+                    y=[float(fill_price)],
+                    mode="markers",
+                    name="Fill Paper confermato",
+                    marker={
+                        "symbol": "circle",
+                        "color": "#00e676",
+                        "size": 11,
+                    },
+                    text=[f"Quantità fill: {order.get('filled_qty', 'n/d')}"],
+                    hovertemplate=(
+                        "Fill Paper %{x}<br>$%{y:.4f}"
+                        "<br>%{text}<extra></extra>"
+                    ),
                     showlegend=False,
-                ), row=1, col=1)
+                ),
+                row=1,
+                col=1,
+            )
+
+            
 
     fig.add_trace(go.Bar(
         x=data["timestamp"], y=data["volume"], name="Volume",
@@ -1139,8 +1210,45 @@ def _plot_market_chart(
 
 st.title("AI Trading Bot")
 st.caption(
-"Monitora il conto, l'andamento del mercato e le attività recenti. "
-"Demo locale, backtest e Alpaca Paper restano contesti separati."
+    "Monitora il conto, l'andamento del mercato e le attività recenti. "
+    "Demo locale, backtest e Alpaca Paper restano contesti separati."
+)
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: #0b1118;
+    }
+    [data-testid="stMetric"] {
+        background: #111a24;
+        border: 1px solid #263442;
+        border-radius: 10px;
+        padding: 0.8rem 1rem;
+    }
+    [data-testid="stPlotlyChart"] {
+        background: #0b0f14;
+        border: 1px solid #263442;
+        border-radius: 12px;
+        padding: 0.35rem;
+    }
+    [data-testid="stExpander"] {
+        border: 1px solid #263442;
+        border-radius: 10px;
+    }
+    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
+        color: #35c98b;
+    }
+    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"] {
+        color: #f06468;
+    }
+    @media (max-width: 720px) {
+        [data-testid="stMetric"] {
+            padding: 0.55rem 0.65rem;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 st.session_state.setdefault("paper_automation_active", False)
 simulation_notice = st.session_state.pop("simulation_notice", None)
@@ -1194,51 +1302,36 @@ with st.sidebar:
             else "Automazione Paper: arrestata"
         )
 
-tab_overview, tab_sim, tab_backtest, tab_alpaca = st.tabs([
-    "Dashboard", "Simulazione", "Backtest", "Alpaca Paper",
-])
-
-with tab_overview:
+st.divider()
+with st.container():
     st.subheader("Stato del sistema")
     mode_status = st.columns(4)
-    mode_status[0].metric(
-        "Modalità",
-        "Alpaca Paper" if settings.trading_mode == "paper" else "Demo locale",
-        help="Paper mostra i dati del conto Alpaca Paper; Demo usa un ledger locale isolato.",
+    connection_status = (
+        "Verificata"
+        if st.session_state.get("paper_verified", False)
+        else "Errore"
+        if st.session_state.get("paper_snapshot_error")
+        else "Non verificata"
+        if settings.trading_mode == "paper"
+        else "N/D · modalità Demo"
     )
-    mode_status[1].metric(
-        "Connessione account",
-        (
-            "Verificata"
-            if st.session_state.get("paper_verified", False)
-            else "Errore"
-            if st.session_state.get("paper_snapshot_error")
-            else "Non verificata"
-            if settings.trading_mode == "paper"
-            else "N/D (Demo locale)"
-        ),
-        help=(
-            st.session_state.get("paper_snapshot_error")
-            or (
-                "Stato restituito dall'ultima verifica dell'account Alpaca Paper."
-                if settings.trading_mode == "paper"
-                else "La modalità Demo locale non apre un conto broker."
-            )
-        ),
-    )
-    mode_status[2].metric(
-        "Automazione",
-        "Attiva" if st.session_state.paper_automation_active else "Arrestata",
-        help="L'automazione è attivabile solo manualmente in Alpaca Paper.",
-    )
+    with mode_status[0]:
+        st.caption("Modalità")
+        st.markdown(f"**{'Alpaca Paper' if settings.trading_mode == 'paper' else 'Demo locale'}**")
+    with mode_status[1]:
+        st.caption("Connessione account")
+        st.markdown(f"**{connection_status}**")
+    with mode_status[2]:
+        st.caption("Automazione")
+        st.markdown(
+            f"**{'Attiva' if st.session_state.paper_automation_active else 'Arrestata'}**"
+        )
     last_market_update = st.session_state.get("market_quote_refreshed_at")
     if last_market_update is None and st.session_state.get("market_frame") is not None:
         last_market_update = st.session_state.market_frame.attrs.get("fetched_at")
-    mode_status[3].metric(
-        "Aggiornamento dati",
-        str(last_market_update) if last_market_update is not None else "N/D",
-        help="Ora dell'ultimo aggiornamento dei dati di mercato disponibili in questa sessione.",
-    )
+    with mode_status[3]:
+        st.caption("Aggiornamento dati")
+        st.markdown(f"**{last_market_update if last_market_update is not None else 'N/D'}**")
     st.caption(
         "Per cambiare modalità riavvia con avvia_demo.ps1 o avvia_paper.ps1; "
         "Demo locale, simulazione e Alpaca Paper non condividono il capitale."
@@ -1249,23 +1342,45 @@ with tab_overview:
         paper_account = _model_dict(paper_snapshot.get("account") or {})
         paper_equity = paper_account.get("equity")
         paper_last_equity = paper_account.get("last_equity")
-        paper_pnl = (
+        paper_daily_pnl = (
             float(paper_equity) - float(paper_last_equity)
             if paper_equity is not None and paper_last_equity is not None else None
         )
-        paper_pnl_pct = (
-            paper_pnl / float(paper_last_equity) * 100
-            if paper_pnl is not None and float(paper_last_equity) > 0 else None
+        paper_daily_pct = (
+            paper_daily_pnl / float(paper_last_equity) * 100
+            if paper_daily_pnl is not None
+            and paper_last_equity is not None
+            and float(paper_last_equity) > 0 else None
+        )
+        paper_initial_equity = paper_account.get("initial_equity")
+        paper_cumulative_pnl = (
+            float(paper_equity) - float(paper_initial_equity)
+            if paper_equity is not None and paper_initial_equity is not None else None
         )
         paper_metrics = st.columns(4)
         paper_metrics[0].metric("Equity", f"${float(paper_equity):,.2f}" if paper_equity is not None else "N/D")
         paper_metrics[1].metric(
-            "P/L (dal close precedente)",
-            "N/D" if paper_pnl is None else f"${paper_pnl:+,.2f}",
-            "N/D" if paper_pnl_pct is None else f"{paper_pnl_pct:+.2f}%",
+            "P/L oggi",
+            "N/D" if paper_daily_pnl is None else f"${paper_daily_pnl:+,.2f}",
+            "N/D" if paper_daily_pct is None else f"{paper_daily_pct:+.2f}%",
         )
-        paper_metrics[2].metric("Operazioni chiuse", "N/D")
-        paper_metrics[3].metric("Win rate", "N/D", help="Numero di operazioni chiuse: N/D")
+        paper_metrics[2].metric("Win rate", "N/D", help="Numero di operazioni chiuse: N/D")
+        paper_metrics[3].metric("Weekly return", "N/D")
+        st.caption(
+            "P/L cumulativo Paper: "
+            + ("N/D" if paper_cumulative_pnl is None else f"${paper_cumulative_pnl:+,.2f}")
+            + " · Operazioni chiuse: N/D · Weekly return: N/D "
+            "(storico equity settimanale non disponibile)."
+        )
+        st.caption(
+            f"Capitale iniziale: "
+            f"${float(paper_initial_equity):,.2f}" if paper_initial_equity is not None
+            else "Capitale iniziale: N/D"
+        )
+        st.caption(
+            f"Saldo disponibile: ${float(paper_account['cash']):,.2f}"
+            if paper_account.get("cash") is not None else "Saldo disponibile: N/D"
+        )
     else:
         local_account = ledger.account()
         if local_account is None:
@@ -1273,9 +1388,9 @@ with tab_overview:
             st.info("Ledger Demo non inizializzato. Apri Simulazione per creare il conto virtuale.")
             local_metrics = st.columns(4)
             local_metrics[0].metric("Equity", "N/D")
-            local_metrics[1].metric("P/L netto (dall'inizio)", "N/D", "N/D")
-            local_metrics[2].metric("Operazioni chiuse", "N/D")
-            local_metrics[3].metric("Win rate", "N/D", help="Numero di operazioni chiuse: N/D")
+            local_metrics[1].metric("P/L realizzato oggi", "N/D", "N/D")
+            local_metrics[2].metric("Win rate", "N/D", help="Numero di operazioni chiuse: N/D")
+            local_metrics[3].metric("Weekly return", "N/D")
         else:
             overview = ledger.summary(float(commission_bps), float(slippage_bps), float(spread_bps))
             closed_trades = [
@@ -1285,27 +1400,47 @@ with tab_overview:
             closed_count = len(closed_trades)
             winning_count = sum(float(trade["net_pnl"]) > 0 for trade in closed_trades)
             initial_capital = float(local_account["initial_eur"]) * float(local_account["eur_usd_rate"])
-            pnl_percent = (
-                float(overview["total_pnl"]) / initial_capital * 100
+            today_utc = datetime.now(timezone.utc).date()
+            realized_today = sum(
+                float(trade["net_pnl"])
+                for trade in closed_trades
+                if trade.get("closed_at")
+                and pd.Timestamp(trade["closed_at"]).date() == today_utc
+            )
+            realized_today_pct = (
+                realized_today / initial_capital * 100
                 if initial_capital > 0 else None
             )
             local_metrics = st.columns(4)
             local_metrics[0].metric("Equity Demo", f"${overview['current_capital']:,.2f}")
             local_metrics[1].metric(
-                "P/L netto (dall'inizio)",
-                f"${overview['total_pnl']:+,.2f}",
-                "N/D" if pnl_percent is None else f"{pnl_percent:+.2f}%",
+                "P/L realizzato oggi",
+                f"${realized_today:+,.2f}",
+                "N/D" if realized_today_pct is None else f"{realized_today_pct:+.2f}%",
             )
-            local_metrics[2].metric("Operazioni chiuse (totale)", closed_count)
-            local_metrics[3].metric(
+            local_metrics[2].metric(
                 "Win rate",
                 "N/D" if not closed_count else f"{winning_count / closed_count * 100:.1f}%",
                 help=f"Operazioni chiuse considerate: {closed_count}",
             )
-    st.divider()
-    _paper_account_monitor()
+            local_metrics[3].metric("Weekly return", "N/D")
+            st.caption(
+                f"P/L cumulativo netto: ${overview['total_pnl']:+,.2f} · "
+                f"Operazioni chiuse: {closed_count} · Weekly return: N/D "
+                "(storico equity settimanale non disponibile)."
+            )
+            st.caption(
+                f"Capitale iniziale: ${initial_capital:,.2f} · "
+                f"Saldo disponibile: ${overview['cash']:,.2f}"
+            )
+    st.caption(
+        "Il win rate considera soltanto operazioni chiuse; il P/L odierno Demo è realizzato. "
+        "Equity e risultati di backtest sono metriche distinte."
+    )
+    with st.expander("Monitor e dettagli del conto Alpaca Paper", expanded=False):
+        _paper_account_monitor()
 
-with tab_overview:
+with st.container():
     st.subheader("Mercato")
     categories = ["ETF e azioni"] + (["Criptovalute"] if st.session_state.get("paper_verified", False) else [])
     market_controls = st.columns(4)
@@ -1331,15 +1466,15 @@ with tab_overview:
         selected_symbol = None
     else:
         with market_controls[1]:
-            selected_symbol = st.selectbox("Strumento", filtered_symbols)
+            selected_symbol = st.selectbox("Strumento da analizzare", filtered_symbols)
         descriptor = INSTRUMENTS[selected_symbol]
         st.caption(f"**{descriptor['name']}** — {descriptor['description']}")
     if not st.session_state.get("paper_verified", False):
         st.caption("Gli strumenti crypto sono mostrati solo dopo la verifica dell'account Paper nella scheda dedicata.")
     with market_controls[2]:
-        interval = st.selectbox("Intervallo", ["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week"], index=4)
+        interval = st.selectbox("Intervallo dati", ["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week"], index=4)
     with market_controls[3]:
-        period = st.selectbox("Periodo", ["1M", "3M", "6M", "1Y", "5Y"], index=1)
+        period = st.selectbox("Periodo grafico", ["1M", "3M", "6M", "1Y", "5Y"], index=1)
     current_market_request = (selected_symbol, interval, period, demo_mode)
 
     if selected_symbol:
@@ -1396,7 +1531,7 @@ with tab_overview:
                 max_selections=4,
             )
             compare_clicked = st.button("Carica confronto", disabled=not compare_symbols)
-        load_clicked = st.button("Aggiorna dati", type="primary")
+        load_clicked = st.button("Carica dati / applica selezione", type="primary")
 
         if load_clicked:
             for key in (
@@ -1491,6 +1626,25 @@ with tab_overview:
         "market_frame" in st.session_state
         and st.session_state.get("market_request") == current_market_request
     )
+    current_data = st.session_state.get("market_frame") if market_data_current else None
+    current_quality = st.session_state.get("market_quality") if market_data_current else None
+    current_symbol = st.session_state.get("market_symbol") if market_data_current else None
+    current_interval = st.session_state.get("market_interval") if market_data_current else None
+    automation_settings = replace(
+        settings,
+        risk_max_trade_fraction=float(max_trade_fraction),
+        risk_max_exposure_fraction=float(max_exposure_fraction),
+        daily_loss_limit_pct=float(daily_loss_fraction),
+        paper_max_daily_orders=int(paper_max_daily_orders),
+    )
+    with st.expander("Controlli automazione Alpaca Paper", expanded=True):
+        _paper_automation_panel(
+            current_symbol,
+            current_interval,
+            current_quality,
+            current_data,
+            automation_settings,
+        )
     latest_signal_summary = None
     if not market_data_current:
         if st.session_state.get("market_error_request") == current_market_request:
@@ -1506,8 +1660,8 @@ with tab_overview:
         source = st.session_state.market_source
         quality = st.session_state.market_quality
         label = (
-            "SINTETICI - SOLO DEMO" if quality == "synthetic"
-            else "DATI ALPACA - FEED IEX" if quality == "real" and "IEX" in source
+            "SINTETICI — SOLO DEMO" if quality == "synthetic"
+            else "DATI ALPACA — FEED IEX" if quality == "real" and "IEX" in source
             else "DATI REALI ALPACA" if quality == "real"
             else "FONTE DATI NON DISPONIBILE"
         )
@@ -1584,13 +1738,27 @@ with tab_overview:
             st.caption("TradingView è solo un link di analisi esterno e non è collegato all'esecuzione o al registro locale.")
 
     st.divider()
-    st.subheader("Ultimo segnale")
+    st.subheader("Segnali recenti")
     if latest_signal_summary is None:
         st.info("Segnale non disponibile per i dati correnti.")
     else:
         signal_text, signal_reason, signal_timestamp = latest_signal_summary
-        st.markdown(f"**{signal_text}** · {signal_timestamp}")
-        st.caption(f"Motivazione: {signal_reason}")
+        signal_price = (
+            float(st.session_state.market_frame["close"].iloc[-1])
+            if market_data_current and not st.session_state.market_frame.empty
+            else None
+        )
+        st.markdown(
+            f"**{signal_text}** · {st.session_state.market_symbol} · "
+            f"{st.session_state.market_interval} · {signal_timestamp}"
+        )
+        st.caption(
+            f"Prezzo barra: ${signal_price:,.4f} · Strategia: medie mobili "
+            f"{int(short_window)}/{int(long_window)} · Motivazione: {signal_reason}"
+            if signal_price is not None
+            else f"Strategia: medie mobili {int(short_window)}/{int(long_window)} · "
+            f"Motivazione: {signal_reason}"
+        )
 
     if st.session_state.get("paper_snapshot_error"):
         st.error(f"Alpaca Paper: {st.session_state.paper_snapshot_error}")
@@ -1671,7 +1839,114 @@ with tab_overview:
         else:
             st.info("Nessuna operazione chiusa registrata.")
 
-with tab_sim:
+    st.divider()
+    review_cols = st.columns([2, 1])
+    with review_cols[0]:
+        st.subheader("Market Review")
+        if market_data_current and not st.session_state.market_frame.empty:
+            review_data = st.session_state.market_frame
+            first_price = float(review_data["close"].iloc[0])
+            latest_price = float(review_data["close"].iloc[-1])
+            period_change = (
+                (latest_price / first_price - 1) * 100 if first_price > 0 else None
+            )
+            review_metrics = st.columns(3)
+            review_metrics[0].metric(
+                f"{st.session_state.market_symbol} · ultimo prezzo",
+                f"${latest_price:,.4f}",
+            )
+            review_metrics[1].metric(
+                "Variazione periodo",
+                "N/D" if period_change is None else f"{period_change:+.2f}%",
+            )
+            close_returns = review_data["close"].pct_change().dropna()
+            observed_volatility = (
+                float(close_returns.std(ddof=1) * 100)
+                if len(close_returns) > 1 else None
+            )
+            review_metrics[2].metric(
+                "Volatilità osservata",
+                "N/D" if observed_volatility is None else f"{observed_volatility:.2f}%",
+                help="Deviazione standard dei rendimenti barra-per-barra nel campione visualizzato; non annualizzata.",
+            )
+            st.caption(f"Fonte dati: {st.session_state.market_source}")
+        else:
+            st.info("Carica i dati di mercato per il riepilogo dell'asset selezionato.")
+    with review_cols[1]:
+        st.subheader("Bot Accuracy")
+        st.metric("Previsioni corrette", "N/D")
+        st.caption(
+            "Nessun esito di segnale etichettato disponibile. Il win rate delle operazioni "
+            "non viene usato come accuratezza previsionale."
+        )
+
+    st.subheader("Performance realizzata e portafoglio")
+    performance_cols = st.columns(2)
+    if settings.trading_mode != "paper" and closed_trades:
+        closed_chart = pd.DataFrame(closed_trades)
+        closed_chart["closed_at"] = pd.to_datetime(
+            closed_chart["closed_at"], utc=True, errors="coerce"
+        )
+        closed_chart = closed_chart.dropna(subset=["closed_at", "net_pnl"])
+        if not closed_chart.empty:
+            daily_pnl = (
+                closed_chart.assign(day=closed_chart["closed_at"].dt.floor("D"))
+                .groupby("day")["net_pnl"]
+                .sum()
+                .rename("P/L netto realizzato (USD)")
+            )
+            with performance_cols[0]:
+                st.markdown("**P/L giornaliero realizzato — Demo**")
+                st.bar_chart(daily_pnl, use_container_width=True)
+            weekly_pnl = (
+                closed_chart.assign(
+                    week=closed_chart["closed_at"]
+                    .dt.tz_convert(None)
+                    .dt.to_period("W")
+                    .astype(str)
+                )
+                .groupby("week")["net_pnl"]
+                .sum()
+                .rename("P/L netto realizzato (USD)")
+            )
+            with performance_cols[1]:
+                st.markdown("**P/L settimanale realizzato — Demo**")
+                st.bar_chart(weekly_pnl, use_container_width=True)
+    else:
+        performance_cols[0].info("Storico P/L giornaliero non disponibile.")
+        performance_cols[1].info("Storico P/L settimanale non disponibile.")
+    if open_positions:
+        positions_chart = pd.DataFrame(open_positions)
+        if {"symbol", "market_value"}.issubset(positions_chart.columns):
+            positions_chart["market_value"] = pd.to_numeric(
+                positions_chart["market_value"], errors="coerce"
+            )
+            positions_chart = positions_chart.dropna(subset=["market_value"])
+            if not positions_chart.empty:
+                st.markdown("**Esposizione per asset**")
+                st.plotly_chart(
+                    go.Figure(
+                        go.Pie(
+                            labels=positions_chart["symbol"],
+                            values=positions_chart["market_value"],
+                            hole=0.55,
+                        )
+                    ).update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="#0b0f14",
+                        plot_bgcolor="#0b0f14",
+                        margin={"l": 10, "r": 10, "t": 20, "b": 10},
+                    ),
+                    use_container_width=True,
+                )
+            else:
+                st.caption("Distribuzione esposizione non disponibile.")
+        else:
+            st.caption("Distribuzione esposizione non disponibile nei dati di posizione.")
+    else:
+        st.caption("Portafoglio senza posizioni aperte da distribuire.")
+
+with st.expander("Simulazione locale", expanded=False):
     _show_simulation_account(float(spread_bps))
     account = ledger.account()
     data = st.session_state.get("market_frame") if market_data_current else None
@@ -1707,8 +1982,8 @@ with tab_sim:
             price = float(quote["price"]) if quote and quote.get("price") else float(data["close"].iloc[-1])
             source_timestamp = order_timestamp
             source = str(quote["source"]) if quote and quote.get("price") else st.session_state.market_source + " — ultimo close barra"
-            buy_tab, sell_tab = st.tabs(["Compra (long)", "Vendi posizione aperta"])
-            with buy_tab:
+            buy_col, sell_col = st.columns(2)
+            with buy_col:
                 with st.form("local_sim_buy"):
                     qty = st.number_input("Quantità da acquistare", min_value=0.000001, value=0.01, format="%.6f")
                     reason = st.text_input("Motivo ingresso", value="Entry manuale utente")
@@ -1740,7 +2015,7 @@ with tab_sim:
                         st.rerun()
                     except (ValueError, RuntimeError) as exc:
                         st.error(f"Acquisto non registrato: {exc}")
-            with sell_tab:
+            with sell_col:
                 if held_position is None:
                     st.info("Nessuna posizione aperta su questo strumento.")
                 else:
@@ -1840,8 +2115,8 @@ with tab_sim:
             )
             st.rerun()
 
-with tab_backtest:
-    st.header("Backtesting — risultati separati")
+with st.expander("Backtest e validazione walk-forward", expanded=False):
+    st.subheader("Backtesting — risultati separati")
     st.caption("Il backtest è separato dal conto simulato e dall'account Alpaca. Segnale calcolato alla chiusura della barra; esecuzione simulata all'apertura della barra successiva.")
     if not market_data_current:
         st.info("Carica o riapplica la selezione corrente nella Dashboard prima del backtest.")
@@ -2377,8 +2652,8 @@ with tab_backtest:
                     "I risultati storici non garantiscono performance future."
                 )
 
-with tab_alpaca:
-    st.header("Account e automazione Alpaca Paper")
+with st.expander("Dettagli account Alpaca Paper", expanded=False):
+    st.subheader("Account Alpaca Paper")
     st.caption(
         "Il broker di trading viene costruito esclusivamente con paper=True. "
         "La demo sintetica e il backtest non possono attivare ordini."
@@ -2389,36 +2664,6 @@ with tab_alpaca:
             "avvia TRADING_MODE=paper. La modalità demo rimane solo locale."
         )
     elif not st.session_state.get("paper_verified", False):
-        st.warning("Verifica prima il conto Paper nella scheda Panoramica.")
+        st.warning("Verifica il conto Paper dal monitor in cima alla dashboard.")
     else:
         st.success("Account paper verificato in questa sessione.")
-
-    current_data = (
-        st.session_state.get("market_frame")
-        if market_data_current
-        else None
-    )
-    current_quality = (
-        st.session_state.get("market_quality")
-        if market_data_current
-        else None
-    )
-    current_symbol = st.session_state.get("market_symbol") if market_data_current else None
-    current_interval = st.session_state.get("market_interval") if market_data_current else None
-    automation_settings = replace(
-        settings,
-        risk_max_trade_fraction=float(max_trade_fraction),
-        risk_max_exposure_fraction=float(max_exposure_fraction),
-        daily_loss_limit_pct=float(daily_loss_fraction),
-        paper_max_daily_orders=int(paper_max_daily_orders),
-    )
-    _paper_automation_panel(
-        current_symbol,
-        current_interval,
-        current_quality,
-        current_data,
-        int(short_window),
-        int(long_window),
-        automation_settings,
-        int(paper_max_daily_orders),
-    )

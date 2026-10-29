@@ -1,15 +1,19 @@
 import math
+import sqlite3
 from datetime import datetime, timedelta, timezone
-
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
 from config.settings import AppSettings
+from src.broker import alpaca_client
+from src.trading import paper_automation
 from src.trading.paper_automation import (
     PaperAutomationError,
     PaperAutomationLog,
+    execute_auto_paper_cycle,
     execute_paper_signal,
 )
 
@@ -85,6 +89,40 @@ class FakePaperBroker:
         }
         self.orders.append(order)
         return order
+
+
+class FakeAutoPaperBroker(FakePaperBroker):
+    paper_client_is_paper = True
+
+    def __init__(self, *, stale_seconds=90):
+        super().__init__()
+        self.stale_seconds = stale_seconds
+        self.requested_symbols = []
+
+    def verify_connection(self):
+        self.connected = True
+        return {"connected": True, "mode": "paper"}
+
+    def get_market_data(self, symbol, *, timeframe, period, limit):
+        self.requested_symbols.append(symbol)
+        data = make_data(stale_seconds=self.stale_seconds)
+        data.attrs["interval"] = timeframe
+        return data
+
+
+def selected_decision(**overrides):
+    decision = {
+        "status": "SELECTED",
+        "asset": "AAPL",
+        "strategy": "moving_average",
+        "parameters": {"short_window": 2, "long_window": 3},
+        "side": "buy",
+        "proposed_quantity": 10.0,
+        "reason": "Validated on out-of-sample folds.",
+        "exclusions": (),
+    }
+    decision.update(overrides)
+    return type("Selection", (), decision)()
 
 
 def make_settings(**overrides):
@@ -169,6 +207,64 @@ def test_incomplete_current_bar_waits_before_generating_an_order():
     result = execute(broker, data=make_data(stale_seconds=10))
     assert result["status"] == "no_signal"
     assert "forming bar was ignored" in result["reason"]
+    assert broker.submitted == []
+
+
+def test_daily_equity_bar_before_session_close_waits_without_order():
+    broker = FakePaperBroker()
+    frame = pd.DataFrame({
+        "timestamp": [pd.Timestamp("2025-07-02T00:00:00Z")],
+        "close": [100.0],
+    })
+    frame.attrs.update({"quality": "real", "interval": "1Day"})
+
+    result = execute_paper_signal(
+        broker=broker,
+        settings=make_settings(),
+        symbol="AAPL",
+        market_data=frame,
+        short_window=2,
+        long_window=3,
+        as_of=pd.Timestamp("2025-07-02T19:00:00Z"),
+    )
+
+    assert result["status"] == "blocked"
+    assert "No completed OHLC bar" in result["reason"]
+    assert broker.submitted == []
+
+
+def test_future_bar_timestamp_cannot_trigger_a_paper_order():
+    broker = FakePaperBroker()
+    frame = pd.DataFrame({
+        "timestamp": pd.date_range(
+            "2025-07-02T20:01:00Z", periods=6, freq="min"
+        ),
+        "close": [4.0, 3.0, 2.0, 1.0, 2.0, 3.0],
+    })
+    frame.attrs.update({"quality": "real", "interval": "1Min"})
+
+    with pytest.raises(PaperAutomationError, match="future timestamp"):
+        execute_paper_signal(
+            broker=broker,
+            settings=make_settings(),
+            symbol="AAPL",
+            market_data=frame,
+            short_window=2,
+            long_window=3,
+            as_of=pd.Timestamp("2025-07-02T20:00:00Z"),
+        )
+
+    assert broker.submitted == []
+
+
+def test_missing_market_data_cannot_trigger_a_paper_order():
+    broker = FakePaperBroker()
+    frame = pd.DataFrame(columns=["timestamp", "close"])
+    frame.attrs.update({"quality": "real", "interval": "1Min"})
+
+    with pytest.raises(PaperAutomationError, match="Fresh real market data"):
+        execute(broker, data=frame)
+
     assert broker.submitted == []
 
 
@@ -443,9 +539,12 @@ def test_paper_automation_log_persists_decisions_without_credentials(tmp_path):
     first_log.record({
         "timestamp_utc": "2026-10-11T10:00:00+00:00",
         "symbol": "AAPL",
+        "strategy": "moving_average",
         "signal_timestamp_utc": "2026-10-11T09:59:00+00:00",
         "signal": 1,
         "decision": "blocked",
+        "quantity": 10.0,
+        "proposed_quantity": 12.0,
         "reason": "Order limit reached.",
     })
 
@@ -454,11 +553,242 @@ def test_paper_automation_log_persists_decisions_without_credentials(tmp_path):
     assert reopened_log.recent() == [{
         "timestamp_utc": "2026-10-11T10:00:00+00:00",
         "symbol": "AAPL",
+        "strategy": "moving_average",
         "signal_timestamp_utc": "2026-10-11T09:59:00+00:00",
         "signal": "1",
         "decision": "blocked",
         "side": None,
-        "quantity": None,
+        "quantity": 10.0,
+        "proposed_quantity": 12.0,
         "order_status": None,
         "reason": "Order limit reached.",
     }]
+
+
+def test_paper_automation_log_migrates_existing_event_table(tmp_path):
+    database_path = tmp_path / "paper" / "existing.sqlite3"
+    database_path.parent.mkdir(parents=True)
+    with sqlite3.connect(database_path) as db:
+        db.execute(
+            """CREATE TABLE paper_automation_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                signal_timestamp_utc TEXT,
+                signal TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                side TEXT,
+                quantity REAL,
+                order_status TEXT,
+                reason TEXT NOT NULL
+            )"""
+        )
+
+    automation_log = PaperAutomationLog(database_path)
+    automation_log.record({
+        "timestamp_utc": "2026-10-11T10:00:00+00:00",
+        "symbol": "AAPL",
+        "strategy": "moving_average",
+        "proposed_quantity": 3.0,
+        "decision": "preview",
+        "reason": "No order was sent.",
+    })
+
+    event = automation_log.recent()[0]
+    assert event["strategy"] == "moving_average"
+    assert event["proposed_quantity"] == 3.0
+    assert event["quantity"] is None
+
+
+def test_auto_cycle_uses_selected_asset_and_strategy_in_no_order_mode(monkeypatch):
+    broker = FakeAutoPaperBroker()
+    selector_calls = []
+    executor_calls = []
+    real_execute = paper_automation.execute_paper_signal
+
+    def select(data, **kwargs):
+        selector_calls.append((data, kwargs))
+        return selected_decision()
+
+    def execute(**kwargs):
+        executor_calls.append(kwargs)
+        return real_execute(**kwargs)
+
+    monkeypatch.setattr(paper_automation, "select_strategy", select)
+    monkeypatch.setattr(paper_automation, "execute_paper_signal", execute)
+
+    result = execute_auto_paper_cycle(
+        broker=broker,
+        settings=make_settings(),
+        allowed_symbols=("AAPL",),
+        interval="1Min",
+    )
+
+    assert len(selector_calls) == 1
+    assert selector_calls[0][0]["AAPL"].attrs["quality"] == "real"
+    assert selector_calls[0][1]["asset_availability"] == {"AAPL": True}
+    assert executor_calls[0]["symbol"] == "AAPL"
+    assert executor_calls[0]["short_window"] == 2
+    assert executor_calls[0]["long_window"] == 3
+    assert executor_calls[0]["dry_run"] is True
+    assert result["status"] == "preview"
+    assert result["strategy"] == "moving_average"
+    assert result["proposed_quantity"] == 10.0
+    assert result["quantity"] > 0
+    assert broker.submitted == []
+
+
+def test_auto_cycle_no_trade_never_invokes_order_execution(monkeypatch):
+    broker = FakeAutoPaperBroker()
+    monkeypatch.setattr(
+        paper_automation,
+        "select_strategy",
+        lambda *args, **kwargs: selected_decision(
+            status="NO_TRADE",
+            asset=None,
+            strategy=None,
+            parameters=None,
+            side=None,
+            proposed_quantity=None,
+            reason="OOS criteria not met.",
+        ),
+    )
+    monkeypatch.setattr(
+        paper_automation,
+        "execute_paper_signal",
+        lambda **kwargs: pytest.fail("NO_TRADE must not reach execution."),
+    )
+
+    result = execute_auto_paper_cycle(
+        broker=broker,
+        settings=make_settings(),
+        allowed_symbols=("AAPL",),
+        interval="1Min",
+    )
+
+    assert result["status"] == "NO_TRADE"
+    assert "OOS criteria not met" in result["reason"]
+    assert broker.submitted == []
+
+
+@pytest.mark.parametrize(
+    ("broker", "decision", "settings", "reason"),
+    [
+        (
+            FakeAutoPaperBroker(stale_seconds=700),
+            selected_decision(),
+            None,
+            "stale",
+        ),
+        (
+            FakeAutoPaperBroker(),
+            selected_decision(proposed_quantity=math.nan),
+            None,
+            "invalid decision",
+        ),
+        (
+            FakeAutoPaperBroker(),
+            selected_decision(),
+            SimpleNamespace(trading_mode="live", paper_trading_enabled=True),
+            "Live and Demo are rejected",
+        ),
+    ],
+)
+def test_auto_cycle_blocks_stale_data_invalid_size_and_live(
+    monkeypatch, broker, decision, settings, reason,
+):
+    monkeypatch.setattr(
+        paper_automation,
+        "select_strategy",
+        lambda *args, **kwargs: decision,
+    )
+
+    with pytest.raises(PaperAutomationError, match=reason):
+        execute_auto_paper_cycle(
+            broker=broker,
+            settings=settings or make_settings(),
+            allowed_symbols=("AAPL",),
+            interval="1Min",
+        )
+    assert broker.submitted == []
+
+
+def test_auto_cycle_risk_limit_and_duplicate_orders_prevent_submission(monkeypatch):
+    monkeypatch.setattr(
+        paper_automation,
+        "select_strategy",
+        lambda *args, **kwargs: selected_decision(),
+    )
+    broker = FakeAutoPaperBroker()
+    broker.get_account = lambda: {
+        "status": "ACTIVE",
+        "cash": "10000",
+        "buying_power": "10000",
+        "equity": "9000",
+        "last_equity": "10000",
+        "trading_blocked": False,
+    }
+
+    result = execute_auto_paper_cycle(
+        broker=broker,
+        settings=make_settings(),
+        allowed_symbols=("AAPL",),
+        interval="1Min",
+        dry_run=False,
+    )
+
+    assert result["status"] == "blocked"
+    assert "daily loss limit" in result["reason"].lower()
+    assert broker.submitted == []
+
+    broker = FakeAutoPaperBroker()
+    broker.orders.append({"symbol": "AAPL", "status": "accepted"})
+    result = execute_auto_paper_cycle(
+        broker=broker,
+        settings=make_settings(),
+        allowed_symbols=("AAPL",),
+        interval="1Min",
+        dry_run=False,
+    )
+
+    assert result["status"] == "blocked"
+    assert "open paper order" in result["reason"].lower()
+    assert broker.submitted == []
+
+
+def test_auto_cycle_requires_verified_paper_endpoint():
+    broker = FakeAutoPaperBroker()
+    broker.paper_client_is_paper = False
+
+    with pytest.raises(PaperAutomationError, match="dedicated Alpaca Paper client"):
+        execute_auto_paper_cycle(
+            broker=broker,
+            settings=make_settings(),
+            allowed_symbols=("AAPL",),
+            interval="1Min",
+        )
+
+    assert broker.submitted == []
+
+
+def test_alpaca_trading_client_is_constructed_only_with_paper_endpoint(monkeypatch):
+    initialized = []
+
+    class MockTradingClient:
+        def __init__(self, api_key, secret_key, *, paper):
+            initialized.append(paper)
+
+    monkeypatch.setattr(alpaca_client, "TradingClient", MockTradingClient)
+    monkeypatch.setattr(alpaca_client, "StockHistoricalDataClient", None)
+    monkeypatch.setattr(alpaca_client, "CryptoHistoricalDataClient", None)
+    monkeypatch.setattr(alpaca_client, "configure_logging", lambda _: object())
+    settings = make_settings()
+
+    broker = alpaca_client.AlpacaClient(settings)
+
+    assert initialized == [True]
+    assert broker.paper_client_configured is True
+    assert broker.paper_client_is_paper is True
+    broker.settings.trading_mode = "live"
+    assert broker.paper_client_configured is False
+    assert broker.paper_client_is_paper is False

@@ -105,7 +105,16 @@ class AlpacaClient:
 
     @property
     def paper_client_configured(self) -> bool:
-        return self.client is not None
+        return (
+            self.client is not None
+            and self.settings.trading_mode == "paper"
+            and self.settings.paper_trading_enabled
+            and self._paper_client_is_paper
+        )
+
+    @property
+    def paper_client_is_paper(self) -> bool:
+        return self._paper_client_is_paper and self.settings.trading_mode == "paper"
 
     def verify_connection(self) -> dict[str, Any]:
         if (
