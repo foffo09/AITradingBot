@@ -8,6 +8,7 @@ import pandas as pd
 
 from config.settings import AppSettings
 from src.utils.logging_config import configure_logging
+from src.trading.paper_coordinator import PaperAccountCoordinator, PaperExecutionLease
 
 try:
     from alpaca.data import CryptoHistoricalDataClient, StockHistoricalDataClient
@@ -104,6 +105,16 @@ class AlpacaClient:
         return self._paper_connection_verified
 
     @property
+    def paper_coordinator(self):
+        if self.settings.paper_execution_scope != "single_host" or not self._paper_connection_verified:
+            return None
+        account = self._verified_account
+        identity = account.get("id") if isinstance(account, dict) else getattr(account, "id", None)
+        if not identity:
+            return None
+        return PaperAccountCoordinator(self.settings.paper_coordinator_directory, str(identity))
+
+    @property
     def paper_client_configured(self) -> bool:
         return self.client is not None
 
@@ -194,8 +205,11 @@ class AlpacaClient:
                 "Alpaca order-query support is unavailable in the installed SDK."
             )
         try:
-            request = GetOrdersRequest(status=QueryOrderStatus.ALL)
-            return self.client.get_orders(filter=request)
+            request = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=500)
+            orders = self.client.get_orders(filter=request)
+            if len(orders) >= 500:
+                raise BrokerConnectionError("Order history may be truncated; automation is blocked.")
+            return orders
         except Exception as exc:  # pragma: no cover
             self._paper_connection_verified = False
             self._verified_account = None
@@ -340,6 +354,9 @@ class AlpacaClient:
             bars.attrs["source"] = source
             bars.attrs["quality"] = "real"
             bars.attrs["interval"] = timeframe
+            bars.attrs["bar_time_contract"] = "alpaca-start-v1"
+            bars.attrs["bar_calendar"] = "24/7" if is_crypto else "NYSE"
+            bars.attrs["session_scope"] = "continuous" if is_crypto else "all_sessions"
             bars.attrs["fetched_at"] = datetime.now(timezone.utc).isoformat()
             bars.attrs["requested_start"] = start.isoformat()
             return bars.sort_values("timestamp").reset_index(drop=True)
@@ -446,6 +463,11 @@ class AlpacaClient:
             raise PermissionError("Only the dedicated Alpaca Paper client may submit orders.")
         if not self._paper_connection_verified:
             raise PermissionError("Verify the active Alpaca Paper account before submitting an order.")
+        lease = kwargs.pop("_execution_lease", None)
+        coordinator = self.paper_coordinator
+        if (coordinator is None or not isinstance(lease, PaperExecutionLease)
+                or lease.directory != coordinator.directory.resolve() or lease.scope != coordinator.scope):
+            raise PermissionError("Exclusive Paper account execution is required; direct submission is disabled.")
         if MarketOrderRequest is None or OrderSide is None or OrderType is None or TimeInForce is None:
             raise BrokerConnectionError("Alpaca market-order support is unavailable in the installed SDK.")
         if args:
@@ -483,6 +505,9 @@ class AlpacaClient:
             self._paper_connection_verified = False
             self._verified_account = None
             raise PermissionError("Active, unblocked Alpaca Paper account verification is required.")
+
+        identity = account.get("id") if isinstance(account, dict) else getattr(account, "id", None)
+        lease.authorize_submission(client_order_id, str(identity or ""))
 
         request = MarketOrderRequest(
             symbol=symbol,

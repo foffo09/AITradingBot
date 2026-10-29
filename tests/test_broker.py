@@ -1,6 +1,26 @@
 from config.settings import AppSettings
 from src.broker.alpaca_client import AlpacaClient, BrokerConnectionError
 
+import pytest
+from types import SimpleNamespace
+
+
+@pytest.mark.parametrize("count", [2, 500])
+def test_order_history_uses_explicit_limit_and_blocks_saturation(count):
+    client = AlpacaClient(AppSettings(trading_mode="demo"))
+    orders = [{"id": f"test-order-{i}"} for i in range(count)]
+    requests = []
+    def get_orders(filter):
+        requests.append(filter)
+        return orders
+    client.client = SimpleNamespace(get_orders=get_orders)
+    if count == 500:
+        with pytest.raises(BrokerConnectionError, match="truncated"):
+            client.get_orders()
+    else:
+        assert client.get_orders() == orders
+    assert requests[0].limit == 500
+
 
 def test_demo_mode_without_api_keys():
     settings = AppSettings(trading_mode="demo", alpaca_api_key=None, alpaca_secret_key=None, paper_trading_enabled=True)

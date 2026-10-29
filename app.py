@@ -12,7 +12,6 @@ from urllib.parse import quote
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from plotly.subplots import make_subplots
 
 from config.settings import AppSettings
 from src.backtesting.engine import BacktestEngine, backtest_input_key
@@ -21,8 +20,12 @@ from src.broker.alpaca_client import AlpacaClient, BrokerConnectionError
 from src.data.fx_rates import fetch_eur_usd_rate
 from src.data.instruments import CRYPTO_SYMBOLS, EQUITY_SYMBOLS, INSTRUMENTS
 from src.data.market_data import generate_synthetic_market_data
+from src.data.bar_timing import BarTimingError, select_completed_bars
 from src.simulation.ledger import SimulationLedger, resolve_simulation_database_path
 from src.strategy.moving_average import MovingAverageStrategy
+from src.ui.charts import plot_market_chart as _plot_market_chart
+from src.ui.presentation import (data_status, finite_number, freshness_limit as _freshness_limit,
+                                 money as _money_or_unavailable, paper_metrics, signal_view, unique_orders)
 from src.trading.paper_automation import (
     PaperAutomationError,
     PaperAutomationLog,
@@ -85,17 +88,22 @@ elif settings.trading_mode == "paper":
             Path(local_app_data) / "AITradingBot" / "paper" / "simulation.sqlite3"
         )
     DB_PATH = resolve_simulation_database_path(ROOT, configured_paper_path)
-    demo_database_path = os.environ.get(DEMO_DB_PATH_ENV)
-    if not demo_database_path and os.getenv("LOCALAPPDATA"):
-        demo_database_path = str(
-            Path(os.environ["LOCALAPPDATA"]) / "AITradingBot" / "demo" / "simulation.sqlite3"
-        )
-    if demo_database_path:
-        resolved_demo_path = resolve_simulation_database_path(ROOT, demo_database_path)
-        if DB_PATH == resolved_demo_path:
-            raise RuntimeError("Paper and demo modes must use separate database files.")
 else:
     raise RuntimeError("Unsupported trading mode; start in demo or paper mode.")
+
+other_mode = "paper" if settings.trading_mode == "demo" else "demo"
+other_database_path = os.environ.get(PAPER_DB_PATH_ENV if other_mode == "paper" else DEMO_DB_PATH_ENV)
+if not other_database_path and os.getenv("LOCALAPPDATA"):
+    other_database_path = str(
+        Path(os.environ["LOCALAPPDATA"]) / "AITradingBot" / other_mode / "simulation.sqlite3"
+    )
+if other_database_path:
+    resolved_other_path = resolve_simulation_database_path(ROOT, other_database_path)
+    if DB_PATH == resolved_other_path or (
+        DB_PATH.exists() and resolved_other_path.exists() and DB_PATH.samefile(resolved_other_path)
+    ):
+        raise RuntimeError("Paper and demo modes must use separate database files.")
+
 @st.cache_resource(show_spinner=False)
 def _runtime_resources(session_id: str, database_path: str, _settings: AppSettings):
     del session_id
@@ -122,28 +130,12 @@ WALK_FORWARD_CANDIDATES = (
 )
 
 
-def _freshness_limit(interval: str) -> timedelta:
-    return {
-        "1Min": timedelta(minutes=10),
-        "5Min": timedelta(minutes=20),
-        "15Min": timedelta(minutes=45),
-        "1Hour": timedelta(hours=3),
-        "1Day": timedelta(days=4),
-        "1Week": timedelta(days=10),
-    }[interval]
-
-
 def _latest_timestamp(data: pd.DataFrame) -> pd.Timestamp:
     return pd.Timestamp(data["timestamp"].iloc[-1])
 
 
 def _data_is_fresh(timestamp: object, interval: str) -> bool:
-    parsed = pd.Timestamp(timestamp)
-    if parsed.tzinfo is None:
-        parsed = parsed.tz_localize("UTC")
-    else:
-        parsed = parsed.tz_convert("UTC")
-    return datetime.now(timezone.utc) - parsed.to_pydatetime() <= _freshness_limit(interval)
+    return data_status(timestamp, interval, "real")["state"] == "fresh"
 
 
 def _tradingview_url(symbol: str) -> str:
@@ -176,6 +168,8 @@ def _load_data(symbol: str, interval: str, period: str, demo: bool) -> tuple[pd.
     result = broker.get_market_data(
         symbol, timeframe=interval, period=period, limit=None,
     )
+    if result is None or result.empty:
+        raise BrokerConnectionError("Nessuna barra disponibile per la selezione corrente.")
     result.attrs["quality"] = "real"
     result.attrs["interval"] = interval
     return result, str(result.attrs.get("source", "Alpaca market data"))
@@ -191,64 +185,17 @@ def _model_dict(item: object) -> dict:
     return {}
 
 
-def _money_or_unavailable(value: object) -> str:
-    try:
-        number = float(value)
-    except (TypeError, ValueError, OverflowError):
-        return "N/D"
-    return f"${number:,.2f}" if math.isfinite(number) else "N/D"
-
-
 def _show_paper_snapshot(snapshot: dict) -> None:
     account = snapshot.get("account") or {}
     account = _model_dict(account)
 
-    def amount(name: str) -> float | None:
-        try:
-            result = float(account[name])
-        except (KeyError, TypeError, ValueError, OverflowError):
-            return None
-        return result if math.isfinite(result) else None
-
-    equity = amount("equity")
-    cash = amount("cash")
-    buying_power = amount("buying_power")
-    last_equity = amount("last_equity")
-    daily_change = (
-        equity - last_equity
-        if equity is not None and last_equity is not None
-        else None
-    )
-    daily_percent = (
-        daily_change / last_equity * 100
-        if daily_change is not None and last_equity is not None and last_equity > 0
-        else None
-    )
-    positions = [_model_dict(item) for item in snapshot.get("positions", [])]
-    orders = [_model_dict(item) for item in snapshot.get("orders", [])]
-    market_values = []
-    unrealized_values = []
-    for position in positions:
-        for source, destination in (
-            ("market_value", market_values),
-            ("unrealized_pl", unrealized_values),
-        ):
-            try:
-                value = float(position[source])
-            except (KeyError, TypeError, ValueError, OverflowError):
-                destination.append(None)
-            else:
-                destination.append(value if math.isfinite(value) else None)
-    market_value = (
-        sum(abs(value) for value in market_values)
-        if all(value is not None for value in market_values)
-        else None
-    )
-    unrealized = (
-        sum(unrealized_values)
-        if all(value is not None for value in unrealized_values)
-        else None
-    )
+    raw_positions = snapshot.get("positions")
+    positions = [_model_dict(item) for item in raw_positions or []]
+    orders = unique_orders([_model_dict(item) for item in snapshot.get("orders") or []])
+    values = paper_metrics(account, positions if raw_positions is not None else None)
+    equity, cash, buying_power = (values[name] for name in ("equity", "cash", "buying_power"))
+    daily_change, daily_percent = values["daily_change"], values["daily_percent"]
+    market_value, unrealized = values["market_value"], values["unrealized"]
     unavailable_message = "N/D — il broker non ha fornito un valore valido."
 
     account_metrics = st.columns(3)
@@ -281,7 +228,7 @@ def _show_paper_snapshot(snapshot: dict) -> None:
     )
     valuation = st.columns(3)
     valuation[0].metric(
-        "Capitale investito (valore posizioni)",
+        "Valore di mercato posizioni (Paper)",
         _money_or_unavailable(market_value),
         help=(
             "Somma del valore assoluto di mercato delle posizioni restituite. "
@@ -323,10 +270,9 @@ def _show_paper_snapshot(snapshot: dict) -> None:
             update_time = pd.Timestamp(updated_at)
             if update_time.tzinfo is None:
                 update_time = update_time.tz_localize("UTC")
-            age_seconds = max(
-                0.0,
-                (datetime.now(timezone.utc) - update_time.tz_convert("UTC").to_pydatetime()).total_seconds(),
-            )
+            age_seconds = finite_number((datetime.now(timezone.utc) - update_time.tz_convert("UTC").to_pydatetime()).total_seconds())
+            if age_seconds is None or age_seconds < 0:
+                raise ValueError("Invalid snapshot timestamp")
             update_label = (
                 f"Ultimo aggiornamento UTC: {updated_at} "
                 f"({age_seconds:.0f} secondi fa)."
@@ -335,6 +281,7 @@ def _show_paper_snapshot(snapshot: dict) -> None:
                 st.warning("Snapshot Paper non aggiornato da oltre 45 secondi.")
         except (TypeError, ValueError, OverflowError):
             update_label = f"Ultimo aggiornamento UTC: N/D — timestamp non valido ({updated_at})."
+            st.warning("Timestamp dello snapshot non affidabile; non considerare il conto aggiornato.")
     else:
         update_label = "Ultimo aggiornamento UTC: N/D — timestamp assente."
     st.caption(
@@ -380,7 +327,7 @@ def _show_paper_snapshot(snapshot: dict) -> None:
                 position_rows.append(row)
             st.dataframe(pd.DataFrame(position_rows), use_container_width=True, hide_index=True)
         else:
-            st.caption("Nessuna posizione aperta.")
+            st.caption("Nessuna posizione aperta." if raw_positions is not None else "Posizioni N/D: elenco non fornito dal broker.")
     with orders_col:
         st.markdown("**Ordini Paper recenti e pendenti**")
         if orders:
@@ -401,6 +348,13 @@ def _show_paper_snapshot(snapshot: dict) -> None:
             selected_orders = pending + [
                 order for order in ordered if order not in pending
             ][:max(0, 10 - len(pending))]
+            order_filter = st.selectbox("Filtro ordini Paper", ["Tutti", "Pendenti", "Con quantità eseguita", "Rifiutati/cancellati"], key="paper_order_filter")
+            if order_filter == "Pendenti":
+                selected_orders = pending
+            elif order_filter == "Con quantità eseguita":
+                selected_orders = [order for order in orders if (finite_number(order.get("filled_qty")) or 0) > 0]
+            elif order_filter == "Rifiutati/cancellati":
+                selected_orders = [order for order in orders if str(order.get("status", "")).lower() in {"rejected", "canceled", "cancelled"}]
             order_fields = (
                 ("symbol", "Strumento"),
                 ("side", "Lato"),
@@ -426,6 +380,14 @@ def _show_paper_snapshot(snapshot: dict) -> None:
                 f"Ordini aperti/pending: {len(pending)} · mostrati anche gli ultimi "
                 f"{max(0, len(selected_orders) - len(pending))} ordini recenti."
             )
+            confirmed = [order for order in orders if (finite_number(order.get("filled_qty")) or 0) > 0
+                         and (finite_number(order.get("filled_avg_price")) or 0) > 0
+                         and not pd.isna(pd.to_datetime(order.get("filled_at"), utc=True, errors="coerce"))]
+            if confirmed:
+                st.markdown("**Esecuzioni confermate dal broker (anche parziali)**")
+                st.dataframe(pd.DataFrame([{name: order.get(name, "N/D") for name in
+                    ("symbol", "filled_qty", "filled_avg_price", "filled_at")} for order in confirmed]),
+                    use_container_width=True, hide_index=True)
         else:
             st.caption("Nessun ordine restituito dall'account.")
 
@@ -535,17 +497,22 @@ def _live_quote_monitor(
         ):
             quote = broker.get_latest_quote(symbol)
             st.session_state.market_quote_refreshed_at = datetime.now(timezone.utc)
-        observed = pd.Timestamp(quote["timestamp"])
+        try:
+            observed = pd.Timestamp(quote.get("timestamp"))
+            if pd.isna(observed):
+                raise ValueError("Missing quote timestamp")
+        except (TypeError, ValueError, OverflowError):
+            raise BrokerConnectionError("Timestamp quotazione non valido; storico mantenuto.") from None
         if observed.tzinfo is None:
             observed = observed.tz_localize("UTC")
         age = datetime.now(timezone.utc) - observed.tz_convert("UTC").to_pydatetime()
-        if age > timedelta(minutes=2) or age < -timedelta(seconds=30):
+        if age > timedelta(minutes=2) or age < timedelta(0):
             quote = None
             st.session_state.market_quote = None
             st.session_state.pop("market_quote_refreshed_at", None)
             st.session_state.market_quote_error = (
-                "La quotazione è futura di oltre 30 secondi."
-                if age < -timedelta(seconds=30)
+                "La quotazione ha un timestamp futuro."
+                if age < timedelta(0)
                 else "La quotazione restituita dal feed è più vecchia di due minuti."
             )
             st.warning(f"Ultima quotazione scaduta o con timestamp futuro ({age.total_seconds() / 60:.1f} min).")
@@ -582,8 +549,9 @@ def _live_quote_monitor(
             short_window,
             long_window,
             show_rsi,
-            paper_orders=[_model_dict(item) for item in paper_snapshot.get("orders", [])],
+            paper_orders=[_model_dict(item) for item in paper_snapshot.get("orders") or []],
             latest_quote=quote,
+            local_history=ledger.history(),
         )
     except BrokerConnectionError as exc:
         st.session_state.market_quote = None
@@ -600,8 +568,9 @@ def _live_quote_monitor(
             short_window,
             long_window,
             show_rsi,
-            paper_orders=[_model_dict(item) for item in snapshot.get("orders", [])],
+            paper_orders=[_model_dict(item) for item in snapshot.get("orders") or []],
             latest_quote=None,
+            local_history=ledger.history(),
         )
 
 
@@ -645,11 +614,17 @@ def _paper_automation_panel(
             return
         if history:
             st.markdown("**Log locale persistente — attività recenti del bot**")
+            decisions = st.multiselect("Filtra decisioni", sorted({row["decision"] for row in history}), key="paper_log_decisions")
+            displayed = [row for row in history if not decisions or row["decision"] in decisions]
+            frame = pd.DataFrame(displayed).fillna("N/D")
+            st.caption("Ultimi 25 eventi locali. Timeframe, versione strategia e fonte non registrati nei vecchi eventi restano N/D; non vengono ricostruiti dai parametri correnti.")
             st.dataframe(
-                pd.DataFrame(history),
+                frame,
                 use_container_width=True,
                 hide_index=True,
             )
+            st.download_button("Scarica decisioni CSV (eventi mostrati)", frame.to_csv(index=False),
+                               file_name="decisioni-paper.csv", mime="text/csv", key="paper_log_csv")
 
     current_market_data = st.session_state.get("market_frame")
     if (
@@ -667,6 +642,10 @@ def _paper_automation_panel(
         "senza credenziali."
     )
     active = bool(st.session_state.get("paper_automation_active", False))
+    coordinated = getattr(broker, "paper_coordinator", None) is not None
+    if not coordinated:
+        st.warning("Invio Paper bloccato: esecutore esclusivo per conto non configurato. Il coordinamento distribuito non è supportato; l'anteprima DRY-RUN resta separata.")
+    preview_requested = False
     if active:
         st.error("Automazione Paper ATTIVA per questa sessione.")
         if st.button("Arresto immediato", type="primary", key="paper_auto_stop"):
@@ -679,11 +658,20 @@ def _paper_automation_panel(
             st.rerun()
     else:
         st.info("Automazione arrestata. L'attivazione richiede un'azione esplicita.")
+        preview_requested = st.button(
+            "Esegui anteprima DRY-RUN",
+            disabled=(not broker.paper_client_configured or settings.trading_mode != "paper"
+                      or not st.session_state.get("paper_verified", False) or quality != "real"
+                      or current_market_data is None or symbol is None),
+            help="Valuta account, dati e rischio una volta. Non avvia l'automazione e non invia ordini.",
+            key="paper_auto_preview",
+        )
         if st.button(
             "Avvia automazione Paper",
             type="primary",
             disabled=(
-                not broker.paper_client_configured
+                not coordinated
+                or not broker.paper_client_configured
                 or settings.trading_mode != "paper"
                 or not st.session_state.get("paper_verified", False)
                 or quality != "real"
@@ -695,7 +683,7 @@ def _paper_automation_panel(
             st.session_state.paper_automation_active = True
             st.session_state.paper_auto_result = None
             active = True
-    if not active:
+    if not active and not preview_requested:
         if (
             settings.trading_mode != "paper"
             or not broker.paper_client_configured
@@ -738,10 +726,20 @@ def _paper_automation_panel(
             short_window=short_window,
             long_window=long_window,
             max_daily_orders=max_daily_orders,
+            dry_run=preview_requested,
         )
+        if preview_requested:
+            result["reason"] = "DRY-RUN — nessun ordine inviato. " + result["reason"]
         st.session_state.paper_auto_result = result
+        if result.get("requires_stop"):
+            st.session_state.paper_automation_active = False
+            st.warning("Automazione arrestata: proprietà dell'esecutore o stato del conto non verificabile.")
         record_event(result)
-        if result["status"] == "submitted":
+        if result["status"] == "dry_run":
+            st.success(f"DRY-RUN: {result['side']} {result['quantity']} · {result['symbol']}. Nessun ordine inviato; automazione arrestata.")
+            st.caption(f"Riferimento {'ask' if result['side'] == 'buy' else 'bid'}: {result['reference_price']} USD · {result['reference_timestamp']}. Stop e target: N/D, non definiti dalla SMA.")
+            st.caption(f"Controvalore teorico: {_money_or_unavailable(result['quantity'] * result['reference_price'])}. Rischio fino allo stop, target e costi effettivi broker: N/D. Il dimensionamento non è un rendimento garantito.")
+        elif result["status"] == "submitted":
             order = _model_dict(result.get("order", {}))
             broker_status = order.get("status", "accepted/unknown")
             st.warning(
@@ -993,148 +991,6 @@ def _show_simulation_account(spread_bps: float) -> None:
         st.info("Nessuna posizione aperta.")
 
 
-def _plot_market_chart(
-    data: pd.DataFrame,
-    signals: pd.DataFrame,
-    symbol: str,
-    short_window: int,
-    long_window: int,
-    show_rsi: bool,
-    paper_orders: list[dict] | None = None,
-    latest_quote: dict | None = None,
-) -> None:
-    rows = 3 if show_rsi else 2
-    heights = [0.65, 0.2, 0.15] if show_rsi else [0.75, 0.25]
-    fig = make_subplots(
-        rows=rows,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.03,
-        row_heights=heights,
-        subplot_titles=("Prezzo OHLC e medie mobili", "Volume", "RSI (14)" if show_rsi else None),
-    )
-    fig.add_trace(go.Candlestick(
-        x=data["timestamp"], open=data["open"], high=data["high"], low=data["low"], close=data["close"],
-        name=symbol, increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
-    ), row=1, col=1)
-    fig.add_trace(go.Scatter(
-        x=signals["timestamp"], y=signals["short_ma"], mode="lines", name=f"MA breve ({short_window})",
-        line={"color": "#ffca28", "width": 1.5},
-    ), row=1, col=1)
-    if latest_quote and latest_quote.get("price") is not None:
-        fig.add_hline(
-            y=float(latest_quote["price"]),
-            line_dash="dot",
-            line_color="#00e5ff",
-            annotation_text=(
-                f"Mid quote UTC {latest_quote.get('timestamp', 'n/d')} — non è una candela OHLC"
-            ),
-            annotation_position="top left",
-            row=1,
-            col=1,
-        )
-    fig.add_trace(go.Scatter(
-        x=signals["timestamp"], y=signals["long_ma"], mode="lines", name=f"MA lunga ({long_window})",
-        line={"color": "#42a5f5", "width": 1.5},
-    ), row=1, col=1)
-
-    buys = signals[signals["signal"] == 1]
-    sells = signals[signals["signal"] == -1]
-    for points, name, color, marker in (
-        (buys, "Segnale acquisto", "#00c853", "triangle-up"),
-        (sells, "Segnale uscita", "#ff1744", "triangle-down"),
-    ):
-        if not points.empty:
-            fig.add_trace(go.Scatter(
-                x=points["timestamp"], y=points["close"], mode="markers", name=name,
-                marker={"symbol": marker, "color": color, "size": 10},
-                text=points["signal_reason"], hovertemplate="%{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
-            ), row=1, col=1)
-
-    history = ledger.history()
-    if history:
-        trade_rows = [item for item in history if item["symbol"] == symbol]
-        for item in trade_rows:
-            opened = pd.to_datetime(item["opened_at"], utc=True)
-            fig.add_trace(go.Scatter(
-                x=[opened], y=[item["entry_price"]], mode="markers", name="Entry simulazione",
-                marker={"symbol": "star", "color": "#ab47bc", "size": 12},
-                text=[item["entry_reason"]],
-                hovertemplate="Entry simulazione<br>%{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
-                showlegend=False,
-            ), row=1, col=1)
-    for order in paper_orders or []:
-        if str(order.get("symbol", "")).upper() != symbol.upper():
-            continue
-        submitted_at = order.get("submitted_at") or order.get("created_at")
-        if submitted_at:
-            submitted_time = pd.to_datetime(submitted_at, utc=True)
-            reference_index = (pd.to_datetime(data["timestamp"], utc=True) - submitted_time).abs().idxmin()
-            reference_price = float(data.loc[reference_index, "close"])
-            order_status = str(order.get("status", "unknown"))
-            fig.add_trace(go.Scatter(
-            x=[submitted_time],
-            y=[reference_price],
-            mode="markers",
-            name="Ordine Paper (close barra di riferimento)",
-            marker={"symbol": "square-open", "color": "#ffca28", "size": 11},
-            text=[f"Ordine {order_status}; il prezzo mostrato è il close barra, non un fill."],
-            hovertemplate="%{x}<br>%{text}<extra></extra>",
-            showlegend=False,
-            ), row=1, col=1)
-        fill_price = order.get("filled_avg_price")
-        filled_at = order.get("filled_at")
-        if fill_price is not None and filled_at:
-            fig.add_trace(go.Scatter(
-            x=[pd.to_datetime(filled_at, utc=True)],
-            y=[float(fill_price)],
-            mode="markers",
-            name="Fill Paper confermato",
-            marker={"symbol": "circle", "color": "#00e676", "size": 11},
-            text=[f"Quantità fill: {order.get('filled_qty', 'n/d')}"],
-            hovertemplate="Fill Paper %{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
-            showlegend=False,
-            ), row=1, col=1)
-            if item["closed_at"] and item["exit_price"] is not None:
-                closed = pd.to_datetime(item["closed_at"], utc=True)
-                fig.add_trace(go.Scatter(
-                    x=[closed], y=[item["exit_price"]], mode="markers", name="Uscita simulazione",
-                    marker={"symbol": "x", "color": "#ff9800", "size": 11},
-                    text=[item["exit_reason"]],
-                    hovertemplate="Uscita simulazione<br>%{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
-                    showlegend=False,
-                ), row=1, col=1)
-
-    fig.add_trace(go.Bar(
-        x=data["timestamp"], y=data["volume"], name="Volume",
-        marker_color="#78909c", opacity=0.65,
-    ), row=2, col=1)
-    if show_rsi:
-        delta = data["close"].diff()
-        gain = delta.clip(lower=0).rolling(14).mean()
-        loss = -delta.clip(upper=0).rolling(14).mean()
-        relative_strength = gain / loss.replace(0, float("nan"))
-        rsi = 100 - (100 / (1 + relative_strength))
-        fig.add_trace(go.Scatter(
-            x=data["timestamp"], y=rsi, mode="lines", name="RSI 14",
-            line={"color": "#ce93d8"},
-        ), row=3, col=1)
-        fig.add_hline(y=70, line_dash="dot", line_color="#ef5350", row=3, col=1)
-        fig.add_hline(y=30, line_dash="dot", line_color="#26a69a", row=3, col=1)
-        fig.update_yaxes(range=[0, 100], row=3, col=1)
-
-    fig.update_layout(
-        height=760 if show_rsi else 650,
-        template="plotly_dark",
-        paper_bgcolor="#0b0f14",
-        plot_bgcolor="#0b0f14",
-        font={"color": "#dce6ef"},
-        xaxis_rangeslider_visible=False,
-        hovermode="x unified",
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
-        margin={"l": 20, "r": 20, "t": 70, "b": 20},
-    )
-    st.plotly_chart(fig, use_container_width=True)
 
 
 st.title("AI Trading Bot")
@@ -1245,27 +1101,7 @@ with tab_overview:
     )
     if settings.trading_mode == "paper":
         st.caption("Le metriche del conto Paper sono mostrate solo quando fornite dall'ultimo snapshot verificato.")
-        paper_snapshot = st.session_state.get("paper_snapshot") or {}
-        paper_account = _model_dict(paper_snapshot.get("account") or {})
-        paper_equity = paper_account.get("equity")
-        paper_last_equity = paper_account.get("last_equity")
-        paper_pnl = (
-            float(paper_equity) - float(paper_last_equity)
-            if paper_equity is not None and paper_last_equity is not None else None
-        )
-        paper_pnl_pct = (
-            paper_pnl / float(paper_last_equity) * 100
-            if paper_pnl is not None and float(paper_last_equity) > 0 else None
-        )
-        paper_metrics = st.columns(4)
-        paper_metrics[0].metric("Equity", f"${float(paper_equity):,.2f}" if paper_equity is not None else "N/D")
-        paper_metrics[1].metric(
-            "P/L (dal close precedente)",
-            "N/D" if paper_pnl is None else f"${paper_pnl:+,.2f}",
-            "N/D" if paper_pnl_pct is None else f"{paper_pnl_pct:+.2f}%",
-        )
-        paper_metrics[2].metric("Operazioni chiuse", "N/D")
-        paper_metrics[3].metric("Win rate", "N/D", help="Numero di operazioni chiuse: N/D")
+        st.caption("Origine: snapshot Alpaca Paper verificato. Nessuna metrica del ledger o del backtest viene sommata al conto.")
     else:
         local_account = ledger.account()
         if local_account is None:
@@ -1302,23 +1138,27 @@ with tab_overview:
                 "N/D" if not closed_count else f"{winning_count / closed_count * 100:.1f}%",
                 help=f"Operazioni chiuse considerate: {closed_count}",
             )
+            st.caption("Origine: ledger locale, capitale virtuale. Il P/L dall'inizio non è il P/L di oggi; i costi applicati sono stime.")
+            if closed_count < 30:
+                st.caption(f"Campione statistico piccolo: {closed_count} operazioni chiuse; il win rate non è una previsione.")
     st.divider()
     _paper_account_monitor()
 
 with tab_overview:
     st.subheader("Mercato")
-    categories = ["ETF e azioni"] + (["Criptovalute"] if st.session_state.get("paper_verified", False) else [])
+    categories = ["ETF e azioni", "Criptovalute"]
     market_controls = st.columns(4)
     with market_controls[0]:
         market_group = st.selectbox("Categoria", categories, key="dashboard_market_group")
     group_symbols = EQUITY_SYMBOLS if market_group == "ETF e azioni" else CRYPTO_SYMBOLS
+    demo_mode = st.checkbox(
+        "Usa serie sintetica demo", value=False,
+        help="Scelta esplicita: prezzi generati per provare l'app, non dati di mercato.",
+    )
+    if settings.trading_mode == "demo":
+        st.caption("Per iniziare senza broker: attiva la serie sintetica, seleziona 1Day e premi Aggiorna dati. Il conto virtuale si crea nella scheda Simulazione.")
     with st.expander("Impostazioni avanzate"):
         query = st.text_input("Cerca per ticker o nome")
-        demo_mode = st.checkbox(
-            "Usa serie sintetica demo",
-            value=False,
-            help="Attiva solo su richiesta; non rappresenta prezzi reali.",
-        )
         show_rsi = st.checkbox("Mostra RSI (14)", value=False)
     filtered_symbols = [
         symbol for symbol in group_symbols
@@ -1335,7 +1175,7 @@ with tab_overview:
         descriptor = INSTRUMENTS[selected_symbol]
         st.caption(f"**{descriptor['name']}** — {descriptor['description']}")
     if not st.session_state.get("paper_verified", False):
-        st.caption("Gli strumenti crypto sono mostrati solo dopo la verifica dell'account Paper nella scheda dedicata.")
+        st.caption("Catalogo consultabile: disponibilità dei dati e negoziabilità Paper restano non verificate finché il broker non le conferma.")
     with market_controls[2]:
         interval = st.selectbox("Intervallo", ["1Min", "5Min", "15Min", "1Hour", "1Day", "1Week"], index=4)
     with market_controls[3]:
@@ -1513,6 +1353,18 @@ with tab_overview:
         )
         bar_timestamp_label = "Timestamp barra sintetica" if quality == "synthetic" else "Timestamp ultima barra"
         st.info(f"{label} · Fonte: {source} · {bar_timestamp_label}: {_latest_timestamp(data)}")
+        quality_status = data_status(_latest_timestamp(data), interval, quality)
+        st.caption(f"Qualità/freschezza: {quality_status['label']} · intervallo {interval}. Acquisizione e timestamp della barra sono informazioni diverse.")
+        if quality == "real":
+            try:
+                completed = select_completed_bars(data, st.session_state.market_symbol,
+                    datetime.now(timezone.utc), require_market_open=False)
+                if completed.empty:
+                    st.warning("Nessuna barra con chiusura temporale verificabile disponibile.")
+                else:
+                    st.caption(f"Ultima barra temporalmente conclusa: {completed['timestamp'].iloc[-1]} · fine intervallo UTC: {completed.attrs['last_completed_at']}. Non equivale a un segnale autorizzato; il feed può rettificare i dati.")
+            except BarTimingError as exc:
+                st.warning(f"Idoneità temporale operativa non verificata: {exc}")
         if data.attrs.get("fetched_at"):
             fetch_label = "Generata localmente il" if quality == "synthetic" else "Dati acquisiti il"
             st.caption(f"{fetch_label} (UTC): {data.attrs['fetched_at']}")
@@ -1556,27 +1408,21 @@ with tab_overview:
                     int(long_window),
                     show_rsi,
                 )
-            usable_signals = signals.dropna(subset=["short_ma", "long_ma"])
-            if usable_signals.empty:
+            if quality == "real":
+                data = st.session_state.get("market_frame", data).copy()
+                signals = strategy.generate_signals(data)
+            latest_signal_summary = signal_view(
+                signals, st.session_state.market_symbol, interval, quality,
+                int(short_window), int(long_window),
+            )
+            if latest_signal_summary["state"] == "DATI INSUFFICIENTI":
                 st.warning("Dati insufficienti per calcolare le due medie mobili.")
-            else:
-                latest = usable_signals.iloc[-1]
-                signal_text = "ACQUISTO" if int(latest["signal"]) == 1 else "USCITA" if int(latest["signal"]) == -1 else "NESSUN INCROCIO"
-                latest_signal_summary = (signal_text, latest["signal_reason"], latest["timestamp"])
-                snapshot = st.session_state.get("paper_snapshot") or {}
-                chart_orders = [
-                    _model_dict(item) for item in snapshot.get("orders", [])
-                ]
-                if quality != "real":
-                    _plot_market_chart(
-                        data,
-                        signals,
-                        st.session_state.market_symbol,
-                        int(short_window),
-                        int(long_window),
-                        show_rsi,
-                        paper_orders=chart_orders,
-                    )
+            if quality != "real":
+                _plot_market_chart(
+                    data, signals, st.session_state.market_symbol,
+                    int(short_window), int(long_window), show_rsi,
+                    local_history=ledger.history(),
+                )
         tv_col1, tv_col2 = st.columns(2)
         with tv_col1:
             st.link_button("Apri grafico su TradingView", _tradingview_url(st.session_state.market_symbol))
@@ -1584,13 +1430,27 @@ with tab_overview:
             st.caption("TradingView è solo un link di analisi esterno e non è collegato all'esecuzione o al registro locale.")
 
     st.divider()
-    st.subheader("Ultimo segnale")
+    st.subheader("Segnale tecnico (SMA crossover)")
     if latest_signal_summary is None:
-        st.info("Segnale non disponibile per i dati correnti.")
+        st.info("Segnale non disponibile per i dati correnti. Seleziona la fonte e premi Aggiorna dati.")
     else:
-        signal_text, signal_reason, signal_timestamp = latest_signal_summary
-        st.markdown(f"**{signal_text}** · {signal_timestamp}")
-        st.caption(f"Motivazione: {signal_reason}")
+        view = latest_signal_summary
+        st.markdown(f"**{view['state']}** · {view['symbol']} · {view['interval']} · {view['parameters']}")
+        st.caption(f"Motivazione: {view['reason']}")
+        if view["quality"] == "synthetic":
+            st.warning("SYNTHETIC / DEMO — segnale dimostrativo, escluso dall'automazione Paper.")
+        signal_columns = st.columns(3)
+        signal_columns[0].metric("Close barra di riferimento", _money_or_unavailable(view["price"]),
+                                help="Close storico della barra usata per il segnale; non è un fill né una quotazione corrente.")
+        signal_columns[1].metric("SMA breve", _money_or_unavailable(view["short_ma"]))
+        signal_columns[2].metric("SMA lunga", _money_or_unavailable(view["long_ma"]))
+        st.caption(f"Timestamp barra UTC: {view['timestamp']}. La barra mostrata può essere in formazione; i controlli dell'automazione sono separati.")
+        st.info("Un segnale tecnico non autorizza un ordine. Per una decisione operativa servono account, barra completata, quotazione e rischio verificati.")
+        with st.expander("Dettagli del segnale e proposta teorica"):
+            st.json(view)
+            st.write("Ingresso di riferimento: close della barra, non prezzo garantito. Stop-loss, take-profit, rischio monetario e rapporto rischio/rendimento: N/D; la strategia SMA non definisce questi livelli.")
+            st.write("Quantità operativa: N/D finché non viene completata una valutazione del conto e del rischio. Un'eventuale anteprima DRY-RUN non invia ordini.")
+            st.caption("Le stime non garantiscono esecuzione: spread, slippage, gap e liquidità possono cambiare il risultato.")
 
     if st.session_state.get("paper_snapshot_error"):
         st.error(f"Alpaca Paper: {st.session_state.paper_snapshot_error}")
@@ -1601,10 +1461,10 @@ with tab_overview:
     if settings.trading_mode == "paper":
         activity_snapshot = st.session_state.get("paper_snapshot") or {}
         open_positions = [
-            _model_dict(item) for item in activity_snapshot.get("positions", [])
+            _model_dict(item) for item in activity_snapshot.get("positions") or []
         ]
         recent_orders = [
-            _model_dict(item) for item in activity_snapshot.get("orders", [])
+            _model_dict(item) for item in activity_snapshot.get("orders") or []
         ]
     else:
         open_positions = ledger.positions() if ledger.account() is not None else []
@@ -1967,7 +1827,7 @@ with tab_backtest:
                 "Win rate delle operazioni chiuse",
                 "N/D" if result["win_rate"] is None
                 else f"{result['win_rate']:.1f}%",
-                help="Quota dei trade chiusi con P/L netto positivo; non è il rendimento del capitale.",
+                help=f"Quota positiva su {result['total_trades']} trade chiusi; non è il rendimento del capitale.",
             )
             stats[3].metric("P/L lordo realizzato", f"${result['gross_pnl']:+.2f}")
             trade_metrics = st.columns(4)

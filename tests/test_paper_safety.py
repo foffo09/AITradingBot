@@ -11,6 +11,7 @@ from config.settings import AppSettings
 import src.broker.alpaca_client as broker_module
 from src.broker.alpaca_client import AlpacaClient, BrokerConnectionError
 from src.data.market_data import generate_synthetic_market_data
+from src.trading.paper_coordinator import PaperCoordinationError
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
@@ -22,7 +23,7 @@ def test_local_demo_data_is_marked_synthetic():
     assert (data["data_quality"] == "synthetic-demo").all()
 
 
-def test_paper_order_requires_verified_active_paper_client(monkeypatch):
+def test_paper_order_requires_verified_active_paper_client(monkeypatch, tmp_path):
     calls = []
 
     class FakeTradingClient:
@@ -34,7 +35,7 @@ def test_paper_order_requires_verified_active_paper_client(monkeypatch):
             return {"id": "paper-order-id", "status": "accepted"}
 
         def get_account(self):
-            return {"status": "ACTIVE", "trading_blocked": False}
+            return {"id": "test-account", "status": "ACTIVE", "trading_blocked": False}
 
     monkeypatch.setattr(broker_module, "TradingClient", FakeTradingClient)
     settings = AppSettings(
@@ -42,6 +43,8 @@ def test_paper_order_requires_verified_active_paper_client(monkeypatch):
         alpaca_api_key="local-test-key",
         alpaca_secret_key="local-test-secret",
         paper_trading_enabled=True,
+        paper_execution_scope="single_host",
+        paper_coordinator_directory=str(tmp_path / "coordinator"),
     )
     client = AlpacaClient(settings)
     assert client.paper_client_configured is True
@@ -56,12 +59,16 @@ def test_paper_order_requires_verified_active_paper_client(monkeypatch):
     assert calls == []
     assert client.verify_connection()["connected"] is True
     assert client.is_connected() is True
-    result = client.submit_order(
-        symbol="AAPL",
-        side="buy",
-        quantity=1,
-        client_order_id="ma-test-order",
-    )
+    with pytest.raises(PermissionError, match="Exclusive Paper account execution"):
+        client.submit_order(symbol="AAPL", side="buy", quantity=1, client_order_id="ma-test-order")
+    with client.paper_coordinator.acquire() as lease:
+        lease.reserve("ma-test-order")
+        lease.submission_check = lambda: None  # Request-builder unit; temporal gate has integration coverage.
+        result = client.submit_order(symbol="AAPL", side="buy", quantity=1,
+                                     client_order_id="ma-test-order", _execution_lease=lease)
+        with pytest.raises(PaperCoordinationError):
+            client.submit_order(symbol="AAPL", side="buy", quantity=1,
+                                client_order_id="ma-test-order", _execution_lease=lease)
     assert result["status"] == "accepted"
     assert len(calls) == 1
     assert calls[0].symbol == "AAPL"
@@ -268,6 +275,7 @@ def test_paper_dashboard_hides_previous_values_when_refresh_fails(
     )
     assert app.session_state.get("paper_snapshot") is None
     assert not any("987,654,321" in metric.value for metric in app.metric)
+    assert not any("987,654,322" in metric.value for metric in app.metric)
 
 
 def test_asset_availability_includes_fractional_and_quantity_rules(monkeypatch):
@@ -346,6 +354,9 @@ def test_incremental_market_data_uses_bounded_request_and_keeps_ohlcv(monkeypatc
 
     assert requests[0]["limit"] == 10
     assert requests[0]["start"] == now - timedelta(minutes=2)
+    assert bars.attrs["bar_time_contract"] == "alpaca-start-v1"
+    assert bars.attrs["bar_calendar"] == "NYSE"
+    assert bars.attrs["session_scope"] == "all_sessions"
     assert bars[["open", "high", "low", "close", "volume"]].iloc[0].tolist() == [
         10.0,
         11.0,

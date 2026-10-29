@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from config.settings import AppSettings
+from src.trading.paper_coordinator import PaperAccountCoordinator
 from src.trading.paper_automation import (
     PaperAutomationError,
     PaperAutomationLog,
@@ -15,13 +16,15 @@ from src.trading.paper_automation import (
 
 
 def make_data(*, quality="real", stale_seconds=90):
-    now = datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)
+    now = pd.Timestamp(datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)).floor("min")
     frame = pd.DataFrame({
         "timestamp": pd.date_range(end=now, periods=6, freq="min"),
         "close": [4.0, 3.0, 2.0, 1.0, 2.0, 3.0],
     })
     frame.attrs["quality"] = quality
     frame.attrs["interval"] = "1Min"
+    frame.attrs.update(bar_time_contract="alpaca-start-v1", bar_calendar="NYSE",
+                       session_scope="all_sessions", fetched_at=datetime.now(timezone.utc).isoformat())
     return frame
 
 
@@ -61,7 +64,7 @@ class FakePaperBroker:
 
     def get_account(self):
         return {
-            "status": "ACTIVE",
+            "status": "ACTIVE", "id": "test-account",
             "cash": "10000",
             "buying_power": "10000",
             "equity": "10000",
@@ -80,11 +83,26 @@ class FakePaperBroker:
         order = {
             "symbol": kwargs["symbol"],
             "client_order_id": kwargs["client_order_id"],
-            "status": "accepted",
+            "status": "accepted", "filled_qty": "0",
             "submitted_at": datetime.now(timezone.utc).isoformat(),
         }
         self.orders.append(order)
         return order
+
+
+@pytest.fixture(autouse=True)
+def coordinated_broker_fixture(monkeypatch, tmp_path):
+    import sys
+    class ControlledDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = cls(2026, 10, 28, 15, 0, 30, tzinfo=timezone.utc)
+            return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+    monkeypatch.setattr(sys.modules[__name__], "datetime", ControlledDatetime)
+    monkeypatch.setattr("src.trading.paper_automation.datetime", ControlledDatetime)
+    monkeypatch.setattr(FakePaperBroker, "paper_coordinator", property(
+        lambda self: PaperAccountCoordinator(tmp_path / str(id(self)), "test-account")
+    ), raising=False)
 
 
 def make_settings(**overrides):
@@ -131,6 +149,112 @@ def test_fresh_buy_signal_submits_one_sized_paper_order():
     repeated = execute(broker)
     assert repeated["status"] == "blocked"
     assert len(broker.submitted) == 1
+
+
+@pytest.mark.parametrize("side", ["buy", "sell"])
+def test_dry_run_validates_and_sizes_without_calling_submit(side):
+    broker = FakePaperBroker()
+    data = make_data()
+    if side == "sell":
+        data["close"] = [1.0, 2.0, 3.0, 4.0, 3.0, 2.0]
+        broker.positions = [{"symbol": "AAPL", "qty": "1", "qty_available": "1"}]
+    def forbidden_submit(**kwargs):
+        pytest.fail("DRY-RUN must never call submit_order")
+    broker.submit_order = forbidden_submit
+    result = execute_paper_signal(broker=broker, settings=make_settings(), symbol="AAPL",
+                                  market_data=data, short_window=2, long_window=3, dry_run=True)
+    assert result["status"] == "dry_run" and result["side"] == side
+    assert result["quantity"] > 0 and result["reference_price"] == (3.01 if side == "buy" else 2.99)
+    assert "order" not in result and broker.orders == [] and broker.submitted == []
+
+
+def test_dry_run_keeps_real_data_and_freshness_gates():
+    broker = FakePaperBroker()
+    for data in [make_data(quality="synthetic"), make_data(stale_seconds=100000)]:
+        with pytest.raises(PaperAutomationError):
+            execute_paper_signal(broker=broker, settings=make_settings(), symbol="AAPL",
+                                 market_data=data, short_window=2, long_window=3, dry_run=True)
+    assert broker.submitted == []
+
+
+def test_concurrent_sessions_with_stale_empty_snapshots_cannot_both_submit(monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    coordinator = PaperAccountCoordinator(tmp_path, "test-account")
+    monkeypatch.setattr(FakePaperBroker, "paper_coordinator", property(lambda self: coordinator))
+    brokers = [FakePaperBroker(), FakePaperBroker(), FakePaperBroker()]
+    barrier = Barrier(3)
+    data = make_data()
+    def evaluate(index):
+        barrier.wait(timeout=5)
+        return execute_paper_signal(broker=brokers[index], settings=make_settings(),
+            symbol=["AAPL", "MSFT", "SPY"][index], market_data=data,
+            short_window=2, long_window=3)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(evaluate, range(3)))
+    assert sum(result["status"] == "submitted" for result in results) == 1
+    assert sum(len(broker.submitted) for broker in brokers) == 1
+    # Even a later process/session seeing the same old empty snapshot cannot proceed.
+    untouched = next(broker for broker in brokers if not broker.submitted)
+    retry = execute(untouched, data=data)
+    assert retry["status"] == "blocked" and untouched.submitted == []
+
+
+def test_missing_coordinator_and_changed_identity_block_before_submit(monkeypatch):
+    broker = FakePaperBroker()
+    original_account = broker.get_account
+    broker.get_account = lambda: dict(original_account(), id="different-account")
+    assert execute(broker)["status"] == "blocked"
+    assert broker.submitted == []
+    monkeypatch.setattr(FakePaperBroker, "paper_coordinator", None)
+    with pytest.raises(PaperAutomationError, match="coordination is not configured"):
+        execute(broker)
+    assert broker.submitted == []
+
+
+@pytest.mark.parametrize("problem", ["future", "duplicate", "unordered", "unknown_contract"])
+def test_bad_bar_contract_or_sequence_stops_before_account_reads(problem):
+    broker = FakePaperBroker()
+    broker.verify_connection = lambda: pytest.fail("Invalid bars must be rejected before account reads")
+    data = make_data()
+    if problem == "future":
+        data.loc[data.index[-1], "timestamp"] = pd.Timestamp(datetime.now(timezone.utc)) + pd.Timedelta(seconds=1)
+    elif problem == "duplicate":
+        data.loc[data.index[-1], "timestamp"] = data["timestamp"].iloc[-2]
+    elif problem == "unordered":
+        data = data.iloc[::-1]
+    else:
+        data.attrs.pop("bar_time_contract")
+    with pytest.raises(PaperAutomationError):
+        execute(broker, data=data)
+    assert broker.submitted == []
+
+
+def test_even_one_second_future_quote_cannot_authorize_paper():
+    broker = FakePaperBroker()
+    quote = broker.get_latest_quote("AAPL")
+    quote["timestamp"] = (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
+    broker.get_latest_quote = lambda symbol: quote
+    with pytest.raises(PaperAutomationError, match="Latest quote is stale"):
+        execute(broker)
+    assert broker.submitted == []
+
+
+def test_session_closing_during_final_broker_verification_prevents_submit(monkeypatch):
+    clock = [datetime(2026, 10, 28, 19, 59, 30, tzinfo=timezone.utc)]
+    monkeypatch.setattr(datetime, "now", classmethod(lambda cls, tz=None: clock[0]))
+    broker = FakePaperBroker()
+    data = make_data()
+    def delayed_submit(**kwargs):
+        clock[0] = datetime(2026, 10, 28, 20, 0, 0, tzinfo=timezone.utc)
+        kwargs["_execution_lease"].authorize_submission(kwargs["client_order_id"], "test-account")
+        broker.submitted.append(kwargs)
+        return {"status": "accepted"}
+    broker.submit_order = delayed_submit
+    with pytest.raises(PaperAutomationError, match="session is closed"):
+        execute(broker, data=data)
+    assert broker.submitted == []
 
 
 def test_synthetic_and_stale_feeds_cannot_trigger_orders():
@@ -208,7 +332,7 @@ def test_terminal_duplicate_order_and_ambiguous_submit_timeout_are_idempotent():
             "symbol": kwargs["symbol"],
             "side": kwargs["side"],
             "client_order_id": kwargs["client_order_id"],
-            "status": "accepted",
+            "status": "accepted", "filled_qty": "0",
             "submitted_at": datetime.now(timezone.utc).isoformat(),
         })
         raise RuntimeError("simulated response timeout after broker acceptance")
@@ -232,7 +356,7 @@ def test_disconnected_or_blocked_account_stops_before_strategy_or_order():
 
     broker = FakePaperBroker()
     broker.get_account = lambda: {
-        "status": "ACTIVE",
+        "status": "ACTIVE", "id": "test-account",
         "cash": "10000",
         "buying_power": "10000",
         "equity": "10000",
@@ -247,7 +371,7 @@ def test_disconnected_or_blocked_account_stops_before_strategy_or_order():
 def test_daily_loss_limit_blocks_automatic_order():
     broker = FakePaperBroker()
     broker.get_account = lambda: {
-        "status": "ACTIVE",
+        "status": "ACTIVE", "id": "test-account",
         "cash": "10000",
         "buying_power": "10000",
         "equity": "9400",
@@ -314,7 +438,7 @@ def test_sell_signal_can_exit_position_without_available_cash():
     broker = FakePaperBroker()
     broker.positions = [{"symbol": "AAPL", "qty": "10", "market_value": "30"}]
     broker.get_account = lambda: {
-        "status": "ACTIVE",
+        "status": "ACTIVE", "id": "test-account",
         "cash": "0",
         "buying_power": "0",
         "equity": "10000",
@@ -347,12 +471,12 @@ def test_each_cycle_checks_account_positions_and_orders_even_without_a_signal():
     data = make_data()
     data["close"] = [5.0, 4.0, 3.0, 2.0, 2.1, 2.2]
     data.iloc[-1, data.columns.get_loc("timestamp")] = (
-        datetime.now(timezone.utc) - timedelta(seconds=10)
+        pd.Timestamp(datetime.now(timezone.utc) - timedelta(seconds=10)).floor("min")
     )
     calls = []
     broker.verify_connection = lambda: calls.append("verify") or {"connected": True}
     broker.get_account = lambda: calls.append("account") or {
-        "status": "ACTIVE",
+        "status": "ACTIVE", "id": "test-account",
         "cash": "10000",
         "buying_power": "10000",
         "equity": "10000",
@@ -386,7 +510,7 @@ def test_untradeable_asset_and_insufficient_minimum_quantity_are_blocked():
         "min_order_size": "1",
     }
     broker.get_account = lambda: {
-        "status": "ACTIVE",
+        "status": "ACTIVE", "id": "test-account",
         "cash": "1",
         "buying_power": "1",
         "equity": "1",
