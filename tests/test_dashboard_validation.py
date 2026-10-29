@@ -340,7 +340,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
     assert app.session_state["paper_automation_active"] is False
     widget(app.button, "Verifica e aggiorna conto Alpaca Paper").click().run()
     widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
-    widget(app.button, "Aggiorna dati").click().run()
+    widget(app.button, "Carica dati").click().run()
 
     assert not app.exception
     assert widget(app.button, "Avvia automazione Paper").disabled is False
