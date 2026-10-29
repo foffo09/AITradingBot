@@ -1,0 +1,31 @@
+{
+  "controls": {
+    "market": "CRYPTO_PERPS",
+    "multi_split_kelly": false,
+    "switch_policy": "flatten",
+    "bankroll": 100.0,
+    "kelly_multiplier": 0.5,
+    "execution": "PAPER_TRADING"
+  },
+  "source": "SYNTHETIC_REPLAY",
+  "running": false,
+  "cash": 100.0,
+  "equity": 100.0,
+  "daily_start_equity": 100.0,
+  "day": "",
+  "locked_until": 0.0,
+  "positions": [],
+  "fills": [],
+  "last_prices": {},
+  "decisions": {},
+  "pending_flatten": false,
+  "cursors": {
+    "MEME_SNIPER": 1500,
+    "CRYPTO_PERPS": 1500,
+    "OPTIONS_0DTE": 1500,
+    "COMMODITIES_FUT": 1500,
+    "BIOTECH_CATALYST": 1500
+  },
+  "events": [],
+  "updated_at": ""
+}
