@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import fcntl
+from contextlib import closing
 import json
 import sqlite3
 import time
 from decimal import Decimal
 from pathlib import Path
+
+import portalocker
 
 from src.broker.native import AccountSnapshot, NativeOrder, NativeRequest
 
@@ -18,33 +20,38 @@ class NativeStore:
 
     def __init__(self, path: Path, scope: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.lock_file = path.with_suffix(path.suffix + ".lock").open("a")
+        self.lock_file = path.with_suffix(path.suffix + ".lock").open("a+b")
+        self.db = None
+        self._locked = False
         try:
-            fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self.lock_file.close()
-            raise RuntimeError("Native account journal is already in use") from None
-        self.db = sqlite3.connect(path)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.execute("PRAGMA synchronous=FULL")
-        self.db.executescript("""
-            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS orders (
-                cloid TEXT PRIMARY KEY, purpose TEXT UNIQUE NOT NULL, role TEXT NOT NULL,
-                request TEXT NOT NULL, status TEXT NOT NULL, broker_id INTEGER, created_ms INTEGER NOT NULL);
-            CREATE TABLE IF NOT EXISTS fills (
-                id TEXT PRIMARY KEY, broker_id INTEGER NOT NULL, quantity TEXT NOT NULL, payload TEXT NOT NULL);
-            CREATE INDEX IF NOT EXISTS fills_order ON fills(broker_id);
-            CREATE TABLE IF NOT EXISTS exits (
-                id TEXT PRIMARY KEY, symbol TEXT NOT NULL, target TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0);
-        """)
-        if self.get("scope") not in {None, scope}:
+            try:
+                portalocker.lock(self.lock_file, portalocker.LOCK_EX | portalocker.LOCK_NB)
+            except portalocker.AlreadyLocked:
+                raise RuntimeError("Native account journal is already in use") from None
+            self._locked = True
+            self.db = sqlite3.connect(path)
+            self.db.row_factory = sqlite3.Row
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.execute("PRAGMA synchronous=FULL")
+            self.db.executescript("""
+                CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS orders (
+                    cloid TEXT PRIMARY KEY, purpose TEXT UNIQUE NOT NULL, role TEXT NOT NULL,
+                    request TEXT NOT NULL, status TEXT NOT NULL, broker_id INTEGER, created_ms INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS fills (
+                    id TEXT PRIMARY KEY, broker_id INTEGER NOT NULL, quantity TEXT NOT NULL, payload TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS fills_order ON fills(broker_id);
+                CREATE TABLE IF NOT EXISTS exits (
+                    id TEXT PRIMARY KEY, symbol TEXT NOT NULL, target TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0);
+            """)
+            if self.get("scope") not in {None, scope}:
+                raise RuntimeError("Journal belongs to a different account/network")
+            self.set("scope", scope)
+            if self.get("since_ms") is None:
+                self.set("since_ms", int(time.time() * 1000) - 60000)
+        except BaseException:
             self.close()
-            raise RuntimeError("Journal belongs to a different account/network")
-        self.set("scope", scope)
-        if self.get("since_ms") is None:
-            self.set("since_ms", int(time.time() * 1000) - 60000)
+            raise
 
     def get(self, key: str, default=None):
         row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
@@ -89,7 +96,7 @@ class NativeStore:
     @staticmethod
     def queue_panic(path: Path, scope: str) -> None:
         # A second CLI process can persist a kill request without owning the broker connection.
-        with sqlite3.connect(f"file:{path}?mode=rw", uri=True) as db:
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=rw", uri=True)) as db:
             row = db.execute("SELECT value FROM meta WHERE key='scope'").fetchone()
             if not row or json.loads(row[0]) != scope:
                 raise RuntimeError("Panic journal account/network mismatch")
@@ -135,6 +142,15 @@ class NativeStore:
             self.db.execute("UPDATE exits SET done=1 WHERE id=?", (identity,))
 
     def close(self) -> None:
-        self.db.close()
-        fcntl.flock(self.lock_file, fcntl.LOCK_UN)
-        self.lock_file.close()
+        try:
+            if self.db is not None:
+                self.db.close()
+                self.db = None
+        finally:
+            if not self.lock_file.closed:
+                try:
+                    if self._locked:
+                        portalocker.unlock(self.lock_file)
+                finally:
+                    self._locked = False
+                    self.lock_file.close()  # Keep the stable sidecar; never unlink an owned lock.

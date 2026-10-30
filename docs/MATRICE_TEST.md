@@ -57,3 +57,12 @@ Le durate in UI/ledger sono limiti di freschezza della presentazione o simulazio
 Ulteriore regressione integrata: la seduta chiude durante l'ultima verifica broker. Il clock controllato porta la decisione fuori seduta prima dell'autorizzazione; il test falliva prima del ricontrollo finale e deve ora dimostrare zero submit. Il test del request builder usa una validazione no-op dichiarata perché verifica soltanto la serializzazione della richiesta fittizia, non sostituisce il test integrato.
 
 Esito finale P1: 124 casi mirati passati; suite completa 386 passati, zero falliti/saltati, un warning in 24,01 s. Incremento rispetto a inizio sessione: 13 casi coordinatore + 29 calendario + 8 integrazioni = 50. Il dettaglio dei comandi e dei tentativi falliti intermedi resta nel WORKLOG.
+
+## Portabilità dei journal — 2026-10-30
+
+`test_native_store.py`: esclusione tra handle e processi spawn, rilascio dopo
+crash, close ripetuto, errori connect/schema/scope/backend/unlock, URI panic
+con spazi e #. `test_paper_coordinator.py` conserva i test di esclusione,
+deadline e incertezza e aggiunge errore backend senza autorità.
+Esecuzione effettiva su macOS; Windows NON ESEGUITO. Procedura e limiti in
+[INSTALLAZIONE_WINDOWS](INSTALLAZIONE_WINDOWS.md). Nessun test preesistente rimosso.

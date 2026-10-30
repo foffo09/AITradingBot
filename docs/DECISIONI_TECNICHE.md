@@ -83,3 +83,13 @@ Raw daily equity e weekly non hanno un contratto RTH sufficientemente verificato
 I test temporali usano orari fissi. Le fixture di automazione sono state rese deterministiche e conformi alla griglia reale; non sono cambiate le aspettative di rischio, quantità, doppio ordine o invio. Il test AppTest di avvio/arresto usa un daily RTH fittizio esplicitamente dichiarato, non un feed autentico.
 
 Autocontrollo D11: il lease deve ricevere una validazione finale temporale, eseguita dall'adattatore dopo la riverifica dell'account e prima del request API. Un test riproduce il passaggio da mercato aperto a chiuso durante quel tratto e dimostra zero submit. Il lock da solo non prolunga la validità del segnale o della quotazione. Se fallisce dopo la prenotazione, l'intento rimane prudenzialmente irrisolto; non viene cancellato automaticamente.
+
+## D12 — Lock multipiattaforma e dipendenze della suite
+
+La [guida Windows](INSTALLAZIONE_WINDOWS.md) aggiorna la decisione POSIX D10:
+NativeStore, coordinatore Paper e console usano Portalocker 3.2.0 con lock OS
+esclusivi non bloccanti. Identità, intenti, default disabilitato e limiti
+finanziari restano invariati. Errori di lock/journal non concedono autorità.
+`requirements-dev.txt` include gli SDK opzionali usati con mock dalla suite;
+FastAPI/HTTPX e gli altri import condivisi sono dipendenze dirette della base.
+Verifica Windows ancora non eseguita; nessuna attestazione multi-host.

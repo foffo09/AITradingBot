@@ -9,9 +9,9 @@ import threading
 import time
 
 try:
-    import fcntl
-except ImportError:  # Unsupported platforms fail closed.
-    fcntl = None
+    import portalocker
+except ImportError:  # A missing locking backend must fail closed.
+    portalocker = None
 
 
 class PaperCoordinationError(RuntimeError):
@@ -35,7 +35,7 @@ class PaperAccountCoordinator:
 
     @contextmanager
     def acquire(self):
-        if fcntl is None:
+        if portalocker is None:
             raise PaperCoordinationError("Exclusive Paper ownership is unavailable on this platform.")
         descriptor = None
         db = None
@@ -44,23 +44,25 @@ class PaperAccountCoordinator:
             self.directory.mkdir(parents=True, exist_ok=True)
             descriptor = os.open(self.directory / (self.scope + ".lock"), os.O_CREAT | os.O_RDWR, 0o600)
             try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
+                portalocker.lock(descriptor, portalocker.LOCK_EX | portalocker.LOCK_NB)
+            except portalocker.AlreadyLocked:
                 raise PaperCoordinationError("Paper account executor is already owned; no decision is allowed.") from None
             db = sqlite3.connect(self.directory / (self.scope + ".sqlite3"), timeout=1)
             db.execute("PRAGMA synchronous=FULL")
             db.execute("CREATE TABLE IF NOT EXISTS intents (client_id TEXT PRIMARY KEY, resolved INTEGER NOT NULL)")
             lease = PaperExecutionLease(self.scope, self.directory.resolve(), descriptor, db)
             yield lease
-        except (OSError, sqlite3.Error) as exc:
+        except (OSError, sqlite3.Error, portalocker.LockException) as exc:
             raise PaperCoordinationError("Paper ownership/journal cannot be verified; execution is blocked.") from exc
         finally:
             if lease is not None:
                 lease.active = False
-            if db is not None:
-                db.close()
-            if descriptor is not None:
-                os.close(descriptor)  # Never unlink: replacing the inode creates two owners.
+            try:
+                if db is not None:
+                    db.close()
+            finally:
+                if descriptor is not None:
+                    os.close(descriptor)  # Never unlink: replacing the inode creates two owners.
 
 
 class PaperExecutionLease:

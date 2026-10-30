@@ -167,3 +167,43 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
 - File aggiunti per nome esplicito, mai git add indiscriminato. Commit logici creati: a769578 (FX e ledger), 57e7ec7 (guard dei test), e29fbcc (dashboard e protezioni Paper/calendario); documenti e istruzioni riuniti nel commit conclusivo della pubblicazione.
 - Pubblicazione richiesta su origin/main con push ordinario, senza force o riscrittura della storia. L'esito remoto e gli hash conclusivi vengono verificati dopo il push e riportati nella risposta della sessione; questa voce registra la preparazione già eseguita.
 - Restano invariati i limiti tecnici documentati: niente multi-host garantito, recupero completo dei fill o aggregati daily/weekly non verificati. Invio operativo disabilitato per default.
+
+## 2026-10-30 — Preparazione compatibilità Windows
+
+- Repository verificato: main, HEAD 175b88e, origin foffo09/AITradingBot;
+  fetch senza avanzamenti. Presenti 17 file tracciati modificati e due nuovi
+  file dell'esecutore Paper: conservati, esclusi da questo commit.
+- Cause: import fcntl diretto in NativeStore e console, dipendenza POSIX nel
+  coordinatore; FastAPI/HTTPX e altri import condivisi solo nel file opzionale.
+  Inventario AST di codice/test e confronto con i metadata delle dipendenze.
+- Portalocker 3.2.0 sostituisce i tre lock diretti; proprietà esclusiva non
+  bloccante e sidecar stabile. Errori di lock/SQLite non autorizzano esecuzione.
+  Cleanup NativeStore su inizializzazione fallita e close ripetuto; il
+  coordinatore rilascia il descriptor anche se la chiusura del DB fallisce.
+- Regressioni osservate prima della correzione: close ripetuto, lock trattenuto
+  dopo connect/schema falliti e URI panic con # che apriva un file diverso.
+  URI assoluto escaped e connessione panic esplicitamente chiusa dopo l'uso.
+- Aggiunte dipendenze condivise alla base, eth-account esplicito tra gli SDK,
+  requirements-dev.txt per la suite completa. Pin preesistenti conservati.
+  Pytest resta nella base per compatibilità. Uvicorn loop auto nella console;
+  uvloop conserva il marker non-Windows. TUI stdin Windows non certificata.
+- Nessun limite finanziario, default operativo, intento, riconciliazione o
+  controllo di isolamento indebolito. Nessun test eliminato o disabilitato.
+- Mac/Python 3.12.14: baseline 432 passati (24,82 s); mirati finali 70 passati
+  (1,40 s); checkout locale completo 444 passati (36,48 s), 0 falliti/skip.
+  Guard rete 0/credenziali 0; un warning preesistente websockets.legacy.
+- Anche la sola versione selezionata per il commit è stata esportata in una
+  cartella temporanea, senza file privati né lavoro executor. Venv nuova senza
+  system-site-packages, installazione requirements-dev.txt riuscita. Comandi:
+  python -m compileall -q app.py config src tests: output vuoto, exit 0;
+  test mirati: 70 passati in 1,72 s; python -m pytest -q: 398 passati in
+  24,00 s, 0 falliti/skip, un warning; guard rete 0/credenziali 0;
+  python -m pip check: No broken requirements found., exit 0.
+  Aggiunto poi il pin esplicito eth-account==0.13.7 già presente nella venv.
+- git diff --check e git diff --cached --check: output vuoto, exit 0.
+  Riletto il diff selezionato, nessun file .env/database/log tracciato incluso.
+  Guida PowerShell, decisioni tecniche e matrice aggiornate. I risultati
+  storici e la documentazione executor già locale restano conservati.
+- Windows/Python 3.11.9 NON ESEGUITO: richiede output della copia di prova
+  dell'utente. Nessun server, ordine, automazione, credenziale o DB personale
+  aperto. I test verdi non attestano sicurezza del trading automatico.

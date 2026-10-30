@@ -1,13 +1,9 @@
 -r requirements.txt
-fastapi==0.162.0
 uvicorn==0.54.0
-rich==15.0.0
-httpx==0.28.1
-pydantic==2.14.1
 uvloop==0.22.1; sys_platform != 'win32'
-websockets==17.3
 ccxt==4.5.90
 hyperliquid-python-sdk==0.24.0
+eth-account==0.13.7
 ib_insync==0.9.86
 yfinance==1.7.0
 openai==3.40.0
