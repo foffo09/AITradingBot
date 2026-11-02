@@ -218,7 +218,25 @@ class SimulationLedger:
         price = _positive(price, "Mark price")
         if not symbol.strip() or not timestamp.strip() or not source.strip():
             raise ValueError("Symbol, timestamp and data source are required.")
+        try:
+            observed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("Mark timestamp is invalid.") from exc
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=timezone.utc)
         with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            current = db.execute("SELECT timestamp FROM marks WHERE symbol=?", (symbol.upper(),)).fetchone()
+            if current:
+                try:
+                    previous = datetime.fromisoformat(current["timestamp"].replace("Z", "+00:00"))
+                except ValueError:
+                    previous = None  # A valid observation may repair an invalid legacy mark.
+                if previous is not None:
+                    if previous.tzinfo is None:
+                        previous = previous.replace(tzinfo=timezone.utc)
+                    if observed < previous:
+                        return
             db.execute(
                 """INSERT INTO marks(symbol, price, timestamp, source) VALUES (?, ?, ?, ?)
                    ON CONFLICT(symbol) DO UPDATE SET price=excluded.price,
@@ -244,8 +262,8 @@ class SimulationLedger:
         if row:
             return {"id": row["id"], "duplicate": True, "kind": "buy"}
         row = db.execute(
-            "SELECT id FROM closes WHERE idempotency_key=? OR idempotency_key LIKE ? LIMIT 1",
-            (key, f"{key}:%"),
+            "SELECT id FROM closes WHERE idempotency_key=? OR idempotency_key=? || ':' || id LIMIT 1",
+            (key, key),
         ).fetchone()
         if row:
             return {"id": row["id"], "duplicate": True, "kind": "sell"}

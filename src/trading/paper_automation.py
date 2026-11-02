@@ -15,11 +15,12 @@ from typing import Any
 import pandas as pd
 
 from config.settings import AppSettings
-from src.data.bar_timing import bar_timing
+from src.data.bar_timing import BarTimingError, select_completed_bars, utc_timestamp
 from src.data.instruments import INSTRUMENTS
 from src.risk.risk_manager import RiskManager
 from src.strategy.auto_selector import AutoSelectionResult, select_strategy
 from src.strategy.moving_average import MovingAverageStrategy
+from src.trading.paper_coordinator import PaperAccountCoordinator, PaperCoordinationError
 
 
 class PaperAutomationError(RuntimeError):
@@ -209,12 +210,9 @@ def _text(value: Any) -> str:
 
 def _utc_datetime(value: Any, label: str) -> datetime:
     try:
-        parsed = pd.Timestamp(value).to_pydatetime()
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise PaperAutomationError(f"{label} is invalid; automation is blocked.") from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return utc_timestamp(value, label).to_pydatetime()
+    except BarTimingError as exc:
+        raise PaperAutomationError(str(exc)) from exc
 
 
 def _order_id(symbol: str, timestamp: str, side: str) -> str:
@@ -420,7 +418,26 @@ def execute_paper_signal(
     dry_run: bool = False,
     as_of: datetime | pd.Timestamp | None = None,
 ) -> dict[str, Any]:
-    """Evaluate one fresh crossover and submit at most one verified paper order."""
+    """Serialize operational evaluation; preview never obtains a submit permit."""
+    arguments = dict(broker=broker, settings=settings, symbol=symbol, market_data=market_data,
+                     short_window=short_window, long_window=long_window,
+                     max_daily_orders=max_daily_orders, dry_run=dry_run, as_of=as_of)
+    if dry_run:
+        return _evaluate_paper_signal(**arguments)
+    if settings.trading_mode != "paper" or not broker.is_connected():
+        raise PaperAutomationError("Paper mode and a verified Alpaca Paper connection are required.")
+    coordinator = getattr(broker, "paper_coordinator", None)
+    if not isinstance(coordinator, PaperAccountCoordinator):
+        raise PaperAutomationError("Paper account coordination is not configured; operational execution is disabled.")
+    try:
+        with coordinator.acquire() as lease:
+            return _evaluate_paper_signal(**arguments, _lease=lease)
+    except PaperCoordinationError as exc:
+        return {"status": "blocked", "reason": str(exc), "requires_stop": True}
+
+
+def _evaluate_paper_signal(*, broker, settings, symbol, market_data, short_window,
+                           long_window, max_daily_orders, dry_run, as_of=None, _lease=None):
     if settings.trading_mode != "paper" or not settings.paper_trading_enabled:
         raise PaperAutomationError("Paper mode is not enabled; no order was sent.")
     if not broker.paper_client_configured or not broker.is_connected():
@@ -432,97 +449,22 @@ def execute_paper_signal(
 
     symbol = symbol.strip().upper()
     interval = str(market_data.attrs.get("interval", "1Day"))
-    bar_intervals = {
-        "1Min": (60, 600),
-        "5Min": (300, 1200),
-        "15Min": (900, 2700),
-        "1Hour": (3600, 10_800),
-        "1Day": (86_400, 345_600),
-        "1Week": (604_800, 864_000),
-    }
-    interval_seconds = bar_intervals.get(interval)
-    if interval_seconds is None:
-        raise PaperAutomationError("Unsupported market-data interval; no order was sent.")
-    timestamps = pd.to_datetime(
-        market_data["timestamp"], utc=True, errors="coerce"
-    )
-    if (
-        timestamps.isna().any()
-        or not timestamps.is_monotonic_increasing
-        or timestamps.duplicated().any()
-    ):
-        raise PaperAutomationError(
-            "Market-data timestamps are invalid, duplicated, or out of order; automation is blocked."
-        )
     try:
-        decision_time = (
-            pd.Timestamp.now(tz="UTC")
-            if as_of is None
-            else pd.Timestamp(as_of)
-        )
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise PaperAutomationError(
-            "Decision timestamp must be a valid timezone-aware date; automation is blocked."
-        ) from exc
-    if pd.isna(decision_time) or decision_time.tzinfo is None:
-        raise PaperAutomationError(
-            "Decision timestamp must be a valid timezone-aware date; automation is blocked."
-        )
-    decision_time = decision_time.tz_convert("UTC")
-
-    signal_data = market_data.copy()
-    signal_data["timestamp"] = timestamps
-    forming_bar = False
-    while not signal_data.empty:
-        is_forming, timestamp_age, _ = bar_timing(
-            symbol,
-            interval,
-            signal_data["timestamp"].iloc[-1],
-            decision_time,
-            interval_seconds[0],
-        )
-        if timestamp_age < 0:
-            raise PaperAutomationError(
-                "Market data contains a future timestamp; automation is blocked."
-            )
-        if not is_forming:
-            break
-        forming_bar = True
-        signal_data = signal_data.iloc[:-1].copy()
-
+        decision_time = as_of if as_of is not None else datetime.now(timezone.utc)
+        signal_data = select_completed_bars(market_data, symbol, decision_time)
+    except BarTimingError as exc:
+        raise PaperAutomationError(str(exc)) from exc
     if signal_data.empty:
-        bar_time = _utc_datetime(
-            timestamps.iloc[-1], "Latest bar timestamp"
-        )
-        return {
-            "status": "blocked",
-            "reason": "No completed OHLC bar is available; automation is waiting.",
-            "signal_timestamp": bar_time.isoformat(),
-        }
-
-    bar_time = _utc_datetime(
-        signal_data["timestamp"].iloc[-1], "Latest completed bar timestamp"
-    )
-    _, completed_timestamp_age, completed_freshness_age = bar_timing(
-        symbol,
-        interval,
-        signal_data["timestamp"].iloc[-1],
-        decision_time,
-        interval_seconds[0],
-    )
-    max_bar_age = interval_seconds[1]
-    if (
-        completed_timestamp_age < 0
-        or completed_timestamp_age > max_bar_age
-        or completed_freshness_age < -120
-        or completed_freshness_age > max_bar_age
-    ):
-        raise PaperAutomationError("Market data is stale; automation is blocked.")
+        return {"status": "blocked", "reason": "No completed OHLC bar is available; automation is waiting."}
+    forming_bar = signal_data.attrs["excluded_incomplete"] > 0
+    bar_time = _utc_datetime(signal_data["timestamp"].iloc[-1], "Latest completed bar timestamp")
 
     verification = broker.verify_connection()
     if not verification.get("connected"):
         raise PaperAutomationError("Paper account verification failed; automation is stopped.")
     account = broker.get_account()
+    if _lease is not None:
+        _lease.assert_account(str(_field(account, "id") or ""))
     if _text(_field(account, "status")) != "active":
         raise PaperAutomationError("Paper account is not active; automation is stopped.")
     if _field(account, "trading_blocked", False) or _field(account, "account_blocked", False):
@@ -558,7 +500,7 @@ def execute_paper_signal(
     quote = broker.get_latest_quote(symbol)
     quote_time = _utc_datetime(quote.get("timestamp"), "Latest quote timestamp")
     quote_age = (datetime.now(timezone.utc) - quote_time).total_seconds()
-    if quote_age < -30 or quote_age > 120:
+    if quote_age < 0 or quote_age > 120:
         raise PaperAutomationError("Latest quote is stale; automation is blocked.")
     bid = _number(quote.get("bid"), "Latest quote bid")
     ask = _number(quote.get("ask"), "Latest quote ask")
@@ -740,24 +682,38 @@ def execute_paper_signal(
             "signal_timestamp": bar_time.isoformat(),
         }
 
+    def validate_submission_time():
+        current = datetime.now(timezone.utc)
+        try:
+            latest = select_completed_bars(market_data, symbol, current)
+        except BarTimingError as exc:
+            raise PaperAutomationError(str(exc)) from exc
+        if latest.empty or _utc_datetime(latest["timestamp"].iloc[-1], "Latest bar") != bar_time:
+            raise PaperAutomationError("Completed bar changed during evaluation; reevaluate before submitting.")
+        if not 0 <= (current - quote_time).total_seconds() <= 120:
+            raise PaperAutomationError("Latest quote expired during evaluation; no order was sent.")
+
+    validate_submission_time()
     if dry_run:
         return {
-            "status": "preview",
-            "signal": int(signal["signal"]),
-            "reason": (
-                "Paper order passed current broker and risk checks; dry-run mode "
-                "did not call submit_order."
-            ),
-            "signal_timestamp": bar_time.isoformat(),
-            "side": side,
-            "quantity": order_quantity,
+            "status": "dry_run", "signal": int(signal["signal"]), "side": side,
+            "quantity": order_quantity, "symbol": symbol, "interval": interval,
+            "reference_price": price, "reference_timestamp": quote_time.isoformat(),
+            "client_order_id": client_order_id, "signal_timestamp": bar_time.isoformat(),
+            "reason": "Controlli completati; anteprima senza invio. Prezzo e quantità non sono un fill.",
         }
 
+    if _lease is None:
+        raise PaperAutomationError("Paper execution requires an exclusive account owner.")
+    _lease.submission_check = validate_submission_time
+    _lease.reconcile_unfilled(orders)
+    _lease.reserve(client_order_id)
     submitted = broker.submit_order(
         symbol=symbol,
         side=side,
         quantity=order_quantity,
         client_order_id=client_order_id,
+        _execution_lease=_lease,
     )
     return {
         "status": "submitted",
