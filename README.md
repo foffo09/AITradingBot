@@ -105,3 +105,9 @@ I dati gratuiti Alpaca possono essere limitati da piano, feed e permessi; IEX no
 Il coordinatore Paper mantiene un lock OS per conto durante verifica/rischio/invio e registra un intento durevole prima del submit. Timeout, crash o fill non riconciliati bloccano altri invii; il submit diretto senza lease è rifiutato. Default: esecuzione disabilitata. I processi devono condividere host e directory; multi-host e riconciliazione piena dei fill restano aperti.
 
 Le barre operative usano il calendario NYSE e il contratto del feed. RTH, DST, festività e chiusure anticipate sono testati offline; timestamp futuri, duplicati, fuori ordine o senza fuso bloccano la valutazione. Daily grezzi/weekly non verificati rimangono di sola analisi; nessuna chiusura è inventata. Consultare D10–D11 e la guida prima di configurare l'esecuzione.
+
+## Verifica Windows e dipendenze test
+
+Per installare tutti gli SDK richiesti dai test usare `python -m pip install -r requirements-dev.txt`.
+La [procedura Windows e le decisioni sul locking](docs/INSTALLAZIONE_WINDOWS.md) distinguono
+installazione base, suite completa e verifiche di piattaforma ancora da eseguire.

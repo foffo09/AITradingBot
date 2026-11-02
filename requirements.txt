@@ -6,7 +6,7 @@ plotly==7.1.0
 pytest==9.1.1
 python-dotenv==1.2.4
 streamlit==1.65.0
-pandas-market-calendars>=4.4
+# Shared console/provider runtime (also imported during test collection).
 anthropic==2.3.0
 ccxt==4.5.91
 fastapi==0.162.0
@@ -14,4 +14,10 @@ httpx==0.28.1
 ib-insync==0.9.86
 openai==3.41.0
 rich==15.0.0
+pydantic==2.14.1
+starlette==1.10.0
+requests==2.34.2
+msgpack==1.2.4
+websockets==17.3
+portalocker==3.2.0
 yfinance==1.7.0

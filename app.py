@@ -1121,49 +1121,10 @@ with st.container():
         "Demo locale, simulazione e Alpaca Paper non condividono il capitale."
     )
     if settings.trading_mode == "paper":
-        st.caption("Le metriche del conto Paper sono mostrate solo quando fornite dall'ultimo snapshot verificato.")
-        paper_snapshot = st.session_state.get("paper_snapshot") or {}
-        paper_account = _model_dict(paper_snapshot.get("account") or {})
-        raw_positions = paper_snapshot.get("positions")
-        snapshot_positions = (
-            [_model_dict(position) for position in raw_positions]
-            if raw_positions is not None else None
-        )
-        values = paper_metrics(paper_account, snapshot_positions)
-        paper_equity = values["equity"]
-        paper_daily_pnl = values["daily_change"]
-        paper_daily_pct = values["daily_percent"]
-        paper_initial_equity = finite_number(paper_account.get("initial_equity"))
-        paper_cumulative_pnl = (
-            finite_number(paper_equity - paper_initial_equity)
-            if paper_equity is not None and paper_initial_equity is not None else None
-        )
-        paper_metric_columns = st.columns(4)
-        paper_metric_columns[0].metric("Equity", _money_or_unavailable(paper_equity))
-        paper_metric_columns[1].metric(
-            "Variazione equity",
-            "N/D" if paper_daily_pnl is None else _money_or_unavailable(paper_daily_pnl),
-            "N/D" if paper_daily_pct is None else f"{paper_daily_pct:+.2f}%",
-            help="Equity meno last_equity dello snapshot broker; non è il P/L realizzato.",
-        )
-        paper_metric_columns[2].metric("Win rate", "N/D", help="Numero di operazioni chiuse: N/D")
-        paper_metric_columns[3].metric("Weekly return", "N/D")
         st.caption(
-            "P/L cumulativo Paper: "
-            + ("N/D" if paper_cumulative_pnl is None else f"${paper_cumulative_pnl:+,.2f}")
-            + " · Operazioni chiuse: N/D · Weekly return: N/D "
-            "(storico equity settimanale non disponibile)."
+            "Saldo, equity e variazioni Alpaca Paper sono visibili nel monitor dedicato "
+            "solo mentre l'ultimo snapshot broker è verificato."
         )
-        st.caption(
-            f"Capitale iniziale: {_money_or_unavailable(paper_initial_equity)}"
-            if paper_initial_equity is not None
-            else "Capitale iniziale: N/D"
-        )
-        st.caption(
-            f"Saldo disponibile: {_money_or_unavailable(values['cash'])}"
-            if values["cash"] is not None else "Saldo disponibile: N/D"
-        )
-        st.caption("Origine: snapshot Alpaca Paper verificato. Nessuna metrica del ledger o del backtest viene sommata al conto.")
     else:
         local_account = ledger.account()
         if local_account is None:

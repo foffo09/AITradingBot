@@ -132,3 +132,10 @@ Le soglie temporali di `src/ui/presentation.py` sono etichette di freschezza, no
 Riferimenti di contratto: [aggregazione Alpaca](https://docs.alpaca.markets/us/docs/market-data-faq), [barre e rettifiche](https://docs.alpaca.markets/us/docs/real-time-stock-pricing-data), [calendari e sedute](https://pandas-market-calendars.readthedocs.io/en/latest/usage.html). Le prove del codice sono offline; il protocollo autenticato non è stato interrogato.
 
 Prima del submit il lease esegue di nuovo il controllo temporale dopo la riverifica dell'account: mercato ancora aperto, stessa ultima barra utilizzabile e quotazione non scaduta. Una nuova barra conclusa invalida la vecchia decisione e richiede rivalutazione. Questo non rende atomico l'istante di ricezione del broker, che dipende dalla rete. Un intento già persistito resta prudenzialmente bloccato anche se il controllo finale fallisce prima dell'API; il recupero completo dei casi noti come non inviati rimane da progettare senza inferire un rifiuto dall'assenza.
+
+## Installazione e portabilità dei lock
+
+Seguire [INSTALLAZIONE_WINDOWS](INSTALLAZIONE_WINDOWS.md) per installazione
+base, dipendenze dell’intera suite e comandi PowerShell. I lock POSIX diretti
+sono sostituiti con Portalocker in NativeStore, coordinatore e console.
+La portabilità Windows è predisposta, non certificata: richiede prove sul PC.

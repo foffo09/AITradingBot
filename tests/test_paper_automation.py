@@ -337,10 +337,14 @@ def test_incomplete_current_bar_waits_before_generating_an_order():
 def test_daily_equity_bar_before_session_close_waits_without_order():
     broker = FakePaperBroker()
     frame = pd.DataFrame({
-        "timestamp": [pd.Timestamp("2025-07-02T00:00:00Z")],
+        "timestamp": [pd.Timestamp("2025-07-02T04:00:00Z")],
         "close": [100.0],
     })
-    frame.attrs.update({"quality": "real", "interval": "1Day"})
+    frame.attrs.update({
+        "quality": "real", "interval": "1Day",
+        "bar_time_contract": "alpaca-start-v1", "bar_calendar": "NYSE",
+        "session_scope": "regular", "fetched_at": "2025-07-02T19:00:00Z",
+    })
 
     result = execute_paper_signal(
         broker=broker,
@@ -365,9 +369,13 @@ def test_future_bar_timestamp_cannot_trigger_a_paper_order():
         ),
         "close": [4.0, 3.0, 2.0, 1.0, 2.0, 3.0],
     })
-    frame.attrs.update({"quality": "real", "interval": "1Min"})
+    frame.attrs.update({
+        "quality": "real", "interval": "1Min",
+        "bar_time_contract": "alpaca-start-v1", "bar_calendar": "NYSE",
+        "session_scope": "all_sessions", "fetched_at": "2025-07-02T20:00:00Z",
+    })
 
-    with pytest.raises(PaperAutomationError, match="future timestamp"):
+    with pytest.raises(PaperAutomationError, match="Future bars"):
         execute_paper_signal(
             broker=broker,
             settings=make_settings(),
@@ -755,7 +763,7 @@ def test_auto_cycle_uses_selected_asset_and_strategy_in_no_order_mode(monkeypatc
     assert executor_calls[0]["short_window"] == 2
     assert executor_calls[0]["long_window"] == 3
     assert executor_calls[0]["dry_run"] is True
-    assert result["status"] == "preview"
+    assert result["status"] == "dry_run"
     assert result["strategy"] == "moving_average"
     assert result["proposed_quantity"] == 10.0
     assert result["quantity"] > 0
@@ -846,6 +854,7 @@ def test_auto_cycle_risk_limit_and_duplicate_orders_prevent_submission(monkeypat
     broker = FakeAutoPaperBroker()
     broker.get_account = lambda: {
         "status": "ACTIVE",
+        "id": "test-account",
         "cash": "10000",
         "buying_power": "10000",
         "equity": "9000",

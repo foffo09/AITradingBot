@@ -166,7 +166,41 @@ def test_invalid_scope_identity_platform_and_journal_fail_closed(tmp_path, monke
     with pytest.raises(PaperCoordinationError, match="cannot be verified"):
         with coordinator.acquire():
             pytest.fail("Corrupt journal must block evaluation")
-    monkeypatch.setattr("src.trading.paper_coordinator.fcntl", None)
+    monkeypatch.setattr("src.trading.paper_coordinator.portalocker", None)
     with pytest.raises(PaperCoordinationError, match="unavailable on this platform"):
         with coordinator.acquire():
             pytest.fail("Unsupported locking must block evaluation")
+
+
+def test_lock_backend_failure_blocks_decisions_and_releases_descriptor(tmp_path, monkeypatch):
+    import portalocker
+    coordinator = PaperAccountCoordinator(tmp_path, "fixture-account")
+    with monkeypatch.context() as patch:
+        def fail(*args):
+            raise portalocker.LockException("synthetic backend failure")
+        patch.setattr("src.trading.paper_coordinator.portalocker.lock", fail)
+        with pytest.raises(PaperCoordinationError, match="cannot be verified") as caught:
+            with coordinator.acquire():
+                pytest.fail("An unverified lock must never yield authority")
+    assert caught.value is not None
+    with coordinator.acquire() as lease:
+        lease.assert_owner()
+
+
+def test_journal_close_error_still_releases_os_ownership(tmp_path, monkeypatch):
+    import sqlite3
+    connect = sqlite3.connect
+    class BrokenClose(sqlite3.Connection):
+        def close(self):
+            super().close()
+            raise sqlite3.OperationalError("synthetic close failure")
+    coordinator = PaperAccountCoordinator(tmp_path, "fixture-account")
+    with monkeypatch.context() as patch:
+        patch.setattr("src.trading.paper_coordinator.sqlite3.connect",
+                      lambda *args, **kwargs: connect(*args, factory=BrokenClose, **kwargs))
+        with pytest.raises(sqlite3.OperationalError, match="synthetic close failure") as caught:
+            with coordinator.acquire() as lease:
+                lease.assert_owner()
+    assert caught.value is not None
+    with coordinator.acquire() as new_lease:
+        new_lease.assert_owner()
