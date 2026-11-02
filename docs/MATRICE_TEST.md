@@ -2,11 +2,11 @@
 
 Legenda: **CODICE** = ispezionato; **TEST** = esecuzione automatica locale; **MOCK** = integrazione sostituita; **NON VERIFICATO** = manca una prova; **FUTURO** = proposta non implementata.
 
-Piattaforma eseguita: macOS, `.venv` Python 3.12.14. I numeri puntuali di ciascuna esecuzione sono nel [WORKLOG](WORKLOG.md). Windows non è implicitamente coperto da questi risultati.
+Piattaforme effettivamente provate: macOS (`.venv` Python 3.12.14, esecuzioni storiche) e Windows (Python 3.11.9, suite completa del 2026-11-02). I numeri puntuali sono nel [WORKLOG](WORKLOG.md). I risultati sono specifici per piattaforma; la suite automatica Windows non certifica l'UX interattiva completa né integrazioni autentiche.
 
 | Area | Test principali | Casi/evidenza | Limiti |
 | --- | --- | --- | --- |
-| Policy test offline | `test_test_isolation.py`, `conftest.py` | Eventi rete e file vietati, contatori e fixture consentite; ambiente ripulito prima della raccolta | Policy testata con eventi simulati; non è sandbox contro codice ostile |
+| Policy test offline | `test_test_isolation.py`, `conftest.py` | Eventi rete e file vietati, contatori e fixture consentite; ambiente ripulito prima della raccolta; su Windows, self-pipe Proactor interna distinta dalle connessioni applicative | Eccezione circoscritta a `socket.socketpair` → `_make_self_pipe` su loopback IPv4; le altre connessioni loopback restano vietate. Policy non è sandbox contro codice ostile |
 | Numeri e formule UI | `test_ui_presentation.py` | Zero/None distinti, stringhe invalide, bool, NaN/infinito, denominatore zero, overflow, aggregati broker | Nessun servizio autentico |
 | Dati e segnale UI | `test_ui_presentation.py`, `test_dashboard_validation.py` | Fresh/stale/future/invalid, SMA, dati insufficienti, fonte sintetica, timestamp della quotazione | Calendario NYSE/intraday verificato con fixture; protocollo autentico e aggregati non supportati esclusi |
 | Grafico | Sei casi parametrizzati in `test_dashboard_validation.py`, test helper | Ledger vuoto/chiuso, pending/fill, prezzi dei marker, SMA/volume/RSI; dati vuoti/incompleti; Demo senza overlay Paper | Resa visuale manuale e responsive NON VERIFICATE |
@@ -21,7 +21,7 @@ Piattaforma eseguita: macOS, `.venv` Python 3.12.14. I numeri puntuali di ciascu
 | Strategia SMA | `test_strategy.py` | Incrocio, hold, finestre e dati insufficienti | Nessuna prova di redditività |
 | Backtest | `test_backtest_execution.py`, `test_backtesting.py` | Open successivo, costi, posizioni aperte, benchmark, metriche | Costi configurati, non misurati da esecuzioni reali |
 | Walk-forward | `test_walk_forward.py` e test UI | Separazione temporale, parametri dal training, fold esclusi, invalidazione risultati | Portafoglio OOS continuo non implementato |
-| Console/TUI | `test_omega.py` | Runtime locale, controlli e cancellazione TUI su pipe | Windows, fcntl e uvloop NON VERIFICATI come flusso portabile |
+| Console/TUI | `test_omega.py` | Runtime locale; regressione stdin/cancellazione TUI su Windows passa con pipe | UX interattiva completa e uvloop Windows NON VERIFICATI; suite offline, nessun servizio |
 | Provider aggiuntivi | `test_providers.py` | Errori, fallback, quote e interfacce AI con transport fittizi | MOCK; nuovi feed live non provati |
 | Hyperliquid nativo | `test_hyperliquid_testnet.py` | Mainnet/redirect bloccati, fill parziali, timeout, riavvio, stop/panic con broker simulato | Ordini autentici testnet NON VERIFICATI |
 
@@ -34,7 +34,7 @@ python -m pytest -q
 git diff --check
 ```
 
-Il `conftest.py` viene importato da pytest anche se non è nell'elenco del comando compileall. Errori del guard non devono essere aggirati: correggere il mock o il percorso. Il report `TEST ISOLATION` deve avere contatori zero per la suite; i test della policy usano una propria istanza non collegata a socket o file reali.
+Il `conftest.py` viene importato da pytest anche se non è nell'elenco del comando compileall. Errori del guard non devono essere aggirati: correggere il mock o il percorso. Il report `TEST ISOLATION` deve avere contatori zero per la suite; i test della policy usano una propria istanza per gli eventi simulati, mentre il caso Proactor costruisce un event loop locale e non interroga servizi esterni.
 
 Prima di chiudere una fase servono lettura del diff, test pertinenti, provenienza dei dati e documentazione. Prima di dichiarare compatibilità Windows o correttezza di un conto autentico servono esecuzioni separate effettive.
 

@@ -18,6 +18,8 @@ Rischio: cambiare una firma senza aggiornare i tre chiamanti. Test e revisione d
 
 Stato: implementato. Rimossa la card duplicata dell'equity dalla panoramica; i numeri sono prodotti dallo snapshot verificato. La duplicazione lasciava un valore vecchio dopo un errore del monitor, riprodotto da una regressione rafforzata.
 
+Il riepilogo esterno al monitor non duplica saldo/equity: questi valori restano nel monitor Paper e sono renderizzati soltanto con snapshot verificato. Un errore di refresh non deve lasciare valori precedenti visibili.
+
 I valori mancanti o non finiti restano N/D; elenco posizioni assente e vuoto sono diversi. La variazione equity è `equity - last_equity`, non il P/L realizzato. Nessuna base di capitale mancante viene ricostruita dal ledger. Il valore di mercato non è chiamato capitale investito.
 
 Riesaminare con uno storico broker completo, flussi di cassa e valuta espliciti prima di aggiungere rendimenti cumulativi o metriche multivaluta.
@@ -43,6 +45,8 @@ Stato: implementato. Il `conftest.py` alla radice installa un audit hook, ripuli
 Alternativa precedente: plugin temporaneo esterno. Era utile per l'audit, ma non riproducibile nel checkout di altri sviluppatori. Due test della policy usano eventi simulati; la suite intera verifica che i test esistenti non tentino accessi vietati.
 
 Il guard previene errori accidentali, non isola codice ostile. Non usare pytest per prove autentiche e non inserire segreti per farlo passare.
+
+Su Windows l'event loop Proactor crea una pipe interna con `socket.socketpair`, che usa una connessione IPv4 loopback. Il guard ignora solo l'evento `socket.connect` a `127.0.0.1` quando lo stack contiene sia `socket.socketpair` sia `asyncio.proactor_events._make_self_pipe`; tutte le altre connessioni IPv4/IPv6, incluso il loopback, restano vietate e contate come tentativi.
 
 ## D7 — Freschezza visuale e barre chiuse non sono sinonimi
 

@@ -1,8 +1,10 @@
 # Installazione e verifica Windows
 
-Questa correzione prepara la portabilità: i risultati macOS non certificano Windows.
-La prova su Windows 11/Python 3.11.9 deve ancora essere eseguita dall'utente.
-Usare una copia di prova, filesystem locale e nessuna credenziale.
+Questa guida raccoglie la procedura e le evidenze di portabilità. La suite
+completa è stata eseguita su Windows/Python 3.11.9 nel checkout corrente:
+436 test passati, guard rete/credenziali 0/0. I risultati macOS non sostituiscono
+la prova Windows e viceversa. Usare una copia di prova, filesystem locale e
+nessuna credenziale.
 
 ## Ambiente pulito e suite completa
 
@@ -60,8 +62,10 @@ protegge da un altro programma che ignora il protocollo o da scritture SDK ester
 Demo, ledger locale, backtest, Alpaca Paper e Hyperliquid testnet restano separati.
 
 La console sceglie il loop Uvicorn `auto`, senza imporre Uvloop a Windows.
-La TUI interattiva e il supporto dei pipe stdin Windows richiedono una verifica
-separata: non sono certificati dai risultati macOS. La dashboard non usa stdin.
+La lettura stdin della TUI usa un thread daemon e una queue su Windows; il test
+di regressione sulla cancellazione con pipe è passato nella suite Windows. La
+UX interattiva completa non è stata verificata manualmente. La dashboard non
+usa stdin.
 
 ## Evidenze richieste
 
@@ -70,4 +74,6 @@ con `os._exit`, contesa, rilascio, scope incompatibile e errori del backend/SQLi
 La suite conserva il guard offline: niente rete o credenziali, nessun test
 eliminato o disabilitato. Passare questi test non autorizza trading automatico.
 
-La verifica Windows è **NON ESEGUITA** finché non viene riportato l'output del PC.
+La suite automatica Windows è stata eseguita; i comandi e i risultati completi
+sono nel [WORKLOG](WORKLOG.md). Non costituisce prova di feed, broker o ordini
+autentici, né certifica l'intera UX interattiva.

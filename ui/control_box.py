@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import queue
 import secrets
 import sys
+import threading
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Literal
@@ -24,15 +26,50 @@ class Command(BaseModel):
     action: Literal["start", "pause", "panic"]
 
 
+def _read_windows_stdin(stream, lines) -> None:
+    while True:
+        try:
+            line = stream.readline()
+        except (OSError, ValueError) as exc:
+            lines.put(exc)
+            return
+        lines.put(line)
+        if not line:
+            return
+
+
+async def _next_windows_stdin_line(lines):
+    while True:
+        try:
+            value = lines.get_nowait()
+        except queue.Empty:
+            await asyncio.sleep(0.05)
+            continue
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+
 async def terminal(runtime: Runtime) -> None:
     """Interactive terminal commands and web buttons share one runtime."""
     from rich.console import Console
     console = Console()
     console.print(f"[bold cyan]OMEGA — {runtime.state.source}[/] | 1–5 market | m split | s start | p pause | ! panic | q exit TUI")
-    reader = asyncio.StreamReader()
-    transport, _ = await asyncio.get_running_loop().connect_read_pipe(
-        lambda: asyncio.StreamReaderProtocol(reader), sys.stdin,
-    )
+    reader = None
+    transport = None
+    windows_lines = None
+    if sys.platform == "win32":
+        windows_lines = queue.Queue()
+        threading.Thread(
+            target=_read_windows_stdin,
+            args=(sys.stdin, windows_lines),
+            daemon=True,
+        ).start()
+    else:
+        reader = asyncio.StreamReader()
+        transport, _ = await asyncio.get_running_loop().connect_read_pipe(
+            lambda: asyncio.StreamReaderProtocol(reader), sys.stdin,
+        )
     try:
         with Live(console=console, refresh_per_second=2) as live:
             while True:
@@ -45,12 +82,21 @@ async def terminal(runtime: Runtime) -> None:
                     table.add_row(market, str(report["sharpe"]), "DEMO OK" if report["approved"] else "REJECTED")
                 live.update(table)
                 try:
-                    line = await asyncio.wait_for(reader.readline(), timeout=0.5)
+                    line = await asyncio.wait_for(
+                        _next_windows_stdin_line(windows_lines)
+                        if windows_lines is not None
+                        else reader.readline(),
+                        timeout=0.5,
+                    )
                 except TimeoutError:
                     continue
                 if not line:
                     return
-                command = line.decode("utf-8").strip().lower()
+                command = (
+                    line.decode("utf-8").strip().lower()
+                    if isinstance(line, bytes)
+                    else line.strip().lower()
+                )
                 try:
                     if command == "q":
                         return
@@ -70,7 +116,8 @@ async def terminal(runtime: Runtime) -> None:
                 except ValueError as exc:
                     console.print(str(exc), style="red")
     finally:
-        transport.close()
+        if transport is not None:
+            transport.close()
 
 
 def create_app(runtime: Runtime, tui: bool = False) -> FastAPI:

@@ -207,3 +207,33 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
 - Windows/Python 3.11.9 NON ESEGUITO: richiede output della copia di prova
   dell'utente. Nessun server, ordine, automazione, credenziale o DB personale
   aperto. I test verdi non attestano sicurezza del trading automatico.
+
+## 2026-11-02 — Verifica finale richiesta, pubblicazione sospesa
+
+- Checkout effettivo: root Git `AITradingBot`, branch `mie-modifiche`, HEAD `c28bc2b`; il percorso richiesto `outputs/aitradingbot-windows-step0` non è presente in questo workspace. Il riferimento storico a HEAD `52d65db` descrive `origin/mie-modifiche`, non l'HEAD locale attuale.
+- Merge iniziale effettivo: `MERGE_HEAD=175b88e`, non il tip corrente `origin/main=2b2d35a`. Sono stati trovati sei file realmente non uniti (`app.py`, `src/data/bar_timing.py`, `src/trading/paper_automation.py` e tre test); `requirements.txt` era già auto-unito. Le sei risoluzioni sono state integrate mantenendo selettore locale, calendario esplicito, DRY-RUN e coordinamento Paper. Nessun marcatore residuo; l'indice non ha percorsi unmerged.
+- `origin/mie-modifiche` punta ancora a `52d65db` ed è antenato del branch locale. Il commit `2b2d35a` aggiunge la portabilità Windows, ma non è antenato del merge in corso. Non è stato avviato un altro merge e non sono stati creati commit o push.
+- Ambiente realmente usato per questa verifica: Windows 10, Python 3.11.9 nella `.venv`; nessuna prova Mac eseguita in questa attività.
+- `python -m compileall -q app.py config src tests`: exit 0. `tests/test_bar_timing.py`: 40 passati. `tests/test_paper_automation.py -k dry_run`: 3 passati, 38 deselect; guard rete/credenziali 0/0. `python -m pip check`: nessuna dipendenza rotta. `git diff --check` e controllo staged: exit 0.
+- `python -m pytest -q`: interrotto in raccolta con un errore, prima dell'esecuzione della suite: `ModuleNotFoundError: No module named 'fcntl'` da `src/trading/native_store.py`; un warning preesistente `websockets.legacy`. In un run mirato con AppTest il guard ha bloccato 34 tentativi socket loopback del Proactor asyncio e contato 0 accessi a credenziali; non è stato disabilitato né aggirato.
+- La suite storica di 386 test del 29 ottobre resta un risultato precedente, non una verifica di questo HEAD; il valore 437 riportato dall'utente non è stato riprodotto. Windows non è verificato e la suite Mac non è stata eseguita.
+- Nessun file `.env`, credenziale, database personale, cache o log è stato aperto o aggiunto. Nessun server, automazione o ordine broker avviato.
+- Commit e push sono sospesi perché i controlli richiesti non sono superati e il merge in corso non punta al tip upstream atteso. `main` non è stato modificato.
+- Prossimo passo concreto: riprendere nel checkout atteso (o confermare quello corretto), integrare in modo verificabile `origin/main` a `2b2d35a`, quindi eseguire l'intera suite nel checkout Mac richiesto e ripetere la verifica Windows senza indebolire il guard offline; solo dopo, creare il commit del merge e fare push ordinario su `origin/mie-modifiche`.
+
+## 2026-11-02 — Nuova verifica nel checkout Windows corrente
+
+- Questa esecuzione riguarda il checkout effettivamente collegato alla sessione: root `C:\Users\rlnmu\Desktop\AITradingBot`, branch `mie-modifiche`, `HEAD=6570e18`, `MERGE_HEAD=2b2d35a`. La merge locale è ancora senza commit; zero percorsi unmerged. Non sostituisce né riscrive le osservazioni precedenti, effettuate su un checkout/base diversi.
+- Ambiente osservato: Windows, Python 3.11.9 nella `.venv`. `python -m compileall -q app.py config src tests`: exit 0; `python -m pip check`: nessun requisito rotto; `python -m pytest -q`: **436 passati, 0 falliti, 0 saltati, 1 warning, 90,72 s**. Warning `websockets.legacy` deprecato. Guard finale: rete 0, credenziali 0. I sette casi prima falliti, rieseguiti insieme dopo le correzioni, sono passati (7/7).
+- Correzioni strettamente legate ai regressi: guard Windows consente solo la self-pipe Proactor provata tramite stack e loopback; la TUI legge stdin Windows su thread daemon/queue senza bloccare la cancellazione; le fixture Paper dichiarano il contratto feed e l'identità richiesti; la card Paper duplicata fuori dal monitor è stata rimossa per non mostrare valori stale dopo un errore dello snapshot. Il test richiede che i valori non persistano. Nessun controllo di invio o rischio è stato allentato.
+- `git diff --check` e `git diff --cached --check`: exit 0. Controlli finali: zero file sensibili tra le modifiche, zero conflitti. Esiti e supporto TUI aggiornati in guida e matrice.
+- Limiti: la suite prova percorsi automatici offline su Windows, non certifica l'intera UX interattiva, un feed/broker autentico, trading, né il checkout macOS. Nessun `.env` o database personale è stato aperto; nessun server, automazione o ordine avviato.
+- Stato Git invariato per prudenza: nessun commit o push; i tre worktree esistenti non sono stati modificati. La merge non è pubblicata e i worktree non sono ancora allineati a un singolo commit comune.
+
+### Aggiornamento di chiusura — integrazione e team
+
+- Salvata la merge verificata in `b65038795447fcea56e9ba46fc4d585dcd3acc3c`, con genitori `6570e18` e `2b2d35a`; `origin/main` è incluso senza modificarne il tip.
+- Pubblicati con push ordinario `mie-modifiche` e i tre branch richiesti. Verifica remota: tutti e quattro i branch puntano al medesimo commit comune; `origin/main` resta `2b2d35a`.
+- I tre worktree già registrati sono stati riutilizzati e fast-forwardati senza commit divergenti o modifiche locali: backend, UI e strategy erano puliti e ora condividono il BASE finale del team. Le directory di lavoro e i branch sono rimasti indipendenti.
+- Il worktree agent separato a `afdebe4` mantiene le sue modifiche locali in `app.py`, `src/broker/alpaca_client.py` e `tests/test_paper_safety.py`; non è stato toccato. I due backup verificati esistono ancora.
+- Stato finale del checkout centrale e dei tre worktree team: pulito. Nessun push forzato, modifica a `main`, file sensibile tracciato o operazione broker.

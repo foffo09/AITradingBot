@@ -189,3 +189,13 @@ La prima suite di fase 1 ha avuto 2 fallimenti di bootstrap multiprocessing dopo
 Compilazione exit 0, output vuoto; test mirati **124 passati in 15,65 s**; suite **386 passati, nessun fallimento o skip, un warning, 24,01 s**. Guard: rete 0, credenziali 0. Diff-check exit 0. Aggiunti 50 casi rispetto ai 336 iniziali. Il warning resta `websockets.legacy`. Nessuno staging, commit o push. Inventario e output Git integrali nel WORKLOG.
 
 R1 globale resta P1 aperto, con mitigazione locale e default disabilitato; R2 ha implementazione e test per il perimetro supportato, con blocchi espliciti per aggregati non verificati. Non dichiarati completati deployment distribuito, recupero dei fill o contratti autentici dei feed.
+
+## Verifica finale del 2026-11-02 — pubblicazione non autorizzata dai controlli
+
+Il checkout realmente aperto è il branch `mie-modifiche` con HEAD `c28bc2b`, non il percorso dichiarato `outputs/aitradingbot-windows-step0`. L'operazione Git in corso ha `MERGE_HEAD=175b88e`; il tip di `origin/main` è `2b2d35a`. I sei conflitti effettivi sono stati risolti senza scartare le modifiche locali; `requirements.txt` era auto-merged. Non restano marcatori o percorsi unmerged.
+
+Le verifiche locali osservate su Windows 10/Python 3.11.9 sono: compilazione riuscita; 40 test calendario e 3 test DRY-RUN passati; `pip check` e `git diff --check` riusciti. La suite completa si interrompe durante la raccolta per `fcntl` importato da `src/trading/native_store.py`, poiché la correzione Windows del commit upstream `2b2d35a` non è integrata nel merge pendente. In un run mirato con AppTest il guard offline ha bloccato 34 tentativi socket loopback dell'event loop Windows e contato 0 accessi a credenziali; non è stato indebolito. Nessuna prova Mac è stata eseguita e i risultati storici non sono stati attribuiti a questo HEAD.
+
+**Stato:** merge non committato, nessun push, `main` invariato. La compatibilità Windows non è verificata; la suite completa non è verde, quindi non si pubblica.
+
+**Prossimo passo:** riprendere dal checkout atteso o confermare quello corretto; integrare `origin/main` a `2b2d35a`, eseguire la suite integrale nel checkout Mac richiesto e una prova Windows completa mantenendo attivo il guard. Commit del merge e push ordinario a `origin/mie-modifiche` solo dopo esiti positivi effettivi.

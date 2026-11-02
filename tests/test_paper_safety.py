@@ -274,8 +274,12 @@ def test_paper_dashboard_hides_previous_values_when_refresh_fails(
         for item in app.error
     )
     assert app.session_state.get("paper_snapshot") is None
-    assert not any("987,654,321" in metric.value for metric in app.metric)
-    assert not any("987,654,322" in metric.value for metric in app.metric)
+    assert not any("987,654,321" in metric.value for metric in app.metric), [
+        (metric.label, metric.value) for metric in app.metric
+    ]
+    assert not any("987,654,322" in metric.value for metric in app.metric), [
+        (metric.label, metric.value) for metric in app.metric
+    ]
 
 
 def test_asset_availability_includes_fractional_and_quantity_rules(monkeypatch):
