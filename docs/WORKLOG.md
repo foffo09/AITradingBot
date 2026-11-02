@@ -229,3 +229,11 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
 - `git diff --check` e `git diff --cached --check`: exit 0. Controlli finali: zero file sensibili tra le modifiche, zero conflitti. Esiti e supporto TUI aggiornati in guida e matrice.
 - Limiti: la suite prova percorsi automatici offline su Windows, non certifica l'intera UX interattiva, un feed/broker autentico, trading, né il checkout macOS. Nessun `.env` o database personale è stato aperto; nessun server, automazione o ordine avviato.
 - Stato Git invariato per prudenza: nessun commit o push; i tre worktree esistenti non sono stati modificati. La merge non è pubblicata e i worktree non sono ancora allineati a un singolo commit comune.
+
+### Aggiornamento di chiusura — integrazione e team
+
+- Salvata la merge verificata in `b65038795447fcea56e9ba46fc4d585dcd3acc3c`, con genitori `6570e18` e `2b2d35a`; `origin/main` è incluso senza modificarne il tip.
+- Pubblicati con push ordinario `mie-modifiche` e i tre branch richiesti. Verifica remota: tutti e quattro i branch puntano al medesimo commit comune; `origin/main` resta `2b2d35a`.
+- I tre worktree già registrati sono stati riutilizzati e fast-forwardati senza commit divergenti o modifiche locali: backend, UI e strategy erano puliti e ora condividono il BASE finale del team. Le directory di lavoro e i branch sono rimasti indipendenti.
+- Il worktree agent separato a `afdebe4` mantiene le sue modifiche locali in `app.py`, `src/broker/alpaca_client.py` e `tests/test_paper_safety.py`; non è stato toccato. I due backup verificati esistono ancora.
+- Stato finale del checkout centrale e dei tre worktree team: pulito. Nessun push forzato, modifica a `main`, file sensibile tracciato o operazione broker.
