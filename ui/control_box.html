@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="it">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OMEGA · Paper Control</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui;background:#090f19;color:#e8eef8}body{max-width:1200px;margin:36px auto;padding:0 24px}header{display:flex;justify-content:space-between;align-items:center}h1{font-size:32px;margin:4px 0}h2{font-size:17px}small,.muted{color:#a8bad1}.badge{background:#163c35;color:#80f2c6;padding:8px 14px;border-radius:20px}button,input,select{font:inherit;border:1px solid #34445b;border-radius:7px;background:#152238;color:inherit;padding:11px}button{cursor:pointer}button:hover,button.selected{border-color:#80f2c6;background:#1c453e}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #f6cc70}button:disabled{opacity:.5;cursor:not-allowed}.markets{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:26px 0}.markets button{text-align:left;min-height:86px;font-size:13px}.markets b{display:block;color:#80f2c6;margin-bottom:9px}.panel{background:#101a2a;border:1px solid #27364d;border-radius:12px;padding:22px;margin:18px 0}.row{display:flex;gap:18px;flex-wrap:wrap;align-items:center}label{display:grid;gap:8px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{background:#101a2a;padding:20px;border-radius:10px}.metric strong{display:block;font-size:26px;margin-top:10px}.panic{background:#892e40;border-color:#ee7687;font-weight:bold}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:12px 6px;border-bottom:1px solid #29364b}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:280px;overflow:auto}#error{color:#ffb0bb;min-height:22px}#status{color:#80f2c6}summary{cursor:pointer}footer{color:#a8bad1;margin:30px 0}@media(max-width:800px){.markets{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:1fr 1fr}table{display:block;overflow:auto}}
+</style>
+<header><div><small>LOCAL RESEARCH CONSOLE / 01</small><h1>OMEGA Control Box</h1></div><span id="dataBadge" class="badge">PAPER · CONNECTING</span></header>
+<p id="dataMode" class="muted">Connessione ai provider…</p>
+<div id="markets" class="markets" aria-label="Seleziona mercato"></div>
+<section class="panel"><div class="row">
+<label>Posizioni allo switch<select id="policy"><option value="flatten">Flatten Immediately</option><option value="tight_trailing">Set Tight Trailing Stop (1%)</option><option value="background">Keep Running in Background</option></select></label>
+<label>Bankroll simulato USD<input id="bankroll" type="number" min="1" max="1000000000" value="10000"></label>
+<label>Kelly multiplier <span id="kellyLabel">0.5× · Half-Kelly</span><input id="kelly" type="range" min="0.1" max="1" step="0.1" value="0.5"></label>
+<label>Esecuzione<select disabled aria-label="Esecuzione"><option>PAPER_TRADING</option></select></label>
+</div><p><label style="display:block"><input id="multi" type="checkbox"> MULTI_SPLIT_KELLY · budget suddiviso tra i cinque profili</label></p>
+<div class="row"><button id="apply">Applica controlli</button><button id="start">Avvia replay</button><button id="pause">Pausa nuove entrate</button><button id="panic" class="panic">PANIC FLATTEN ALL</button><span id="status" role="status">Connessione…</span></div></section>
+<div id="error" role="alert"></div>
+<div class="metrics"><div class="metric">Equity netta stimata<strong id="equity">—</strong></div><div class="metric">PnL simulato<strong id="pnl">—</strong></div><div class="metric">Posizioni aperte<strong id="positions">—</strong></div><div class="metric">Blocco operativo<strong id="lock">—</strong></div></div>
+<section class="panel"><h2>Provider e qualità dei dati</h2><p class="muted">Fonte, trasporto e freschezza sono separati dall’esecuzione. Un proxy non abilita ordini su derivati.</p><pre id="providerStatus">In attesa…</pre><p id="executionStatus" class="muted"></p></section>
+<section class="panel"><h2>Sandbox · holdout cronologico</h2><p class="muted">Selezione su training 60%; gate sul restante 40%. Sharpe ≥ 2 · Drawdown ≤ 8% · Profit Factor ≥ 1.6 · almeno 10 trade chiusi. Gate con stop, uscite parziali e costi del replay; Kelly stimato sul training. Approvazione valida solo per questa demo.</p><table><thead><tr><th>Profilo</th><th>Sharpe</th><th>Sortino</th><th>Calmar</th><th>Drawdown</th><th>PF</th><th>Trade</th><th>Gate</th></tr></thead><tbody id="reports"></tbody></table></section>
+<section class="panel"><h2>Strategia generata · grammatica limitata</h2><p id="aiDescription" class="muted">Parametri MA validati; nessuna esecuzione di Python arbitrario.</p><pre id="source"></pre><details><summary>Capacità live mancanti del profilo selezionato</summary><p id="unavailable"></p></details></section>
+<section class="panel"><h2>Registro esecuzioni simulate</h2><p class="muted">Entrate, uscite, prezzi, commissioni e PnL netto persistiti nel conto locale.</p><pre id="fills">Nessuna esecuzione simulata.</pre></section>
+<section class="panel"><h2>Notizie biotech · eventi FDA/SEC non verificati</h2><pre id="news">Nessuna notizia disponibile.</pre></section>
+<section class="panel"><h2>Eventi runtime</h2><pre id="events" aria-live="polite"></pre></section>
+<footer>Commissione 5 bps + mezzo spread 5 bps + slippage 5 bps per lato: stime configurate, non costi reali. Stop valutati sui campioni disponibili; nessuna garanzia di esecuzione al prezzo stop. Kill switch a −5% rispetto al riferimento giornaliero UTC; blocco persistente di 24 ore. Il pulsante Panic applica lo stesso blocco.</footer>
+<script>
+const token='__CONTROL_TOKEN__', $=id=>document.getElementById(id);
+const modes=['MEME_SNIPER','CRYPTO_PERPS','OPTIONS_0DTE','COMMODITIES_FUT','BIOTECH_CATALYST'];
+let state=null,selected='CRYPTO_PERPS',busy=false;
+const number=x=>x===null||x===undefined?'N/D':Number(x).toFixed(2);
+async function api(path,data){const r=await fetch('/api/'+path,data?{method:'POST',headers:{'Content-Type':'application/json','X-Control-Token':token},body:JSON.stringify(data)}:{});const result=await r.json();if(!r.ok)throw Error(typeof result.detail==='string'?result.detail:JSON.stringify(result.detail));return result;}
+function controls(){return {market:selected,multi_split_kelly:$('multi').checked,switch_policy:$('policy').value,bankroll:Number($('bankroll').value),kelly_multiplier:Number($('kelly').value),execution:'PAPER_TRADING'};}
+function render(s,form=false){state=s;renderProviders(s);selected=s.controls.market;if(form){$('policy').value=s.controls.switch_policy;$('bankroll').value=s.controls.bankroll;$('kelly').value=s.controls.kelly_multiplier;$('multi').checked=s.controls.multi_split_kelly;$('kellyLabel').textContent=s.controls.kelly_multiplier+'×';}for(const b of $('markets').children){const active=b.dataset.mode===selected;b.classList.toggle('selected',active);b.setAttribute('aria-pressed',active);}$('equity').textContent='$'+number(s.equity);$('pnl').textContent='$'+number(s.equity-s.controls.bankroll);$('positions').textContent=s.positions.length;renderFills(s.fills||[]);$('lock').textContent=s.locked_until>Date.now()/1000?Math.ceil((s.locked_until-Date.now()/1000)/3600)+' h':'Libero';$('status').textContent=s.running?(s.source==='LIVE_DATA_PAPER'?'Paper armato su dati reali':'Replay in esecuzione'):'Nuove entrate in pausa';$('source').textContent=s.sources[selected]||'';$('unavailable').textContent=s.unavailable[selected];$('events').textContent=s.events.slice(-25).reverse().join('\n');$('reports').replaceChildren();for(const m of modes){const r=s.reports[m];if(!r)continue;const tr=document.createElement('tr');for(const value of [m,number(r.sharpe),number(r.sortino),number(r.calmar),number(100*r.max_drawdown)+'%',number(r.profit_factor),r.trades,r.approved?'DEMO OK':'REJECTED']){const td=document.createElement('td');td.textContent=value;tr.append(td);}$('reports').append(tr);}}
+function renderProviders(s){
+  const live=s.source==='LIVE_DATA_PAPER';
+  $('dataBadge').textContent=live?'LIVE DATA · PAPER':'PAPER · SYNTHETIC';
+  $('dataMode').textContent=live?'Feed reali con fallback per mercato · conto paper locale isolato · nessun ordine broker automatico':'Replay sintetico long-only · 1 candela giornaliera per secondo · leva 1×';
+  $('start').textContent=live?'Arma paper su dati reali':'Avvia replay';
+  $('providerStatus').textContent=modes.map(m=>{
+    const q=(s.quotes||{})[m],p=(s.providers||{})[m];
+    if(!live)return m+' · SYNTHETIC_REPLAY';
+    return m+' · '+(p?p.provider+' / '+p.state:'in attesa')+(q?' · '+q.symbol+' @ '+number(q.price)+' · '+q.transport+' · '+q.quality+' · '+(q.fresh?'FRESH':'STALE / UNVERIFIED'):'')+'\n  '+((s.unavailable||{})[m]||'');
+  }).join('\n');
+  $('executionStatus').textContent=s.execution_providers?'Esecuzione dashboard: local_paper · credenziali native presenti: '+Object.entries(s.execution_providers.credentials_present).filter(([v,ok])=>ok).map(([v])=>v).join(', '):'Esecuzione sintetica locale';
+  $('aiDescription').textContent=s.ai?'AI: '+s.ai.provider+' · '+s.ai.status+' · parametri validati prima della generazione del codice':'Mutazione deterministica delle finestre MA della repo; nessuna esecuzione di Python arbitrario.';
+  $('news').textContent=s.news&&s.news.length?s.news.map(n=>n.provider+' · '+n.title).join('\n'):'Nessuna notizia disponibile.';
+}
+function renderFills(fills){
+  $('fills').textContent=fills.length?fills.slice(-20).reverse().map(f=>
+    new Date(f.timestamp*1000).toISOString()+' · '+f.market+' · '+f.side.toUpperCase()+
+    ' '+number(f.quantity)+' @ '+number(f.price)+' · fee $'+number(f.commission)+
+    ' · PnL $'+number(f.net_pnl)+' · '+f.reason
+  ).join('\n'):'Nessuna esecuzione simulata.';
+}
+async function act(fn){if(busy)return;busy=true;$('error').textContent='';try{render(await fn(),true);}catch(e){$('error').textContent=e.message;}finally{busy=false;}}
+for(const [i,m] of modes.entries()){const b=document.createElement('button');b.dataset.mode=m;const n=document.createElement('b');n.textContent='0'+(i+1);b.append(n,document.createTextNode(m));b.onclick=()=>act(()=>api('controls',{...controls(),market:m}));$('markets').append(b);}
+$('kelly').oninput=()=>{$('kellyLabel').textContent=$('kelly').value+'×';};$('apply').onclick=()=>act(()=>api('controls',controls()));for(const action of ['start','pause','panic'])$(action).onclick=()=>act(()=>api('command',{action}));
+async function poll(first=false){if(!busy){try{render(await api('state'),first);}catch(e){$('status').textContent='Connessione persa';$('error').textContent=e.message;}}setTimeout(()=>poll(),1000);}poll(true);
+</script></html>

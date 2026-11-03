@@ -1,8 +1,18 @@
 alpaca-py==0.44.0
 numpy==2.4.6
 pandas==3.0.6
+pandas-market-calendars==5.5.0
 plotly==7.1.0
 pytest==9.1.1
 python-dotenv==1.2.4
 streamlit==1.65.0
-pandas-market-calendars>=4.4
+# Shared console/provider runtime (also imported during test collection).
+fastapi==0.162.0
+httpx==0.28.1
+rich==15.0.0
+pydantic==2.14.1
+starlette==1.10.0
+requests==2.34.2
+msgpack==1.2.4
+websockets==17.3
+portalocker==3.2.0

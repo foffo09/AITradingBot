@@ -10,6 +10,7 @@ from src.broker.alpaca_client import AlpacaClient, BrokerConnectionError
 import src.broker.alpaca_client as alpaca_module
 from src.simulation.ledger import SimulationLedger
 from src.trading.paper_automation import PaperAutomationLog
+from src.trading.paper_coordinator import PaperAccountCoordinator
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
@@ -217,7 +218,7 @@ def test_paper_dashboard_displays_only_broker_snapshot_values_and_n_d_reasons(
     assert metrics["Saldo in contanti (Paper)"] == "$125.00"
     assert metrics["Equity Alpaca Paper"] == "$150.00"
     assert metrics["Liquidità utilizzabile (buying power)"] == "$125.00"
-    assert metrics["Capitale investito (valore posizioni)"] == "$25.00"
+    assert metrics["Valore di mercato posizioni (Paper)"] == "$25.00"
     assert metrics["P/L non realizzato Paper"] == "$5.00"
     assert metrics["P/L realizzato Paper"] == "N/D"
     assert metrics["P/L totale Paper"] == "N/D"
@@ -231,6 +232,14 @@ def test_paper_dashboard_displays_only_broker_snapshot_values_and_n_d_reasons(
 def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
     monkeypatch, tmp_path,
 ):
+    import sys
+    class ControlledDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = cls(2026, 10, 28, 15, 0, 30, tzinfo=timezone.utc)
+            return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+    monkeypatch.setattr(sys.modules[__name__], "datetime", ControlledDatetime)
+    monkeypatch.setattr("src.trading.paper_automation.datetime", ControlledDatetime)
     settings = AppSettings(
         trading_mode="paper",
         alpaca_api_key="test-paper-key",
@@ -251,6 +260,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
     class AutomationBroker:
         paper_client_configured = True
         paper_client_is_paper = True
+        paper_coordinator = PaperAccountCoordinator(tmp_path / "coordinator", "test-account")
 
         def __init__(self, runtime_settings):
             self.settings = runtime_settings
@@ -269,7 +279,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
         def get_paper_snapshot(self):
             return {
                 "account": {
-                    "status": "ACTIVE",
+                    "status": "ACTIVE", "id": "test-account",
                     "cash": "10000",
                     "equity": "10000",
                     "buying_power": "10000",
@@ -290,7 +300,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
 
         def get_account(self):
             return {
-                "status": "ACTIVE",
+                "status": "ACTIVE", "id": "test-account",
                 "cash": "10000",
                 "equity": "10000",
                 "buying_power": "10000",
@@ -315,15 +325,18 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
                 return pd.DataFrame(columns=[
                     "timestamp", "open", "high", "low", "close", "volume",
                 ])
-            end = pd.Timestamp.now(tz="UTC").floor("s")
-            return pd.DataFrame({
-                "timestamp": pd.date_range(end=end, periods=40, freq="D"),
+            end = pd.Timestamp(datetime.now(timezone.utc)).tz_convert("America/New_York").normalize()
+            frame = pd.DataFrame({
+                "timestamp": pd.date_range(end=end, periods=40, freq="D").tz_convert("UTC"),
                 "open": [100.0] * 40,
                 "high": [101.0] * 40,
                 "low": [99.0] * 40,
                 "close": [100.0] * 40,
                 "volume": [1000] * 40,
             })
+            frame.attrs.update(bar_time_contract="alpaca-start-v1", bar_calendar="NYSE",
+                               session_scope="regular", fetched_at=datetime.now(timezone.utc).isoformat())
+            return frame
 
         def get_latest_quote(self, symbol):
             return {
@@ -344,6 +357,10 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
 
     assert not app.exception
     assert widget(app.button, "Avvia automazione Paper").disabled is False
+    widget(app.button, "Esegui anteprima DRY-RUN").click().run()
+    assert not app.exception and not submitted_orders
+    assert app.session_state["paper_automation_active"] is False
+    assert "DRY-RUN" in app.session_state["paper_auto_result"]["reason"]
     widget(app.button, "Avvia automazione Paper").click().run()
 
     assert not app.exception
@@ -391,6 +408,27 @@ def test_paper_path_cannot_alias_the_demo_database(monkeypatch, tmp_path):
     assert len(app.exception) == 1
     assert "Paper and demo modes must use separate database files" in app.exception[0].message
     assert ledger_initializations == []
+
+
+@pytest.mark.parametrize(("mode", "hardlink"), [("demo", False), ("demo", True), ("paper", True)])
+def test_both_modes_reject_shared_database_before_broker_initialization(monkeypatch, tmp_path, mode, hardlink):
+    settings = AppSettings(trading_mode=mode, alpaca_api_key="test-key", alpaca_secret_key="test-secret")
+    monkeypatch.setattr(AppSettings, "from_env", classmethod(lambda cls: settings))
+    demo = tmp_path / "demo.sqlite3"
+    demo.touch()
+    paper = demo
+    if hardlink:
+        paper = tmp_path / "paper.sqlite3"
+        paper.hardlink_to(demo)
+    monkeypatch.setenv("AI_TRADINGBOT_DEMO_DB_PATH", str(demo))
+    monkeypatch.setenv("AI_TRADINGBOT_PAPER_DB_PATH", str(paper))
+    def unexpected_broker(*args, **kwargs):
+        raise AssertionError("Broker initialized before database isolation check")
+    monkeypatch.setattr(AlpacaClient, "__init__", unexpected_broker)
+    app = AppTest.from_file(str(APP_PATH), default_timeout=15).run()
+    assert len(app.exception) == 1
+    assert "Paper and demo modes must use separate database files" in app.exception[0].message
+    assert demo.stat().st_size == 0
 
 
 def test_paper_configuration_fallback_does_not_open_paper_or_personal_ledger(
@@ -527,7 +565,7 @@ def test_dashboard_rejects_invalid_strategy_windows_without_traceback(dashboard)
 def test_dashboard_reports_insufficient_demo_bars_without_traceback(dashboard):
     app, _, _ = dashboard
     widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
-    widget(app.selectbox, "Periodo grafico").set_value("1M").run()
+    widget(app.selectbox, "Periodo").set_value("1M").run()
     widget(app.button, "Carica dati / applica selezione").click().run()
     widget(app.number_input, "Media mobile lunga").set_value(31).run()
 
@@ -558,7 +596,7 @@ def test_changing_market_selection_hides_prior_backtest_result(dashboard):
         for metric in app.metric
     )
 
-    widget(app.selectbox, "Strumento da analizzare").set_value("QQQ").run()
+    widget(app.selectbox, "Strumento").set_value("QQQ").run()
     assert not app.exception
     assert any(
         "La selezione dei dati è cambiata" in item.value
@@ -575,11 +613,11 @@ def test_dashboard_backtest_invalidates_on_interval_period_and_strategy_changes(
     assert not app.exception
     assert app.session_state["backtest_result"]
 
-    widget(app.selectbox, "Periodo grafico").set_value("6M").run()
+    widget(app.selectbox, "Periodo").set_value("6M").run()
     assert not any(metric.label == "P/L lordo realizzato" for metric in app.metric)
     assert any("La selezione dei dati è cambiata" in item.value for item in app.info)
 
-    widget(app.selectbox, "Periodo grafico").set_value("3M").run()
+    widget(app.selectbox, "Periodo").set_value("3M").run()
     widget(app.number_input, "Media mobile breve").set_value(9).run()
     assert not any(metric.label == "P/L lordo realizzato" for metric in app.metric)
     assert any("riesegui il backtest" in item.value for item in app.info)
@@ -587,7 +625,7 @@ def test_dashboard_backtest_invalidates_on_interval_period_and_strategy_changes(
     widget(app.number_input, "Media mobile breve").set_value(10).run()
     assert any(metric.label == "P/L lordo realizzato" for metric in app.metric)
 
-    widget(app.selectbox, "Intervallo dati").set_value("1Week").run()
+    widget(app.selectbox, "Intervallo").set_value("1Week").run()
     assert not any(metric.label == "P/L lordo realizzato" for metric in app.metric)
     assert any("La selezione dei dati è cambiata" in item.value for item in app.info)
 
@@ -648,9 +686,9 @@ def test_walk_forward_dashboard_uses_selected_synthetic_data_without_broker_or_l
 @pytest.mark.parametrize(
     ("label", "value"),
     [
-        ("Periodo grafico", "6M"),
-        ("Intervallo dati", "1Week"),
-        ("Strumento da analizzare", "QQQ"),
+        ("Periodo", "6M"),
+        ("Intervallo", "1Week"),
+        ("Strumento", "QQQ"),
     ],
 )
 def test_walk_forward_results_are_hidden_after_market_selection_changes(
@@ -857,4 +895,139 @@ def test_simulated_trade_persists_without_broker_submission(dashboard):
     )
     assert restarted_summary["realized_pnl"] == pytest.approx(summary["realized_pnl"])
     assert restarted_summary["cash"] == pytest.approx(summary["cash"])
+    assert submitted_orders == []
+
+
+@pytest.mark.parametrize("local_closed", [False, True])
+@pytest.mark.parametrize("paper_status", [None, "accepted", "filled"])
+def test_market_chart_keeps_local_trades_and_paper_markers_separate(
+    tmp_path, monkeypatch, local_closed, paper_status,
+):
+    from src.data.market_data import generate_synthetic_market_data
+    from src.strategy.moving_average import MovingAverageStrategy
+    from src.ui.charts import plot_market_chart
+    local = SimulationLedger(tmp_path / "chart.sqlite3")
+    local.initialize_account(initial_eur=100, eur_usd_rate=1, fx_source="test", fx_timestamp="2026-01-01")
+    now = datetime.now(timezone.utc).isoformat()
+    if local_closed:
+        local.buy(
+            symbol="SPY", quantity=0.1, market_price=100, commission_bps=0,
+            slippage_bps=0, max_trade_fraction=0.2, max_exposure_fraction=0.5,
+            daily_loss_limit_fraction=0.05, data_timestamp=now,
+            data_source="isolated test fixture", reason="local entry",
+        )
+        local.sell(
+            symbol="SPY", quantity=0.1, market_price=102, commission_bps=0,
+            slippage_bps=0, data_timestamp=now,
+            data_source="isolated test fixture", reason="local exit",
+        )
+    orders = []
+    if paper_status:
+        order = {"id": "fake-paper-order", "symbol": "SPY", "status": paper_status,
+                 "submitted_at": now}
+        if paper_status == "filled":
+            order.update(filled_at=now, filled_avg_price="105", filled_qty="0.1")
+        orders.append(order)
+    charts = []
+    monkeypatch.setattr("streamlit.plotly_chart", lambda fig, **kwargs: charts.append(fig))
+    data = generate_synthetic_market_data("SPY", periods=90)
+    signals = MovingAverageStrategy(10, 30).generate_signals(data)
+    plot_market_chart(data, signals, "SPY", 10, 30, True, paper_orders=orders, local_history=local.history())
+    market = next(fig for fig in charts if any(trace.type == "candlestick" for trace in fig.data))
+    names = [trace.name for trace in market.data]
+    assert names.count("Entry simulazione") == int(local_closed)
+    assert names.count("Uscita simulazione") == int(local_closed)
+    assert names.count("Ordine Paper (close barra di riferimento)") == int(paper_status is not None)
+    assert names.count("Fill Paper confermato") == int(paper_status == "filled")
+    assert names.count("Volume") == names.count("RSI 14") == 1
+    assert any(name.startswith("MA breve") for name in names)
+    assert any(name.startswith("MA lunga") for name in names)
+    for name, price in [("Entry simulazione", 100), ("Uscita simulazione", 102),
+                        ("Fill Paper confermato", 105)]:
+        for trace in market.data:
+            if trace.name == name:
+                assert list(trace.y) == [price]
+
+
+def test_future_historical_bars_do_not_enable_local_orders(dashboard, monkeypatch):
+    from datetime import timedelta
+    from src.data.market_data import generate_synthetic_market_data
+    app, submitted_orders, _ = dashboard
+    def future_bars(self, symbol, **kwargs):
+        data = generate_synthetic_market_data(symbol, periods=40)
+        data["timestamp"] += timedelta(days=7)
+        data["is_synthetic"] = False
+        data.attrs["source"] = "isolated broker fixture"
+        return data
+    monkeypatch.setattr(AlpacaClient, "get_market_data", future_bars)
+    widget(app.button, "Carica dati / applica selezione").click().run()
+    assert not app.exception
+    assert any("ordini locali bloccati" in item.value for item in app.error)
+    assert not any(item.label.startswith("Conferma acquisto simulato") for item in app.button)
+    assert submitted_orders == []
+
+
+@pytest.mark.parametrize(("step", "expected"), [(1, 100), (0, 50), (-1, 0)])
+def test_chart_rsi_handles_one_sided_and_flat_prices(dashboard, monkeypatch, step, expected):
+    from src.data import market_data
+    app, submitted_orders, _ = dashboard
+    original = market_data.generate_synthetic_market_data
+    def trend_data(symbol, periods):
+        data = original(symbol, periods)
+        data["close"] = [1000 + step * i for i in range(periods)]
+        data["open"] = data["close"]
+        data["high"] = data["close"] + 1
+        data["low"] = data["close"] - 1
+        return data
+    monkeypatch.setattr(market_data, "generate_synthetic_market_data", trend_data)
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
+    widget(app.checkbox, "Mostra RSI (14)").set_value(True).run()
+    charts = []
+    monkeypatch.setattr("streamlit.plotly_chart", lambda fig, **kwargs: charts.append(fig))
+    widget(app.button, "Carica dati / applica selezione").click().run()
+    assert not app.exception
+    rsi = next(trace for fig in charts for trace in fig.data if trace.name == "RSI 14")
+    values = pd.Series(rsi.y).dropna()
+    assert not values.empty and values.iloc[-1] == expected
+    assert submitted_orders == []
+
+
+def test_demo_chart_does_not_overlay_paper_fills(dashboard, monkeypatch):
+    app, submitted_orders, _ = dashboard
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(True).run()
+    app.session_state["paper_snapshot"] = {"orders": [{"id": "fake-paper", "symbol": "SPY",
+        "filled_at": datetime.now(timezone.utc).isoformat(), "filled_qty": "1", "filled_avg_price": "100"}]}
+    charts = []
+    monkeypatch.setattr("streamlit.plotly_chart", lambda fig, **kwargs: charts.append(fig))
+    widget(app.button, "Carica dati / applica selezione").click().run()
+    assert not app.exception
+    market = next(fig for fig in charts if any(trace.type == "candlestick" for trace in fig.data))
+    assert all("Paper" not in trace.name for trace in market.data)
+    assert "SYNTHETIC / DEMO" in market.layout.title.text
+    assert submitted_orders == []
+
+
+def test_empty_broker_bars_show_unavailable_without_breaking_dashboard(dashboard, monkeypatch):
+    app, submitted_orders, _ = dashboard
+    monkeypatch.setattr(AlpacaClient, "get_market_data", lambda *args, **kwargs: pd.DataFrame())
+    widget(app.button, "Carica dati / applica selezione").click().run()
+    assert not app.exception
+    assert any("Nessuna barra" in item.value for item in app.warning)
+    assert submitted_orders == []
+
+
+@pytest.mark.parametrize("quote_time", ["future", "invalid"])
+def test_quote_with_future_or_invalid_timestamp_is_not_presented_as_current(dashboard, monkeypatch, quote_time):
+    from datetime import timedelta
+    from src.data.market_data import generate_synthetic_market_data
+    app, submitted_orders, _ = dashboard
+    monkeypatch.setattr(AlpacaClient, "get_market_data", lambda self, symbol, **kwargs:
+                        generate_synthetic_market_data(symbol, periods=40))
+    timestamp = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat() if quote_time == "future" else "invalid"
+    monkeypatch.setattr(AlpacaClient, "get_latest_quote", lambda self, symbol:
+                        {"bid": 99, "ask": 100, "price": 99.5, "timestamp": timestamp, "source": "isolated fixture"})
+    widget(app.button, "Carica dati / applica selezione").click().run()
+    assert not app.exception
+    assert app.session_state.get("market_quote") is None
+    assert not any(metric.label == "Quotazione aggiornata" for metric in app.metric)
     assert submitted_orders == []

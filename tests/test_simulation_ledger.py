@@ -90,6 +90,54 @@ def buy(ledger, **kwargs):
     return ledger.buy(**defaults)
 
 
+@pytest.mark.parametrize(("new_key", "closed_key"), [
+    ("%", "first-exit"), ("exit_", "exitA"), ("exit%", "exit-first"), ("exit", "exit:detail"),
+])
+def test_idempotency_keys_are_literal_not_sql_patterns(tmp_path, new_key, closed_key):
+    ledger = make_ledger(tmp_path / "literal-keys.sqlite3")
+    buy(ledger)
+    exit_fields = dict(
+        symbol="AAPL", quantity=1, market_price=55, commission_bps=0, slippage_bps=0,
+        data_timestamp=datetime.now(timezone.utc).isoformat(), data_source="test feed",
+        reason="test exit", idempotency_key=closed_key,
+    )
+    closed = ledger.sell(**exit_fields)
+    replay = ledger.sell(**exit_fields)
+    assert replay["duplicate"] is True and replay["id"] == closed["id"]
+    first = buy(ledger, quantity=0.1, idempotency_key=new_key)
+    assert first["duplicate"] is False
+    repeated = buy(ledger, quantity=0.1, idempotency_key=new_key)
+    assert repeated["duplicate"] is True and repeated["id"] == first["id"]
+    assert len(ledger.history()) == 2
+
+
+def test_older_mark_cannot_replace_current_price_or_add_snapshot(tmp_path):
+    ledger = make_ledger(tmp_path / "ordered-marks.sqlite3")
+    ledger.update_mark("AAPL", 100, "2026-01-02T12:00:00+00:00", "new feed")
+    with ledger._connect() as db:
+        snapshots = db.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
+    ledger.update_mark("AAPL", 90, "2026-01-02T12:30:00+01:00", "delayed feed")
+    with ledger._connect() as db:
+        mark = dict(db.execute("SELECT * FROM marks WHERE symbol='AAPL'").fetchone())
+        assert db.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0] == snapshots
+    assert mark["price"] == 100 and mark["source"] == "new feed"
+    ledger.update_mark("AAPL", 101, "2026-01-02T12:00:00+00:00", "corrected same bar")
+    with ledger._connect() as db:
+        assert db.execute("SELECT price FROM marks WHERE symbol='AAPL'").fetchone()[0] == 101
+
+
+def test_mark_rejects_invalid_timestamp_and_can_repair_legacy_timestamp(tmp_path):
+    ledger = make_ledger(tmp_path / "invalid-marks.sqlite3")
+    with pytest.raises(ValueError, match="timestamp"):
+        ledger.update_mark("AAPL", 100, "invalid", "test feed")
+    with ledger._connect() as db:
+        assert db.execute("SELECT COUNT(*) FROM marks").fetchone()[0] == 0
+        db.execute("INSERT INTO marks VALUES ('AAPL', 90, 'invalid', 'legacy')")
+    ledger.update_mark("AAPL", 100, "2026-01-02", "valid feed")
+    with ledger._connect() as db:
+        assert db.execute("SELECT price FROM marks WHERE symbol='AAPL'").fetchone()[0] == 100
+
+
 def test_fx_initial_capital_costs_and_partial_close_math(tmp_path):
     ledger = make_ledger(tmp_path / "account.sqlite3", rate=1.1)
     assert ledger.account()["initial_cash"] == pytest.approx(110)

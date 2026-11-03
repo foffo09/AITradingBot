@@ -44,6 +44,8 @@ class AppSettings:
     spread_bps: float = 0.0
     commission_bps: float = 5.0
     paper_trading_enabled: bool = True
+    paper_execution_scope: str = "disabled"
+    paper_coordinator_directory: str | None = None
 
     def __post_init__(self) -> None:
         self.trading_mode = (self.trading_mode or "paper").strip().lower()
@@ -128,6 +130,8 @@ class AppSettings:
             spread_bps=float(os.getenv("SPREAD_BPS", "0.0")),
             commission_bps=float(os.getenv("COMMISSION_BPS", "5.0")),
             paper_trading_enabled=mode in {"paper", "demo"},
+            paper_execution_scope=os.getenv("PAPER_EXECUTION_SCOPE", "disabled"),
+            paper_coordinator_directory=_normalize_optional_string(os.getenv("PAPER_COORDINATOR_DIRECTORY")),
         )
 
         if not settings.alpaca_api_key or not settings.alpaca_secret_key:
@@ -138,6 +142,12 @@ class AppSettings:
         return settings
 
     def validate(self) -> None:
+        if self.paper_execution_scope not in {"disabled", "single_host"}:
+            raise ValueError("Paper execution scope must be disabled or single_host; distributed execution is unsupported.")
+        if self.paper_execution_scope == "single_host" and (
+            not self.paper_coordinator_directory or not Path(self.paper_coordinator_directory).is_absolute()
+        ):
+            raise ValueError("Single-host Paper execution requires an absolute shared coordinator directory.")
         if self.trading_mode not in {"demo", "paper", "live"}:
             raise ValueError("trading_mode must be one of: demo, paper, live")
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -22,7 +22,7 @@ def generate_demo_prices(
     trend = rng * drift
     prices = start_price * (1.0 + (trend / 100.0) + noise)
 
-    dates = [datetime.utcnow() - timedelta(days=periods - idx) for idx in range(periods)]
+    dates = pd.date_range(end=datetime.now(timezone.utc) - timedelta(days=1), periods=periods, freq="D")
     df = pd.DataFrame({
         "symbol": symbol,
         "timestamp": dates,
