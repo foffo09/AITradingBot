@@ -354,6 +354,8 @@ class AlpacaClient:
                     if start_time is not None
                     else min(10_000, max(limit, int(expected_bars * 1.05)))
                 )
+            # A capped ASC history can omit the latest bars; incremental backfill must stay ASC.
+            sort = "desc" if limit is not None and start_time is None else "asc"
             if is_crypto:
                 response = client.get_crypto_bars(
                     CryptoBarsRequest(
@@ -361,6 +363,7 @@ class AlpacaClient:
                         timeframe=frame,
                         start=start,
                         limit=request_limit,
+                        sort=sort,
                     )
                 )
                 source = "Dati storici reali Alpaca Crypto"
@@ -370,6 +373,7 @@ class AlpacaClient:
                     timeframe=frame,
                     start=start,
                     limit=request_limit,
+                    sort=sort,
                     feed=DataFeed.IEX,
                 )
                 response = client.get_stock_bars(request)
@@ -629,7 +633,7 @@ class AlpacaClient:
 
     def describe_error(self, exc: Exception) -> str:
         message = str(exc)
-        for secret in (self.settings.alpaca_api_key, self.settings.alpaca_secret_key):
-            if secret:
-                message = message.replace(secret, "<redacted>")
+        secrets = (self.settings.alpaca_api_key, self.settings.alpaca_secret_key)
+        for secret in sorted(filter(None, secrets), key=len, reverse=True):
+            message = message.replace(secret, "<redacted>")
         return message

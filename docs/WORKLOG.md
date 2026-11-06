@@ -237,3 +237,26 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
 - I tre worktree già registrati sono stati riutilizzati e fast-forwardati senza commit divergenti o modifiche locali: backend, UI e strategy erano puliti e ora condividono il BASE finale del team. Le directory di lavoro e i branch sono rimasti indipendenti.
 - Il worktree agent separato a `afdebe4` mantiene le sue modifiche locali in `app.py`, `src/broker/alpaca_client.py` e `tests/test_paper_safety.py`; non è stato toccato. I due backup verificati esistono ancora.
 - Stato finale del checkout centrale e dei tre worktree team: pulito. Nessun push forzato, modifica a `main`, file sensibile tracciato o operazione broker.
+
+## 2026-11-06 — Persona 1, fase 2 backend
+
+- Base f36f9e2 verificata nel worktree AITradingBot-backend, branch
+  feature/backend-market-data pulito; nessun merge o modifica ad altri branch.
+- Review di produttori SDK e chiamanti dashboard/selettore/esecuzione. Sono
+  riprodotti e corretti: tasso FX booleano/data futura, provenienza sintetica
+  o contraddittoria ammessa dal helper operativo, redazione parziale di segreti
+  sovrapposti e storico limitato ASC che può escludere le barre più recenti.
+- Invariati firme, soglie finanziarie, coordinator, timeout e policy HTTP.
+  Finestre limitate senza start_time richieste DESC e restituite ASC; storico
+  completo e backfill restano ASC. Impatto documentato prima della modifica.
+- Il sospetto 200 {} interpretato come conto vuoto non è stato confermato:
+  SDK e backend lo rifiutavano già. Aggiunti test, nessuna patch ridondante.
+- 33 nuovi casi offline in test_backend_integration.py. Mac/Python 3.12.14:
+  205 mirati passati in 1,72 s; suite 535 passati, 1 skip, un warning in
+  24,51 s. Guard rete 0/credenziali 0. Il test Windows Proactor resta saltato
+  sul Mac. Nessun test esistente eliminato, modificato o disattivato.
+- BACKEND_HANDOFF.md contiene contratti, decisioni, matrice delle prove e
+  richieste a Persona 2/3 senza modificare app.py o strategie. Limiti REST e
+  proposta analitica distinti dall'autorizzazione operativa.
+- Windows e broker autentici NON ESEGUITI. Nessun ordine, server, automazione,
+  file di credenziali o database personale aperto.

@@ -208,3 +208,123 @@ Queste prove riguardano codice e trasporti simulati su macOS. La prova di questa
 versione su Windows 11/Python 3.11, su feed autentici e su account Paper reale
 resta **NON ESEGUITA**. Richiede i comandi PowerShell sopra, senza credenziali per
 la suite. I test verdi non attestano sicurezza del trading automatico.
+
+## Fase 2 — impatto documentato prima della correzione
+
+Base della revisione: `f36f9e2021ae10793a6289ffdd231c62b462334f`.
+Nessuna modifica alle firme delle API broker o ai tipi dei risultati.
+
+Correzioni riprodotte con test, circoscritte ai file della Persona 1:
+
+1. `fetch_eur_usd_rate`: un booleano JSON era convertito in 1.0; la data della
+   risposta poteva essere futura. Verranno rifiutati con RuntimeError già previsto
+   dall'API. Nessuna nuova soglia di età per i fixing ECB, che possono essere
+   legittimamente precedenti nei weekend/festività. Confronto della data in UTC.
+2. `select_completed_bars`: accettava provenienza sintetica o mancante e flag
+   is_synthetic discordanti. Le firme restano invariate; il gate operativo
+   richiederà attrs quality=real e, se presente, ogni flag is_synthetic esplicitamente
+   False. I frame reali minimali senza quella colonna restano supportati.
+   I chiamanti Paper già controllano quality; questo consolida il contratto del
+   helper condiviso, senza attestare che la pipeline precedente inviasse ordini Demo.
+3. `describe_error`: se la chiave più corta era contenuta nel segreto più lungo,
+   la prima sostituzione lasciava una parte del segreto visibile. Redazione dal
+   valore più lungo al più corto, stesso tipo str ed eccezioni già esistenti.
+
+La prova con SDK reale e HTTP simulato ha invece dimostrato che 200 {}, JSON
+vuoto/null e 204 su ordini/posizioni sono già rifiutati: nessuna modifica
+ridondante al trasporto. Una risposta esplicita 200 [] resta una lista vuota
+valida; non certifica da sola completezza globale o coerenza del conto.
+
+### Impatto aggiuntivo sulla finestra storica limitata
+
+Revisione dello SDK installato: BaseTimeseriesDataRequest.sort usa ASC per default;
+_get_marketdata interrompe la paginazione quando raggiunge il limite. Il chiamante
+Paper chiede period=3M e limit=1000 per l'intraday; il budget effettivo del backend
+può arrivare a 10000 barre, ma ASC seleziona la parte più vecchia del periodo e
+può lasciare il selettore senza barre fresche. Nessun test autentico del feed è
+implicito in questa osservazione del contratto SDK.
+
+Impatto prima della modifica: a firma invariata, per limit finito e start_time
+assente il backend richiederà sort=desc (finestra più recente); restituirà sempre
+un DataFrame ordinato crescente. Con limit=None resta sort=asc per lo storico
+completo; con start_time esplicito resta sort=asc per non saltare il backfill.
+Il calcolo preesistente del budget, incluso il tetto 10000, non viene modificato;
+limit non è una promessa di cardinalità esatta o di copertura dell'intero periodo.
+
+## Fase 2 — contratti per Persona 2 e Persona 3
+
+Le sezioni precedenti mantengono la descrizione delle API broker. Le validazioni
+aggiuntive sopra sono implementate; non cambiano firme o forme dei risultati.
+
+| API dati | Input e output | Contratto/errore |
+| --- | --- | --- |
+| `generate_demo_prices(symbol="AAPL", periods=200, start_price=100.0, drift=0.0005, volatility=0.012)` | DataFrame con symbol, timestamp UTC, OHLCV, is_synthetic=True e data_quality=synthetic-demo | Generazione esplicita Demo; mai fallback di un errore Alpaca. Non idonea al gate operativo. |
+| `generate_synthetic_market_data(symbol="AAPL", periods=200)` | Stesso DataFrame del generatore Demo | Alias compatibile; il generatore non certifica provenienza reale tramite attrs. |
+| `fetch_eur_usd_rate(timeout=4.0)` | dict rate: float positivo finito, timestamp: data ISO, source: Frankfurter API (ECB reference rate) | RuntimeError su rete/JSON/valori invalidi. La data è quella del fixing, non un timestamp di negoziazione. Booleani e date future UTC rifiutati. Nessuna conversione implicita nelle quote Alpaca. |
+| `utc_timestamp(value, label)` | pandas.Timestamp timezone-aware, convertito UTC | BarTimingError su NaT, assenza di fuso o valore invalido. Non localizzare automaticamente timestamp ricevuti senza fuso. |
+| `bar_timing(symbol, interval, bar_timestamp, as_of, minimum_age_seconds)` | tuple is_forming: bool, timestamp_age_seconds: float, freshness_age_seconds: float | Helper analitico, non attestazione operativa o di provenienza. ValueError/BarTimingError su date/calendario invalidi. |
+| `select_completed_bars(data, symbol, now, require_market_open=True)` | DataFrame crescente con sole barre temporalmente chiuse; attrs originali e excluded_incomplete, excluded_outside_session, last_completed_at se non vuoto | BarTimingError su provenienza non reale/contraddittoria, dati invalidi, vecchi, futuri o contratto non dimostrabile. Può restituire un DataFrame vuoto senza autorizzare nulla. |
+
+Regole comuni per l'integrazione:
+
+- Le quote richiedono timestamp UTC e 0..120 secondi di età; un midpoint non è
+  un fill e un fixing FX non è una quote corrente. Un errore non restituisce un
+  prezzo precedente come aggiornamento riuscito.
+- I limiti esistenti delle barre sono 600/1200/2700/10800/345600 secondi per
+  1Min/5Min/15Min/1Hour/1Day, più contratto feed e margine di pubblicazione 30 s.
+  Nessuna soglia è stata allargata. Weekly e aggregati non verificati restano bloccati.
+- Nel gate operativo quality deve essere real. Se esiste is_synthetic, ogni
+  cella deve essere un booleano False; True, None e stringhe sono rifiutati.
+  La colonna può mancare per compatibilità con frame minimali già supportati.
+- Preservare attrs durante cache/copy/concat e mantenere associati simbolo,
+  intervallo e fonte. Non cambiare un flag di provenienza per far passare il gate.
+- Lista ordini vuota è una risposta valida solo se effettivamente ricevuta come
+  tale. Non prova coerenza globale, fine della paginazione o risoluzione di un
+  intento persistito. Dopo un errore di lettura account/posizioni/ordini il
+  backend invalida lo stato verificato; il successivo snapshot richiede nuova
+  verifica e non riusa il saldo precedente.
+- Un guasto market data non implica necessariamente guasto al conto, ma blocca
+  il dato richiesto. is_connected() non autorizza l'uso di una quote scaduta.
+
+### Richieste proposte alle altre persone, senza modifiche ai loro file
+
+| Destinatario | Evidenza del codice attuale | Proposta da concordare |
+| --- | --- | --- |
+| Persona 2 / dashboard | Il refresh cancella la quote dopo BrokerConnectionError, conserva lo storico con avviso e può continuare a calcolare signal_view su quello storico. Il controllo temporale è mostrato separatamente. | Mantenere questa separazione: segnali su storico vecchio o non operativo vanno presentati come analisi storica, non come indicazioni correnti. Usare il gate condiviso per un'etichetta di idoneità, senza cancellare dati utili al backtest. |
+| Persona 2 / cache | Il refresh aggiorna attrs dopo concat. | Conservare i metadati del backend, in particolare provenienza e acquisizione; non rinnovare fetched_at a seguito di un errore o del solo refresh della UI. Controllare coerentemente simbolo/intervallo. |
+| Persona 3 / selettore | _prepare_data verifica quality e tempo con bar_timing, ma non usa il medesimo gate operativo select_completed_bars, né verifica is_synthetic/fetched_at. La funzione di esecuzione rivalida poi il dato e blocca gli invii non idonei. | Chiarire che SELECTED è una proposta analitica. Per proporre un segnale operativo applicare il gate condiviso agli stessi frame, gestire BarTimingError come indisponibilità/NO_TRADE e controllare i marker di provenienza. Nessuna rimozione dei controlli finali. |
+| Persona 3 / finestre dati | Il chiamante usa period=3M, limit=1000 e poi tail(1000). | La correzione backend richiede ora la finestra più recente quando limit è finito. Conservare il tail su timestamp crescenti; usare limit=None per copertura storica completa e start_time esplicito per backfill. |
+| Coordinatore | Snapshot REST sequenziali e storico ordini a tetto 500 non costituiscono una riconciliazione atomica. | Conservare il blocco dopo esiti ambigui; non sbloccare il coordinatore solo perché il monitor risponde nuovamente. |
+
+Queste sono richieste di integrazione, non modifiche già effettuate a dashboard,
+strategie o runner. Il backend non può impedire a un chiamante che ignora il
+contratto di rietichettare arbitrariamente un dato; non è una sandbox ostile.
+
+### Verifiche Fase 2 — 2026-11-06
+
+- Commit iniziale: f36f9e2; checkout pulito e branch dedicato verificati prima
+  dell'intervento. Nessuna modifica preesistente sovrascritta.
+- Solo quattro correzioni: fixing FX invalido, provenienza del gate operativo,
+  redazione di segreti sovrapposti e finestra recente nelle richieste limitate.
+- 33 nuovi casi in tests/test_backend_integration.py, compresi i controlli già
+  corretti sulle risposte HTTP incomplete/204, body troncati, liste vuote valide,
+  disconnessione e riverifica senza riutilizzo del vecchio saldo.
+- SDK reale con Session.send simulato; nessuna chiamata autenticata. La prova
+  iniziale sul presunto problema 200 {} è passata: nessuna modifica al trasporto.
+- Il confronto con sorgente SDK ha confermato sort ASC di default e limite della
+  paginazione; test di stock e crypto dimostravano la finestra obsoleta prima del fix.
+- Nessun test esistente modificato, rimosso o disattivato; conftest invariato.
+- Mac/Python 3.12.14: 205 mirati passati in 1,72 s; suite completa 535 passati,
+  1 saltato, 0 falliti, 1 warning in 24,51 s. Guard rete 0, credenziali 0.
+  Skip Windows Proactor e warning websockets.legacy preesistenti.
+- Sicurezza: 142 passati, 1 skip Proactor e un warning in 1,30 s;
+  compilazione, pip check e diff-check exit 0. Non sono una prova di sicurezza assoluta del trading.
+- Windows e broker/feed autentici di questa versione NON ESEGUITI. Nessun server,
+  automazione, ordine broker, file di credenziali o database personale aperto.
+
+Per ripetere i nuovi casi su PowerShell, dopo l'installazione già descritta:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests/test_backend_integration.py tests/test_backend_contract.py tests/test_bar_timing.py tests/test_fx_rates.py tests/test_paper_automation.py tests/test_paper_safety.py
+.\.venv\Scripts\python.exe -m pytest -q -rs
+```
