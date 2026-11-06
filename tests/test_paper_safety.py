@@ -35,7 +35,7 @@ def test_paper_order_requires_verified_active_paper_client(monkeypatch, tmp_path
             return {"id": "paper-order-id", "status": "accepted"}
 
         def get_account(self):
-            return {"id": "test-account", "status": "ACTIVE", "trading_blocked": False}
+            return {"id": "test-account", "status": "ACTIVE", "trading_blocked": False, "account_blocked": False}
 
     monkeypatch.setattr(broker_module, "TradingClient", FakeTradingClient)
     settings = AppSettings(
