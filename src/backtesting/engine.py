@@ -5,6 +5,7 @@ import json
 import math
 from dataclasses import dataclass, asdict, field
 from numbers import Integral
+from typing import Protocol
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,11 @@ import pandas as pd
 from config.settings import AppSettings
 from src.risk.risk_manager import RiskManager
 from src.strategy.moving_average import MovingAverageStrategy
+from src.strategy.levels import LevelConfig, plan_levels
+
+
+class BacktestStrategy(Protocol):
+    def generate_signals(self, data: pd.DataFrame) -> pd.DataFrame: ...
 
 
 def backtest_input_key(
@@ -73,6 +79,8 @@ class BacktestResult:
     average_profit_per_trade: float | None = None
     average_loss_per_trade: float | None = None
     profit_factor: float | None = None
+    expectancy: float | None = None
+    average_realized_r: float | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -144,7 +152,14 @@ class BacktestEngine:
         slippage_bps: float | None = None,
         periods_per_year: int | None = None,
         risk_free_rate_annual: float = 0.0,
+        strategy: BacktestStrategy | None = None,
+        protection: LevelConfig | None = None,
     ) -> BacktestResult:
+        """Simulate long-only fills; supplied strategies must generate causal signals.
+
+        Protection uses completed bars preceding entry and fixed levels throughout
+        the trade. OHLC cannot resolve intrabar order: an ambiguous bar stops out.
+        """
         if data.empty:
             raise ValueError("Backtest data is empty.")
         if "open" not in data.columns or "close" not in data.columns:
@@ -173,9 +188,13 @@ class BacktestEngine:
             raise ValueError("Moving average windows must be positive.")
         if short_period >= long_period:
             raise ValueError("short_window must be smaller than long_window.")
-        if len(data) < long_period + 2:
+        warmup = getattr(strategy, "warmup_bars", getattr(strategy, "long_window", long_period) + 1)
+        if isinstance(warmup, bool) or not isinstance(warmup, Integral) or warmup < 1:
+            raise ValueError("Strategy warmup_bars must be a positive integer.")
+        minimum_bars = max(2, int(warmup) + 1)
+        if len(data) < minimum_bars:
             raise ValueError(
-                f"Backtest needs at least {long_period + 2} bars for a complete "
+                f"Backtest needs at least {minimum_bars} bars for a complete "
                 "moving-average signal and next-bar execution."
             )
         if "timestamp" in data.columns:
@@ -184,11 +203,35 @@ class BacktestEngine:
                 raise ValueError("Backtest timestamps must be valid, strictly increasing, and unique.")
         normalized_data = data.copy()
         normalized_data[["open", "close"]] = prices
-        strategy = MovingAverageStrategy(
+        strategy = strategy if strategy is not None else MovingAverageStrategy(
             short_window=short_period,
             long_window=long_period,
         )
-        signals = strategy.generate_signals(normalized_data).reset_index(drop=True)
+        generated = strategy.generate_signals(normalized_data.copy())
+        if (
+            not isinstance(generated, pd.DataFrame)
+            or not generated.index.equals(normalized_data.index)
+            or not {"signal", "signal_reason"}.issubset(generated.columns)
+            or not generated["signal"].isin([-1, 0, 1]).all()
+            or generated["signal_reason"].isna().any()
+        ):
+            raise ValueError("Strategy signals must align with input bars and contain -1, 0 or 1 and reasons.")
+        signals = normalized_data.reset_index(drop=True)
+        signals[["signal", "signal_reason"]] = generated[["signal", "signal_reason"]].reset_index(drop=True)
+        if protection is not None:
+            if not isinstance(protection, LevelConfig):
+                raise ValueError("Protection must be a LevelConfig.")
+            if not {"high", "low"}.issubset(signals.columns):
+                raise ValueError("Protected backtests require valid OHLC prices.")
+            ohlc = signals[["open", "high", "low", "close"]].apply(pd.to_numeric, errors="coerce")
+            if (
+                not np.isfinite(ohlc.to_numpy(dtype=float)).all()
+                or (ohlc <= 0).any().any()
+                or (ohlc["high"] < ohlc[["open", "close", "low"]].max(axis=1)).any()
+                or (ohlc["low"] > ohlc[["open", "close", "high"]].min(axis=1)).any()
+            ):
+                raise ValueError("Protected backtests require valid OHLC prices.")
+            signals[["open", "high", "low", "close"]] = ohlc
         trade_fraction = max_trade_fraction if max_trade_fraction is not None else self.settings.risk_max_trade_fraction
         loss_fraction = daily_loss_limit_fraction if daily_loss_limit_fraction is not None else self.settings.daily_loss_limit_pct
         commission_rate = (commission_bps if commission_bps is not None else self.settings.commission_bps) / 10_000
@@ -292,6 +335,13 @@ class BacktestEngine:
                         cash, position_qty, float(signals.iloc[index]["close"])
                     ))
                     continue
+                levels = None
+                if protection is not None:
+                    levels = plan_levels(
+                        signals.iloc[:index], "BUY", execution_price,
+                        spread=execution_price * spread_rate_bps / 10_000,
+                        config=protection,
+                    )
                 cash -= notional + entry_fee
                 position_qty = quantity
                 fees_paid += entry_fee
@@ -312,7 +362,27 @@ class BacktestEngine:
                     "entry_reason": str(signals.iloc[index - 1]["signal_reason"]),
                     "status": "open",
                 }
-            elif signal == -1 and position_qty > 0:
+                if levels is not None:
+                    open_trade.update(levels)
+            exit_reason = str(signals.iloc[index - 1]["signal_reason"])
+            should_exit = signal == -1
+            if protection is not None and position_qty > 0 and open_trade is not None:
+                stop = float(open_trade["stop_loss"])
+                target = float(open_trade["take_profit"])
+                # Opening gaps precede a discretionary exit at the same open.
+                if execution_price <= stop:
+                    should_exit, exit_reason = True, "stop_loss"
+                elif execution_price >= target:
+                    execution_price = target
+                    should_exit, exit_reason = True, "take_profit"
+                elif not should_exit:
+                    if float(signals.iloc[index]["low"]) <= stop:
+                        execution_price = stop
+                        should_exit, exit_reason = True, "stop_loss"
+                    elif float(signals.iloc[index]["high"]) >= target:
+                        execution_price = target
+                        should_exit, exit_reason = True, "take_profit"
+            if should_exit and position_qty > 0:
                 sell_fill = execution_price * (1 - half_spread_rate - slippage_rate)
                 exit_value = position_qty * sell_fill
                 sell_fee = exit_value * commission_rate
@@ -333,14 +403,19 @@ class BacktestEngine:
                         **open_trade,
                         "closed_at": str(signals.iloc[index].get("timestamp", index)),
                         "exit_price": sell_fill,
+                        "exit_market_price": execution_price,
                         "exit_fee": sell_fee,
                         "exit_spread": sell_spread,
                         "exit_slippage": sell_slippage,
                         "gross_pnl": gross_pnl,
                         "net_pnl": pnl,
-                        "exit_reason": str(signals.iloc[index - 1]["signal_reason"]),
+                        "exit_reason": exit_reason,
                         "status": "closed",
                     })
+                if protection is not None:
+                    trade_history[-1]["realized_r"] = pnl / (
+                        position_qty * float(open_trade["stop_distance"])
+                    )
                 if pnl > 0:
                     winning_trades += 1
                 elif pnl < 0:
@@ -497,4 +572,9 @@ class BacktestEngine:
             average_profit_per_trade=average_profit_per_trade,
             average_loss_per_trade=average_loss_per_trade,
             profit_factor=profit_factor,
+            expectancy=sum(closed_net_pnls) / closed_trade_count if closed_trade_count else None,
+            average_realized_r=(
+                sum(float(trade["realized_r"]) for trade in closed_trades) / closed_trade_count
+                if protection is not None and closed_trade_count else None
+            ),
         )

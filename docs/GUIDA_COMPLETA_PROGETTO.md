@@ -149,3 +149,15 @@ operazioni del ledger locale. Quote, storico, dati sintetici e segnali non
 operativi sono etichettati; valori non disponibili sono N/D. Vedere
 [UI_HANDOFF](../UI_HANDOFF.md) per contratti, timestamp, percorsi e limiti,
 e [guida operativa](COME_USARE_LA_DASHBOARD.md) per l'utilizzo.
+
+## Motore strategie Persona 3
+
+Il nuovo StrategyEngine produce proposte Paper senza inviare ordini. EMA9/21
+con trend50 oppure SMA esistente, livelli ATR/struttura, rischio e scadenza
+restano separati dall'esecuzione. SELL non apre short. La dashboard e il runner
+attuali non vengono collegati automaticamente. Snapshot di rischio incompleti
+o gate/quote non validi implicano NO_TRADE. TP/SL nativi non sono installati.
+Il backtest originale supporta una strategia e livelli opzionali; esistono
+tranche training/validation/OOS indipendenti senza ottimizzazione sul test.
+[STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md) documenta API, configurazioni,
+risultati sintetici, requisiti del consumer e prove successive su Windows.

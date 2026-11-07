@@ -91,3 +91,18 @@ contratto temporale assente, barre vecchie e refresh fallito. Verifica che
 `test_dashboard_validation.py` verifica conservazione integrale dei metadati
 quote e rifiuto di refresh con fonte/calendario/sessione/contratto discordanti.
 Il contratto aggiornato è [DASHBOARD_HANDOFF](../DASHBOARD_HANDOFF.md).
+
+## Persona 3 — Motore strategie
+
+| Test nuovo | Evidenza |
+| --- | --- |
+| test_trend_strategy | EMA causali, BUY/SELL/WAIT, filtro trend, no segnali ripetuti, prefissi invarianti, RSI/volume diagnostici |
+| test_trade_levels | ATR/struttura, ordinamento livelli, spread, RR insufficiente, dati mancanti/invalidi |
+| test_strategy_risk | Budget stop/costi, cap notional/globali, DD/perdita/counter, cash, long-only, simbolo, nessuna crescita rischio dopo perdita |
+| test_strategy_engine | Gate reale e provenienza, quote, entry, expiry, ID replay/config, snapshot Paper e simbolo, JSON rifiuti, nessun submit |
+| test_strategy_backtest | Next-open, TP/SL/gap/ambiguità, costi, expectancy/R e causalità, SMA default invariata |
+| test_strategy_partitions | Tranche disgiunte, closed_at, barre incomplete escluse, capitale/indicatori indipendenti, nessuna contaminazione futura |
+
+Fonte sintetica controllata, non redditività di mercato. Nessuna verifica
+Windows/broker autentico in questa fase. Contratti e limiti nel
+[STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md); esiti delle suite nel WORKLOG.

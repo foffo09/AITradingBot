@@ -343,3 +343,59 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   credenziali/database personale letto. Windows, broker autentico e timer/
   resa interattiva nel browser non provati. L'idoneità UI non certifica la
   sicurezza del trading automatico o una riconciliazione contabile completa.
+
+## 2026-11-07 — Persona 3: strategy engine, livelli e integrazione
+
+- Repository/worktree verificati prima di scrivere. Creato AITradingBot-strategy
+  sul solo feature/strategy-engine dal remoto 67f6a47; fast-forward a 432ecdd,
+  che include backend 1a68d5b. Nessun conflitto o modifica preesistente nel nuovo
+  worktree. Main, backend, dashboard e worktree altrui lasciati intatti.
+- Piano in docs/superpowers/plans/2026-11-07-strategy-engine.md. Aggiunti EMA9/21
+  con filtro50, diagnostici RSI14 e volume, riuso SMA invariata. MACD escluso
+  come filtro ridondante non validato. Indicatori e segnali causali verificati
+  su prefissi; solo incroci, WAIT quando manca un'opportunità valida.
+- StrategyEngine puro con gate operativo backend reale, metadata/source,
+  quote correnti, snapshot rischio Paper, entry ask/bid, ATR14/struttura,
+  stop/target e RR lordo/netto, expiry ancorata alla chiusura e quote.
+  Fonte sintetica/ignota/contraddittoria e quote scadute producono NO_TRADE.
+  Anche flag sintetico/quality contraddittori nelle quote sono respinti.
+- RiskManager esistente riutilizzato con budget stop/costi, esposizione
+  globale, DD e contatori. Nessuna martingala o aumento automatico dei cap.
+  La revisione indipendente ha individuato quantità senza simbolo: corretto
+  RiskSnapshot con position_symbol obbligatoriamente coerente, regressioni
+  BUY/SELL cross-symbol. SELL riduce soltanto un long verificato; i suoi
+  livelli ribassisti sono analitici e non bracket di un long residuo.
+- ID dell'evento stabile per conto/simbolo/intervallo/lato/chiusura; cambiare
+  rischio/configurazione non rinnova un evento consumato. Persistenza ID al
+  consumer. Contratto JSON di un rifiuto non si rompe con numeri non finiti:
+  serializzati N/D senza mutare gli input. Regressioni red/green eseguite.
+- BacktestEngine esteso opzionalmente a strategie causali e TP/SL: default
+  SMA invariato, next-open, livelli dal solo passato, gap prudenziali e
+  stop-first per barra ambigua, costi separati, expectancy/R. Livelli non
+  validi fanno fallire il replay, senza rimuovere protezioni. Dimensionamento
+  storico notional preesistente distinto dal nuovo budget multi-asset.
+- Nuove tranche fisse training/validation/OOS con closed_at per-row verificato
+  rispetto ad as_of, senza overlap o contaminazione futura, capitale e
+  indicatori indipendenti. Non costituisce ottimizzazione o validazione statistica.
+- Replay sintetico sinusoide 720 barre, tre tranche240, EMA fisse e costi
+  5/2/5bps effettivamente eseguito: senza protezione chiusi3/4/3 trade,
+  P/L chiuso51,4486/80,3066/54,1834 USD. Equity OOS include posizione aperta.
+  Con protezione predefinita replay bloccato da RR insufficiente rispetto
+  alla struttura. Nessun risultato protetto o redditività reale dichiarati.
+  Formula/parametri/esiti e limiti in STRATEGY_HANDOFF.md.
+- Nessuna modifica a app.py, UI, backend, configurazione o percorsi d'invio.
+  Nessun collegamento automatico nuovo a runner/selector. Contratto per la
+  successiva integrazione documentato; per peak_equity/counter mancanti
+  occorre contabilità Paper verificata, altrimenti NO_TRADE.
+- Verifica finale macOS/Python3.12.14: 146 nuovi casi, nessun test preesistente
+  modificato o eliminato. Gruppo strategia/rischio/backtest:232 passati,
+  1 warning,0,90s. Backend:172 passati,1 warning,1,39s. Sicurezza:39 passati,
+  1 skip,1 warning,1,98s. Suite completa:747 passati,1 skip,0 falliti,
+  1 warning,32,82s. Guard network=0,credentials=0. Skip Windows Proactor
+  sul Mac; warning websockets.legacy preesistente.
+- compileall -q app.py config src tests: exit0, output vuoto.
+  pip check: No broken requirements found. git diff --check: exit0.
+  Diff e contratti rivisti indipendentemente, problemi rilevati corretti.
+- Windows, broker autentico, performance e timer/browser NON VERIFICATI.
+  Nessun ordine/server/automazione, accesso a credenziali o DB personali.
+  Limiti residui e passi di integrazione generale in STRATEGY_HANDOFF.md.

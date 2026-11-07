@@ -119,3 +119,20 @@ Errore esplicito e non aggiorna fetched_at. Il campo informativo operational_dat
 non concede autorizzazione al motore o al coordinatore. Storico/backtest restano
 utilizzabili a fini analitici senza trasformarsi in dati operativi verificati.
 Dettagli e indicazioni Persona 3 in DASHBOARD_HANDOFF.md.
+
+## D14 — Proposte strategiche pure e protezione analitica
+
+Persona 3 aggiunge EMA crossover/trend con ATR/struttura e riusa SMA/risk manager.
+Il gate operativo resta select_completed_bars, mai reimplementato. La strategia
+non invia ordini: produce un contratto JSON e NO_TRADE se manca una verifica.
+SELL è riduzione del long verificato per quello stesso simbolo, non short;
+i suoi livelli ribassisti non sono bracket di un long residuo. Default rischio
+monetario 0,5%, DD10%, trade5/giorno oltre ai cap esistenti, mai aumentati.
+Snapshot Paper entro45s richiede peak/counter verificati, non derivati da N/D.
+Deduplica stateless per conto/simbolo/intervallo/lato/barra: ID consumati vanno
+persistiti dal consumer e non cambiano variando configurazione/rischio.
+Backtest opzionale TP/SL nel simulatore originale: next-open e stop-first su
+OHLC ambiguo. Replay con livelli non validi fallisce, senza disattivare protezione.
+Tranche fisse training/validation/OOS non sovrapposte e chiusura per-row esplicita.
+Nessuna validazione statistica, cambio UI o attivazione di trading impliciti.
+Dettagli: [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md).
