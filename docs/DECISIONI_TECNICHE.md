@@ -109,3 +109,13 @@ una quote e una barra in formazione non produce un segnale reale idoneo.
 Snapshot Paper oltre 45 secondi, futuri o senza timezone sono invalidati.
 Le schede non modificano soglie di rischio né permessi del coordinatore.
 Contratti e limiti: [UI_HANDOFF](../UI_HANDOFF.md).
+
+### D13 — Idoneità dei dati e quota corrente
+
+La scheda segnale usa il gate backend, senza replicare calendario o soglie.
+Alla presentazione richiede anche la fonte prevista dal contratto e una quota
+corrente validata dal riepilogo UI esistente. Un refresh discordante resta un
+Errore esplicito e non aggiorna fetched_at. Il campo informativo operational_data
+non concede autorizzazione al motore o al coordinatore. Storico/backtest restano
+utilizzabili a fini analitici senza trasformarsi in dati operativi verificati.
+Dettagli e indicazioni Persona 3 in DASHBOARD_HANDOFF.md.

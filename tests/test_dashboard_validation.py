@@ -513,13 +513,12 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
         market_requests.append((symbol, timeframe, period, limit, start_time))
         return market_bars.tail(1).copy() if start_time is not None else market_bars.copy()
 
+    expected_quote = {"price": 102.6, "bid": 102.5, "ask": 102.7,
+                      "timestamp": pd.Timestamp.now(tz="UTC").isoformat(),
+                      "source": "Alpaca IEX latest quote", "receipt_marker": "preserve-me"}
     def get_latest_quote(self, symbol):
         quote_requests.append(symbol)
-        return {
-            "price": 102.6, "bid": 102.5, "ask": 102.7,
-            "timestamp": pd.Timestamp.now(tz="UTC").isoformat(),
-            "source": "Alpaca IEX latest quote",
-        }
+        return dict(expected_quote)
 
     monkeypatch.setattr(AlpacaClient, "get_market_data", get_market_data)
     monkeypatch.setattr(AlpacaClient, "get_latest_quote", get_latest_quote)
@@ -536,7 +535,7 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
     assert market_requests[1][:4] == ("SPY", "1Day", "1M", 100)
     assert market_requests[1][4] is not None
     assert quote_requests == ["SPY"]
-    assert app.session_state["market_quote"]["source"] == "Alpaca IEX latest quote"
+    assert app.session_state["market_quote"] == expected_quote
     assert any(
         "Dati insufficienti per calcolare le due medie mobili" in item.value
         for item in app.warning
@@ -1086,4 +1085,31 @@ def test_signal_uses_only_bars_completed_by_backend_calendar(dashboard, monkeypa
     widget(app.button, "Carica dati").click().run()
     assert not app.exception
     assert widget(app.metric, "Close barra di riferimento").value == f"${expected:,.2f}"
+    assert submitted_orders == []
+
+
+@pytest.mark.parametrize('changed_key', ['source', 'bar_calendar', 'session_scope', 'bar_time_contract'])
+def test_refresh_does_not_erase_contradictory_backend_metadata(dashboard, monkeypatch, changed_key):
+    from src.data.market_data import generate_synthetic_market_data
+    app, submitted_orders, _ = dashboard
+    data = generate_synthetic_market_data('SPY', periods=40)
+    data['is_synthetic'] = False
+    data['data_quality'] = 'Dati storici reali Alpaca IEX (copertura venue parziale)'
+    acquired = (pd.Timestamp.now(tz='UTC') - pd.Timedelta(seconds=20)).isoformat()
+    data.attrs = dict(quality='real', interval='1Day', source=data['data_quality'].iloc[0],
+                      bar_calendar='NYSE', session_scope='regular',
+                      bar_time_contract='alpaca-start-v1', fetched_at=acquired)
+    incoming = data.tail(1).copy()
+    incoming.attrs[changed_key] = 'contradictory fixture'
+    incoming.attrs['fetched_at'] = pd.Timestamp.now(tz='UTC').isoformat()
+    monkeypatch.setattr(AlpacaClient, 'get_market_data',
+        lambda self, symbol, **kwargs: incoming.copy() if kwargs.get('start_time') else data.copy())
+    monkeypatch.setattr(AlpacaClient, 'get_latest_quote', lambda *args:
+        dict(bid=99, ask=101, price=100, source='Alpaca IEX latest quote',
+             timestamp=pd.Timestamp.now(tz='UTC').isoformat()))
+    widget(app.checkbox, 'Usa serie sintetica demo').set_value(False).run()
+    widget(app.button, 'Carica dati').click().run()
+    assert not app.exception
+    assert 'Metadati' in app.session_state['market_incremental_error']
+    assert app.session_state['market_frame'].attrs == data.attrs
     assert submitted_orders == []

@@ -447,15 +447,28 @@ def _signal_monitor(request, short_window, long_window) -> None:
     except ValueError as exc:
         st.warning(f"Segnale non disponibile: {exc}")
         return
+    decision_time = datetime.now(timezone.utc)
     timing_error = None
     if quality == "real":
         try:
-            eligible = select_completed_bars(data, st.session_state.market_symbol, datetime.now(timezone.utc))
+            eligible = select_completed_bars(data, st.session_state.market_symbol, decision_time)
             if eligible.empty:
                 raise BarTimingError("Nessuna barra operativa conclusa disponibile.")
             signals = strategy.generate_signals(eligible)
         except BarTimingError as exc:
             timing_error = str(exc)
+    if quality == "real" and timing_error is None:
+        expected_source = ("Dati storici reali Alpaca Crypto" if "/" in st.session_state.market_symbol
+                           else "Dati storici reali Alpaca IEX (copertura venue parziale)")
+        if (data.attrs.get("source") != expected_source
+                or ("data_quality" in data and not data["data_quality"].eq(expected_source).all())):
+            timing_error = "Fonte storica assente o contraddittoria rispetto al contratto backend."
+    if quality == "real" and timing_error is None and st.session_state.get("market_incremental_error"):
+        timing_error = "Aggiornamento dello storico non verificato; analisi storica soltanto."
+    quote_state = market_summary(quote=st.session_state.get("market_quote"),
+                                 quality=quality, now=decision_time)["state"]
+    if quality == "real" and quote_state != "fresh" and timing_error is None:
+        timing_error = "Quotazione corrente assente, scaduta o non verificabile; analisi storica soltanto."
     latest_signal_summary = signal_view(
         signals, st.session_state.market_symbol, interval, quality,
         int(short_window), int(long_window),
@@ -464,9 +477,14 @@ def _signal_monitor(request, short_window, long_window) -> None:
         st.warning("Dati insufficienti per calcolare le due medie mobili.")
     if timing_error:
         latest_signal_summary.update(state="ANALISI STORICA — NON OPERATIVA", reason=timing_error)
+    latest_signal_summary["operational_data"] = quality == "real" and timing_error is None
+    latest_signal_summary["quote_state"] = quote_state
     view = latest_signal_summary
     st.markdown(f"**{view['state']}** · {view['symbol']} · {view['interval']} · {view['parameters']}")
     st.caption(f"Motivazione: {view['reason']}")
+    st.caption("Dati: barre ammesse dal gate backend e quota corrente verificata. Non è un permesso di invio."
+               if view["operational_data"] else
+               "Dati: analisi storica/backtest o dimostrazione sintetica; idoneità operativa non verificata.")
     if view["quality"] == "synthetic":
         st.warning("SYNTHETIC / DEMO — segnale dimostrativo, escluso dall'automazione Paper.")
     signal_columns = st.columns(3)
@@ -521,6 +539,9 @@ def _live_quote_monitor(
                 if not incremental.empty:
                     if incremental.attrs.get("quality") != "real" or incremental.attrs.get("interval") != interval:
                         raise BrokerConnectionError("Metadati del refresh non verificati; storico mantenuto.")
+                    origin_keys = ("source", "bar_time_contract", "bar_calendar", "session_scope")
+                    if any(incremental.attrs.get(key) != current_data.attrs.get(key) for key in origin_keys):
+                        raise BrokerConnectionError("Metadati di origine del refresh discordanti; storico mantenuto.")
                     combined = pd.concat([current_data, incremental], ignore_index=True)
                     combined = combined.drop_duplicates("timestamp", keep="last")
                     combined = combined.sort_values("timestamp").tail(10_000).reset_index(drop=True)
@@ -1867,6 +1888,7 @@ if workspace != "paper":
                 st.rerun()
 
 with st.expander("Backtest e validazione walk-forward", expanded=False):
+    st.caption("Uso storico/backtesting: dati e risultati restano separati dal conto e dai permessi Paper. Uno storico può essere utile al backtest senza superare il gate operativo; non è un prezzo corrente né una validazione operativa.")
     st.subheader("Backtesting — risultati separati")
     st.caption("Il backtest è separato dal conto simulato e dall'account Alpaca. Segnale calcolato alla chiusura della barra; esecuzione simulata all'apertura della barra successiva.")
     if not market_data_current:

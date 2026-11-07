@@ -81,3 +81,13 @@ Esecuzione effettiva su macOS; Windows NON ESEGUITO. Procedura e limiti in
 Test con mock e file temporanei. Browser visuale, Windows e broker autentici
 non verificati per questa modifica. Restano i limiti del backend e del
 coordinamento descritti nel relativo handoff.
+
+### Contratti effettivi backend — completamento Persona 2
+
+`test_signal_refresh.py` invoca anche il gate backend reale: quota corrente,
+assente/scaduta/futura, fonti mancanti o contraddittorie, righe sintetiche,
+contratto temporale assente, barre vecchie e refresh fallito. Verifica che
+`operational_data` non diventi True e che gli input restino invariati.
+`test_dashboard_validation.py` verifica conservazione integrale dei metadati
+quote e rifiuto di refresh con fonte/calendario/sessione/contratto discordanti.
+Il contratto aggiornato è [DASHBOARD_HANDOFF](../DASHBOARD_HANDOFF.md).

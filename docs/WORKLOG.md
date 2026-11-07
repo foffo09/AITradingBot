@@ -304,3 +304,42 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   questa consegna. Nessun ordine, server o automazione avviati; nessuna lettura
   di file di credenziali o database personali. Restano i limiti REST, storico
   contabile incompleto e coordinamento descritti nei due handoff.
+
+## 2026-11-07 — Persona 2: completamento contratti backend
+
+- Inizio dc3561c6aed28039585dd766cb4fa33a4eb6a18f, checkout pulito sul solo
+  feature/dashboard-ui. Backend 1a68d5b già antenato, nessun nuovo merge.
+- Riletto BACKEND_HANDOFF.md. La scheda segnale usava correttamente il gate
+  delle barre ma non rivalutava anche la quota corrente: ora quota assente,
+  vecchia, futura o non verificabile impone analisi storica non operativa.
+  Campo informativo operational_data distinto da qualsiasi permesso di invio.
+- Fonte storica mancante/discordante e data_quality contraddittoria impediscono
+  la presentazione come dato operativo verificato. Nessuna riscrittura di
+  metadati o delle regole del gate: calendario, chiusura e freschezza barre
+  restano in select_completed_bars. Distinto esplicitamente l'uso backtest.
+- Evidenziato e riprodotto un ulteriore problema: concat del refresh conservava
+  gli attrs vecchi anche con fonte/calendario/sessione/contratto discordanti.
+  Ora il refresh è rifiutato prima del concat; storico e fetched_at restano
+  invariati, errore visibile e scheda non operativa finché non si risolve.
+- 18 casi aggiunti, compreso il gate backend reale con input sintetici
+  controllati. Le regressioni sulle quote e sui metadati discordanti sono
+  fallite prima della patch. Rafforzato il test AppTest con confronto integrale
+  della quote (timestamp, fonte, metadati extra). Nessun test rimosso.
+- DASHBOARD_HANDOFF.md è il contratto canonico: architettura, componenti,
+  modalità, grafici, uso storico/backtest/operativo e indicazioni Persona 3.
+  UI_HANDOFF.md mantiene il collegamento compatibile. Matrice e decisioni
+  aggiornate. Revisione indipendente del diff senza altri problemi importanti.
+- macOS/Python 3.12.14, solo mock e DB temporanei:
+  compileall -q app.py config src tests: exit 0, nessun output.
+  Dashboard: 120 passati, 1 warning, 22,62 s.
+  Backend: 172 passati, 1 warning, 1,56 s.
+  Sicurezza: 39 passati, 1 skip, 1 warning, 2,25 s.
+  Suite completa: 601 passati, 1 skip, 1 warning, 36,66 s.
+  Zero falliti; TEST ISOLATION network=0, credentials=0. Skip Windows Proactor
+  sul Mac e deprecazione websockets.legacy preesistenti.
+  pip check: No broken requirements found. Diff-check: exit 0.
+- Nessuna modifica ai file backend, strategie, rischio, trading o backtest.
+  Solo Paper; nessun ordine, server o automazione avviato. Nessun file di
+  credenziali/database personale letto. Windows, broker autentico e timer/
+  resa interattiva nel browser non provati. L'idoneità UI non certifica la
+  sicurezza del trading automatico o una riconciliazione contabile completa.
