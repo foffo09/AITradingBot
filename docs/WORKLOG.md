@@ -260,3 +260,47 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   proposta analitica distinti dall'autorizzazione operativa.
 - Windows e broker autentici NON ESEGUITI. Nessun ordine, server, automazione,
   file di credenziali o database personale aperto.
+
+## 2026-11-07 — Persona 2: dashboard e integrazione backend
+
+- Worktree dedicato AITradingBot-dashboard, branch feature/dashboard-ui.
+  Stato iniziale pulito a 67f6a47; integrazione backend con fast-forward a
+  1a68d5bbc25f3e1b6eceb0235f9ea2fdfa033240. Nessun merge su main; worktree
+  principale con modifiche preesistenti e branch delle altre persone intatti.
+- Dashboard esistente conservata: tema unico, metriche capitale/cash/P&L/
+  drawdown/esposizione, provenienza quote e schede rischio informative.
+  Plotly mantiene candele, volume, SMA/RSI e marker; aggiunge zoom/pan/reset,
+  intervalli rapidi e persistenza del range per strumento/intervallo.
+- Demo, Simulazione e Paper selezionabili con ledger distinti. Cambio contesto
+  cancella snapshot/verifica/automazione e risultati della sessione. Offline
+  elimina le credenziali runtime e non costruisce SDK Alpaca. Paper nasconde
+  le operazioni del ledger e non inizializza capitale locale. Nessuna migrazione
+  o eliminazione di dati. Alias e hard link fra contesti sono bloccati.
+- Nessuna reinterpretazione di metadati mancanti come fonte reale; fetched_at
+  resta quello del backend nel refresh. Quote invalide/vecchie: bid/ask/spread
+  N/D e close storico esplicito. Snapshot conto oltre 45 secondi, futuri o
+  privi di timezone: rimossi e verifica invalidata. Capitale/P&L cumulativo/
+  drawdown/commissioni Paper non forniti dal broker: N/D.
+- Segnale reale calcolato sulle barre ammesse dal calendario; gate non valido:
+  analisi storica non operativa. La revisione indipendente ha individuato una
+  scheda segnale esterna al refresh: corretto con fragment di 15 secondi che
+  rilegge frame e calendario. Test invoca il corpo reale ripetutamente senza
+  full rerun; timer browser non provato.
+- 48 casi nuovi, nessun test eliminato o disattivato. Fixture esistenti aggiornate
+  alla scelta sintetica esplicita e al contratto backend di fonte/intervallo;
+  snapshot fittizio aggiornato all'ora effettiva invece di una data fissa.
+- macOS, Python 3.12.14, ambiente virtuale backend con requisiti identici:
+  compileall -q app.py config src tests: exit 0, output vuoto.
+  Test mirati UI/isolation/Paper: 115 passati, 1 warning, 21,47 s.
+  Suite completa: 583 passati, 1 skip, 1 warning, 31,66 s.
+  TEST ISOLATION: network=0, credentials=0. Skip Windows Proactor sul Mac;
+  warning di deprecazione websockets.legacy preesistente.
+  pip check: No broken requirements found. git diff --check: exit 0.
+- Contratti/limiti in UI_HANDOFF.md; aggiornate guida operativa, guida completa,
+  decisioni, matrice e roadmap. Nessuna modifica a backend, strategie, rischio,
+  motore o soglie. Revisione del diff e scansione dei file da pubblicare senza
+  segreti letterali rilevati; nessun database o file generato nel commit.
+- Windows, broker autentico e resa/interazioni nel browser NON VERIFICATI per
+  questa consegna. Nessun ordine, server o automazione avviati; nessuna lettura
+  di file di credenziali o database personali. Restano i limiti REST, storico
+  contabile incompleto e coordinamento descritti nei due handoff.

@@ -66,3 +66,18 @@ con spazi e #. `test_paper_coordinator.py` conserva i test di esclusione,
 deadline e incertezza e aggiunge errore backend senza autorità.
 Esecuzione effettiva su macOS; Windows NON ESEGUITO. Procedura e limiti in
 [INSTALLAZIONE_WINDOWS](INSTALLAZIONE_WINDOWS.md). Nessun test preesistente rimosso.
+
+## Consolidamento dashboard Persona 2 — 7 novembre 2026
+
+| Test | Casi nuovi |
+| --- | --- |
+| `test_dashboard_metrics.py` | Metriche locali/Paper separate, N/D, quote stale/future/invalide, provenienza, storico esplicito |
+| `test_signal_refresh.py` | Invocazioni ripetute del fragment senza full rerun: nuovo frame, gate scaduto e selezione cambiata; timer browser non provato |
+| `test_ui_charts.py` | Candele/volume/SMA/RSI, range intraday/daily, zoom/pan/reset, uirevision |
+| `test_ui_workspaces.py` | Tre percorsi distinti, alias/hard link rifiutati, percorsi Unicode, DB personale escluso |
+| `test_dashboard_contexts.py` | AppTest: cambi contesto, azzeramento stato, zero SDK offline, saldi e storico separati, snapshot scaduti/futuri |
+| `test_dashboard_validation.py` | Metadati non reinterpretati, acquisizione backend conservata, segnale filtrato sulle barre concluse |
+
+Test con mock e file temporanei. Browser visuale, Windows e broker autentici
+non verificati per questa modifica. Restano i limiti del backend e del
+coordinamento descritti nel relativo handoff.

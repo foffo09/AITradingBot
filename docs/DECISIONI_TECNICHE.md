@@ -97,3 +97,15 @@ finanziari restano invariati. Errori di lock/journal non concedono autorità.
 `requirements-dev.txt` include gli SDK opzionali usati con mock dalla suite;
 FastAPI/HTTPX e gli altri import condivisi sono dipendenze dirette della base.
 Verifica Windows ancora non eseguita; nessuna attestazione multi-host.
+
+## D13 — Dashboard con tre contesti e dati verificabili
+
+Il contesto UI è distinto dal trading_mode backend: Demo e Simulazione usano
+impostazioni senza credenziali e ledger distinti; Paper usa solo dati conto
+broker. Cambiare contesto azzera lo stato operativo della sessione, non gli
+ordini del broker. Nessun DB viene migrato. Alias e hard link sono rifiutati.
+Il rendering conserva i metadati backend; un close storico non sostituisce
+una quote e una barra in formazione non produce un segnale reale idoneo.
+Snapshot Paper oltre 45 secondi, futuri o senza timezone sono invalidati.
+Le schede non modificano soglie di rischio né permessi del coordinatore.
+Contratti e limiti: [UI_HANDOFF](../UI_HANDOFF.md).

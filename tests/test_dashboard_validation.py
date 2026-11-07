@@ -289,7 +289,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
                 },
                 "positions": [],
                 "orders": [],
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": pd.Timestamp.now(tz="UTC").isoformat(),
             }
 
         def verify_connection(self):
@@ -334,7 +334,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
                 "close": [100.0] * 40,
                 "volume": [1000] * 40,
             })
-            frame.attrs.update(bar_time_contract="alpaca-start-v1", bar_calendar="NYSE",
+            frame.attrs.update(quality="real", interval="1Day", source="Dati storici reali Alpaca IEX (fixture)", bar_time_contract="alpaca-start-v1", bar_calendar="NYSE",
                                session_scope="regular", fetched_at=datetime.now(timezone.utc).isoformat())
             return frame
 
@@ -344,7 +344,7 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
                 "ask": 100.01,
                 "price": 100,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "source": "mock paper feed",
+                "source": "Alpaca IEX latest quote",
             }
 
     monkeypatch.setattr(alpaca_module, "AlpacaClient", AutomationBroker)
@@ -352,7 +352,8 @@ def test_paper_automation_requires_explicit_start_and_stop_is_persisted(
     assert not app.exception
     assert app.session_state["paper_automation_active"] is False
     widget(app.button, "Verifica e aggiorna conto Alpaca Paper").click().run()
-    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
+    assert widget(app.checkbox, "Usa serie sintetica demo").disabled is True
+    assert widget(app.checkbox, "Usa serie sintetica demo").value is False
     widget(app.button, "Carica dati").click().run()
 
     assert not app.exception
@@ -467,6 +468,7 @@ def test_dashboard_starts_and_reports_unavailable_real_market_data(dashboard, mo
     assert app.session_state["paper_automation_active"] is False
     automation_button = widget(app.button, "Avvia automazione Paper")
     assert automation_button.disabled is True
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
     widget(app.button, "Carica dati").click().run()
     assert not app.exception
     assert any(
@@ -498,6 +500,10 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
         "close": [100.5, 101.5, 102.5],
         "volume": [1000, 1100, 1200],
     })
+    market_bars["is_synthetic"] = False
+    market_bars.attrs.update(quality="real", interval="1Day", source="Dati storici reali Alpaca IEX", fetched_at=now.isoformat())
+    acquired = (now - pd.Timedelta(seconds=20)).isoformat()
+    market_bars.attrs["fetched_at"] = acquired
     market_requests = []
     quote_requests = []
 
@@ -505,14 +511,14 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
         self, symbol, timeframe="1Day", period="3M", limit=1000, start_time=None,
     ):
         market_requests.append((symbol, timeframe, period, limit, start_time))
-        return market_bars.iloc[0:0].copy() if start_time is not None else market_bars.copy()
+        return market_bars.tail(1).copy() if start_time is not None else market_bars.copy()
 
     def get_latest_quote(self, symbol):
         quote_requests.append(symbol)
         return {
-            "price": 102.6,
+            "price": 102.6, "bid": 102.5, "ask": 102.7,
             "timestamp": pd.Timestamp.now(tz="UTC").isoformat(),
-            "source": "mock Alpaca feed",
+            "source": "Alpaca IEX latest quote",
         }
 
     monkeypatch.setattr(AlpacaClient, "get_market_data", get_market_data)
@@ -520,6 +526,7 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
     widget(app.number_input, "Media mobile breve").set_value(2).run()
     widget(app.number_input, "Media mobile lunga").set_value(5).run()
     widget(app.checkbox, "Mostra RSI (14)").set_value(True).run()
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
     widget(app.button, "Carica dati").click().run()
 
     assert not app.exception
@@ -529,11 +536,12 @@ def test_live_quote_fragment_uses_current_selection_and_strategy_with_short_hist
     assert market_requests[1][:4] == ("SPY", "1Day", "1M", 100)
     assert market_requests[1][4] is not None
     assert quote_requests == ["SPY"]
-    assert app.session_state["market_quote"]["source"] == "mock Alpaca feed"
+    assert app.session_state["market_quote"]["source"] == "Alpaca IEX latest quote"
     assert any(
         "Dati insufficienti per calcolare le due medie mobili" in item.value
         for item in app.warning
     )
+    assert app.session_state["market_frame"].attrs["fetched_at"] == acquired
     assert submitted_orders == []
 
 
@@ -957,9 +965,10 @@ def test_future_historical_bars_do_not_enable_local_orders(dashboard, monkeypatc
         data = generate_synthetic_market_data(symbol, periods=40)
         data["timestamp"] += timedelta(days=7)
         data["is_synthetic"] = False
-        data.attrs["source"] = "isolated broker fixture"
+        data.attrs.update(quality="real", interval=kwargs.get("timeframe", "1Day"), source="Dati storici reali Alpaca IEX")
         return data
     monkeypatch.setattr(AlpacaClient, "get_market_data", future_bars)
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
     widget(app.button, "Carica dati").click().run()
     assert not app.exception
     assert any("ordini locali bloccati" in item.value for item in app.error)
@@ -1010,6 +1019,7 @@ def test_demo_chart_does_not_overlay_paper_fills(dashboard, monkeypatch):
 def test_empty_broker_bars_show_unavailable_without_breaking_dashboard(dashboard, monkeypatch):
     app, submitted_orders, _ = dashboard
     monkeypatch.setattr(AlpacaClient, "get_market_data", lambda *args, **kwargs: pd.DataFrame())
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
     widget(app.button, "Carica dati").click().run()
     assert not app.exception
     assert any("Nessuna barra" in item.value for item in app.warning)
@@ -1021,13 +1031,59 @@ def test_quote_with_future_or_invalid_timestamp_is_not_presented_as_current(dash
     from datetime import timedelta
     from src.data.market_data import generate_synthetic_market_data
     app, submitted_orders, _ = dashboard
-    monkeypatch.setattr(AlpacaClient, "get_market_data", lambda self, symbol, **kwargs:
-                        generate_synthetic_market_data(symbol, periods=40))
+    def bars(self, symbol, **kwargs):
+        data = generate_synthetic_market_data(symbol, periods=40)
+        data["is_synthetic"] = False
+        data.attrs.update(quality="real", interval=kwargs.get("timeframe", "1Day"), source="Dati storici reali Alpaca IEX")
+        return data
+    monkeypatch.setattr(AlpacaClient, "get_market_data", bars)
     timestamp = (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat() if quote_time == "future" else "invalid"
     monkeypatch.setattr(AlpacaClient, "get_latest_quote", lambda self, symbol:
                         {"bid": 99, "ask": 100, "price": 99.5, "timestamp": timestamp, "source": "isolated fixture"})
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
     widget(app.button, "Carica dati").click().run()
     assert not app.exception
     assert app.session_state.get("market_quote") is None
     assert not any(metric.label == "Quotazione aggiornata" for metric in app.metric)
+    assert submitted_orders == []
+
+
+@pytest.mark.parametrize("metadata", [{}, {"quality": "synthetic", "interval": "1Day"},
+                                       {"quality": "real", "interval": "1Min"}])
+def test_unverified_backend_metadata_is_not_relabelled_real(dashboard, monkeypatch, metadata):
+    from src.data.market_data import generate_synthetic_market_data
+    app, submitted_orders, _ = dashboard
+    data = generate_synthetic_market_data("SPY", periods=40)
+    data.attrs.clear()
+    data.attrs.update(metadata)
+    monkeypatch.setattr(AlpacaClient, "get_market_data", lambda *args, **kwargs: data)
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
+    widget(app.button, "Carica dati").click().run()
+    assert not app.exception
+    assert "Provenienza o intervallo" in app.session_state["market_load_error"]
+    assert app.session_state.get("market_quote") is None
+    assert not any(button.label.startswith("Conferma acquisto simulato") for button in app.button)
+    assert submitted_orders == []
+
+
+def test_signal_uses_only_bars_completed_by_backend_calendar(dashboard, monkeypatch):
+    from src.data.market_data import generate_synthetic_market_data
+    app, submitted_orders, _ = dashboard
+    data = generate_synthetic_market_data("SPY", periods=40)
+    data["is_synthetic"] = False
+    data.attrs.update(quality="real", interval="1Day", source="Dati storici reali Alpaca IEX")
+    expected = float(data.iloc[-2]["close"])
+    data.loc[data.index[-1], "close"] = 987654.32
+    monkeypatch.setattr(AlpacaClient, "get_market_data",
+                        lambda self, symbol, **kwargs: data.iloc[0:0].copy() if kwargs.get("start_time") else data.copy())
+    monkeypatch.setattr(AlpacaClient, "get_latest_quote", lambda *args: (_ for _ in ()).throw(BrokerConnectionError("offline fixture")))
+    def completed_bars(bars):
+        result = bars.iloc[:-1].copy()
+        result.attrs["last_completed_at"] = result.iloc[-1]["timestamp"]
+        return result
+    monkeypatch.setattr("src.data.bar_timing.select_completed_bars", lambda bars, *args, **kwargs: completed_bars(bars))
+    widget(app.checkbox, "Usa serie sintetica demo").set_value(False).run()
+    widget(app.button, "Carica dati").click().run()
+    assert not app.exception
+    assert widget(app.metric, "Close barra di riferimento").value == f"${expected:,.2f}"
     assert submitted_orders == []

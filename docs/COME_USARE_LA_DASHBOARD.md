@@ -100,3 +100,26 @@ La configurazione tecnica comprende `PAPER_EXECUTION_SCOPE` (default `disabled`,
 Se compare un intento incerto, pending o con fill, l'operatività rimane bloccata. Non cancellare file lock o journal e non ricreare un DB per ripartire. Solo un terminale con zero fill verificato permette il recupero automatico previsto. La riconciliazione completa dei fill è ancora da realizzare.
 
 Per l'anteprima con dati reali occorre anche un contratto temporale supportato. Daily grezzi/weekly non verificati rimangono utilizzabili per analisi, ma non per generare ordini. I dati intraday equity operativi sono filtrati alla seduta regolare; crypto intraday resta continuo. Un errore di calendario o un mercato chiuso è un blocco, non un invito a cambiare l'orologio o ad allargare le soglie.
+
+## Contesti indipendenti (Persona 2, 7 novembre 2026)
+
+In alto nella barra laterale, **Contesto** separa Demo, Simulazione e Alpaca
+Paper. La serie sintetica è selezionata e dichiarata nei contesti offline;
+Paper la disabilita. Ogni contesto conserva il proprio capitale e storico.
+Passare a un altro contesto cancella la verifica Paper e i risultati della
+sessione; gli ordini già accettati dal broker non vengono annullati.
+
+Per scegliere il DB Simulazione esplicitamente, prima dell'avvio:
+
+```powershell
+$env:AI_TRADINGBOT_SIMULATION_DB_PATH = Join-Path $env:LOCALAPPDATA 'AITradingBot\simulation\simulation.sqlite3'
+```
+
+```sh
+export AI_TRADINGBOT_SIMULATION_DB_PATH="$HOME/Library/Application Support/AITradingBot/simulation/simulation.sqlite3"
+```
+
+Le schede mercato distinguono prezzo quotato e close storico. Bid/ask/spread
+N/D indicano che manca una quotazione corrente verificata: nessun prezzo è
+inventato. Nel grafico usare zoom, pan, intervalli rapidi e reset; RSI è opzionale.
+I dettagli di conti, metriche, errori e limiti sono in [UI_HANDOFF](../UI_HANDOFF.md).

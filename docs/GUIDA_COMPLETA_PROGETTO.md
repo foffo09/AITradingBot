@@ -139,3 +139,13 @@ Seguire [INSTALLAZIONE_WINDOWS](INSTALLAZIONE_WINDOWS.md) per installazione
 base, dipendenze dell’intera suite e comandi PowerShell. I lock POSIX diretti
 sono sostituiti con Portalocker in NativeStore, coordinatore e console.
 La portabilità Windows è predisposta, non certificata: richiede prove sul PC.
+
+## Aggiornamento dashboard: tre contesti
+
+La barra laterale separa Demo, Simulazione locale e Alpaca Paper. I conti offline
+non costruiscono client Alpaca; i database sono distinti e il cambio contesto
+cancella verifiche e risultati della sessione. Il conto Paper non espone
+operazioni del ledger locale. Quote, storico, dati sintetici e segnali non
+operativi sono etichettati; valori non disponibili sono N/D. Vedere
+[UI_HANDOFF](../UI_HANDOFF.md) per contratti, timestamp, percorsi e limiti,
+e [guida operativa](COME_USARE_LA_DASHBOARD.md) per l'utilizzo.
