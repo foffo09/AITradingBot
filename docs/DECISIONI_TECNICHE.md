@@ -34,6 +34,8 @@ Riesaminare con uno storico broker completo, flussi di cassa e valuta espliciti 
 
 Stato: implementato e testato solo con mock. `dry_run=True` entra negli stessi controlli disponibili e, in presenza di proposta valida, termina prima di `submit_order`. Nessun ordine è costruito come fill o salvato nel broker fittizio. Anche i casi senza segnale o bloccati restano senza invio.
 
+Il wrapper `execute_auto_paper_cycle` espone l'esito senza invio come `preview`, lasciando invariato `dry_run` nell'esecuzione sottostante e negli altri chiamanti. Gli esiti `submitted`, `NO_TRADE` e `blocked` non vengono rimappati.
+
 L'alternativa di cambiare il default della funzione esistente avrebbe alterato i suoi chiamanti. Per compatibilità il default della funzione rimane invariato; la UI aggiunge un pulsante di anteprima esplicito che non avvia il loop. L'automazione rimane arrestata all'avvio. Il comando legacy di avvio è separato e può inviare Paper: non è un DRY-RUN.
 
 Non implementata una modalità DRY-RUN continua. Restano necessarie decisioni su coordinamento per conto, recupero di richieste incerte e calendario prima di estendere l'automazione.

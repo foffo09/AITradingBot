@@ -443,3 +443,31 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   sicurezza Paper e broker: 57 passati, 0 falliti, 0 saltati, 1 warning in
   44,85 s. Guard rete/credenziali 0/0. Nessuna modifica a verifica Alpaca,
   Demo, simulazione o backtest.
+
+## 2026-11-08 — Integrazione release su main
+
+- Nuova worktree `integration/release-20261108` creata dal tip verificato
+  `origin/main` `00898b3b18c4db769175a5a2fec3ddd80962b4a5`. Merge normale
+  `5dfaca0` integra `integration/sync-team-20261108`, incluso il fix Paper
+  `1c7a582` e i sei commit backend, dashboard e strategia. Nessun conflitto.
+- Audit dopo fetch: backend `1a68d5b`, dashboard `432ecdd` e strategia
+  `93fde78` sono antenati dell'integrazione; anche `prova-ai-locale` e
+  `chore/prepare-safe-commits` erano già antenati. I due genitori di
+  `origin/mie-modifiche` (`52d65db` e `2b2d35a`) sono anch'essi nella storia,
+  ma il merge remoto `1afd8fb` non è antenato e contiene risoluzioni storiche
+  da non applicare come snapshot ai file più recenti.
+- Riallineato il solo contratto mancante: `execute_auto_paper_cycle` espone
+  `preview` quando il ciclo sottostante restituisce `dry_run`; gli altri stati
+  e il comportamento di invio restano invariati. Le API temporali, il gate
+  delle barre e le protezioni Windows erano già presenti. Non adottati i pin
+  più vecchi né lo spostamento delle dipendenze condivise fuori da
+  `requirements.txt`. I risultati Windows/Mac storici, inclusi 436, 437 e 438,
+  restano distinti e attribuiti come nelle voci precedenti.
+- Windows/Python 3.11.9: test mirati dashboard/Paper: 102 passati. Suite:
+  **748 passati, 0 falliti, 0 saltati, 1 warning, 87,10 s**. Warning di
+  deprecazione `websockets.legacy`. `compileall` exit 0; `pip check` senza
+  requisiti rotti; guard test: rete 0, credenziali 0.
+- `.env` ignorato e non tracciato; `.env.example` controllato senza mostrare
+  valori, nessun valore credenziale letterale evidente. Nessun ordine, broker,
+  server o automazione avviati. Nessun push o modifica ai worktree esistenti;
+  modifiche non committate nell'altro worktree agente lasciate intatte.

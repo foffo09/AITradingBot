@@ -396,6 +396,7 @@ def execute_auto_paper_cycle(
     )
     return {
         **execution,
+        "status": "preview" if execution["status"] == "dry_run" else execution["status"],
         "symbol": selection.asset,
         "strategy": selection.strategy,
         "parameters": dict(selection.parameters),

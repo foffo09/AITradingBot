@@ -763,7 +763,7 @@ def test_auto_cycle_uses_selected_asset_and_strategy_in_no_order_mode(monkeypatc
     assert executor_calls[0]["short_window"] == 2
     assert executor_calls[0]["long_window"] == 3
     assert executor_calls[0]["dry_run"] is True
-    assert result["status"] == "dry_run"
+    assert result["status"] == "preview"
     assert result["strategy"] == "moving_average"
     assert result["proposed_quantity"] == 10.0
     assert result["quantity"] > 0
