@@ -471,3 +471,32 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   valori, nessun valore credenziale letterale evidente. Nessun ordine, broker,
   server o automazione avviati. Nessun push o modifica ai worktree esistenti;
   modifiche non committate nell'altro worktree agente lasciate intatte.
+
+## 2026-11-08 — Riconciliazione modifiche worktree agente
+
+- Stato iniziale verificato: branch agente a `afdebe4`, tre file tracciati
+  modificati tutti unstaged, nessun untracked e nessuna operazione Git in corso.
+  Release iniziale pulita a
+  `09d3c0f`. Creato backup esterno con patch binaria e copie integrali dei tre
+  file; hash delle copie coincidenti e `git apply --check --reverse` riuscito.
+- `src/broker/alpaca_client.py`: il filtro `GetOrdersRequest(status=ALL)` e la
+  gestione errore erano già presenti. La release aggiunge inoltre `limit=500`,
+  valida la risposta e blocca la saturazione; la modifica agente non è stata
+  copiata perché avrebbe rimosso tale limite e i test di truncation.
+- `tests/test_paper_safety.py`: i test di filtro ordini e errore endpoint sono
+  già presenti. Il test dashboard agente riguarda la vecchia UI a letture
+  separate; AppTest nella release copre snapshot riuscito/fallito, rimozione
+  valori precedenti, stato errore e arresto dell'automazione.
+- `app.py`: la release usa un solo snapshot verificato per conto, posizioni e
+  ordini, mostra cash/equity/buying power e invalida lo snapshot e arresta
+  l'automazione su errore. Non importata la schermata agente obsoleta, che
+  effettuava letture broker separate e duplicava il monitor attuale.
+- Verifica ripetuta su Windows/Python 3.11.9: mirati Paper Safety, broker,
+  backend, dashboard e isolamento **175 passati**; suite completa **748
+  passati, 0 falliti, 0 saltati, 1 warning, 81,20 s**. `compileall` exit 0,
+  `pip check` senza requisiti rotti, rete 0/credenziali 0. Warning noto
+  `websockets.legacy`.
+- Nessuna modifica applicativa copiata perché tutte le parti utili risultano
+  già presenti, con protezioni più forti, nella release. Worktree agente e
+  repository principale lasciati intatti; nessun ordine, server, automazione
+  o push.
