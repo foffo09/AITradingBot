@@ -106,6 +106,10 @@ def select_completed_bars(data, symbol, now, *, require_market_open=True):
     current = utc_timestamp(now, "Reference time")
     if data.empty or not {"timestamp", "close"}.issubset(data.columns):
         raise BarTimingError("No timestamped close bars are available.")
+    if data.attrs.get("quality") != "real":
+        raise BarTimingError("Real bar provenance is required for operational selection.")
+    if "is_synthetic" in data and not data["is_synthetic"].map(lambda value: value is False).all():
+        raise BarTimingError("Synthetic or unknown row provenance is not operationally usable.")
     interval = data.attrs.get("interval")
     if interval not in MAX_AGE:
         raise BarTimingError("Unsupported operational interval; weekly aggregation is unverified.")

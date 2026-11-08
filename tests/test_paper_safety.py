@@ -35,7 +35,7 @@ def test_paper_order_requires_verified_active_paper_client(monkeypatch, tmp_path
             return {"id": "paper-order-id", "status": "accepted"}
 
         def get_account(self):
-            return {"id": "test-account", "status": "ACTIVE", "trading_blocked": False}
+            return {"id": "test-account", "status": "ACTIVE", "trading_blocked": False, "account_blocked": False}
 
     monkeypatch.setattr(broker_module, "TradingClient", FakeTradingClient)
     settings = AppSettings(
@@ -280,6 +280,10 @@ def test_paper_dashboard_hides_previous_values_when_refresh_fails(
     assert not any("987,654,322" in metric.value for metric in app.metric), [
         (metric.label, metric.value) for metric in app.metric
     ]
+    assert any(item.value == "**Errore**" for item in app.markdown)
+    assert app.session_state["paper_automation_active"] is False
+    assert app.session_state.get("_paper_status_sync_rerun") is None
+    assert len(snapshot_fetches) == 2
 
 
 def test_asset_availability_includes_fractional_and_quantity_rules(monkeypatch):

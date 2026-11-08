@@ -7,10 +7,12 @@ from typing import Any
 import pandas as pd
 
 from config.settings import AppSettings
+from src.broker.alpaca_transport import AlpacaSession
 from src.utils.logging_config import configure_logging
 from src.trading.paper_coordinator import PaperAccountCoordinator, PaperExecutionLease
 
 try:
+    from alpaca.common.rest import RESTClient
     from alpaca.data import CryptoHistoricalDataClient, StockHistoricalDataClient
     from alpaca.data.enums import DataFeed
     from alpaca.data.requests import (
@@ -31,6 +33,7 @@ try:
     )
     from alpaca.trading.requests import GetAssetsRequest, GetOrdersRequest, MarketOrderRequest
 except Exception:  # pragma: no cover - environment fallback
+    RESTClient = None
     CryptoHistoricalDataClient = None
     StockHistoricalDataClient = None
     StockBarsRequest = None
@@ -76,6 +79,7 @@ class AlpacaClient:
                     self.settings.alpaca_secret_key,
                     paper=True,
                 )
+                self._configure_transport(self.client, 'paper-api.alpaca.markets', read_only=False)
                 self._paper_client_is_paper = True
             except Exception:  # pragma: no cover - defensive branch
                 self.logger.warning("Failed to initialize the Alpaca Paper Trading client.")
@@ -87,6 +91,7 @@ class AlpacaClient:
                         api_key=self.settings.alpaca_api_key,
                         secret_key=self.settings.alpaca_secret_key,
                     )
+                    self._configure_transport(self.market_data_client, 'data.alpaca.markets', read_only=True)
             except Exception:  # pragma: no cover - market-data availability is independent
                 self.logger.warning("Failed to initialize the Alpaca stock-data client.")
                 self.market_data_client = None
@@ -97,9 +102,44 @@ class AlpacaClient:
                         api_key=self.settings.alpaca_api_key,
                         secret_key=self.settings.alpaca_secret_key,
                     )
+                    self._configure_transport(self.crypto_data_client, 'data.alpaca.markets', read_only=True)
             except Exception:  # pragma: no cover - defensive branch
                 self.logger.warning("Failed to initialize the Alpaca crypto-data client.")
                 self.crypto_data_client = None
+
+    @staticmethod
+    def _configure_transport(client, host, *, read_only):
+        # SDK internals are pinned and covered by transport tests; test doubles have no HTTP session.
+        if RESTClient is not None and isinstance(client, RESTClient):
+            client._session.close()
+            client._session = AlpacaSession(host, read_only=read_only)
+            client._retry = 2 if read_only else 0
+            client._retry_wait = 1
+            client._retry_codes = [429, 504]
+
+    @staticmethod
+    def _validate_account(account):
+        if not isinstance(account, dict) and not hasattr(account, 'status'):
+            raise BrokerConnectionError('Alpaca returned an unrecognized account response.')
+        for field in ('cash', 'equity', 'buying_power', 'last_equity'):
+            value = account.get(field) if isinstance(account, dict) else getattr(account, field, None)
+            if value is None:
+                continue
+            try:
+                valid = not isinstance(value, bool) and math.isfinite(float(value))
+            except (ValueError, TypeError, OverflowError):
+                valid = False
+            if not valid:
+                raise BrokerConnectionError(f'Alpaca returned an invalid {field} amount.')
+        return account
+
+    @staticmethod
+    def _validate_collection(items, label):
+        if not isinstance(items, list) or any(
+            not isinstance(item, dict) and not hasattr(item, 'model_dump') for item in items
+        ):
+            raise BrokerConnectionError(f'Alpaca returned an unrecognized {label} response.')
+        return items
 
     def is_connected(self) -> bool:
         return self._paper_connection_verified
@@ -137,13 +177,13 @@ class AlpacaClient:
             self._paper_connection_verified = False
             self._verified_account = None
             return {
-                "status": "demo",
+                "status": "error" if self.settings.trading_mode == "paper" else "demo",
                 "connected": False,
                 "message": "A dedicated Alpaca Paper client is unavailable; no account connection is verified.",
-                "mode": "demo",
+                "mode": self.settings.trading_mode,
             }
         try:
-            account = self.client.get_account()
+            account = self._validate_account(self.client.get_account())
             account_status = getattr(account, "status", None)
             if isinstance(account, dict):
                 account_status = account.get("status")
@@ -181,6 +221,10 @@ class AlpacaClient:
 
     def get_account(self) -> dict[str, Any]:
         if self.client is None:
+            self._paper_connection_verified = False
+            self._verified_account = None
+            if self.settings.trading_mode == 'paper':
+                raise BrokerConnectionError('Alpaca Paper client is unavailable.')
             return {
                 "account_number": "demo",
                 "mode": "demo",
@@ -190,24 +234,32 @@ class AlpacaClient:
                 "status": "unavailable",
             }
         try:
-            return self.client.get_account()
+            return self._validate_account(self.client.get_account())
         except Exception as exc:  # pragma: no cover - defensive branch
             self._paper_connection_verified = False
             self._verified_account = None
-            raise BrokerConnectionError(f"Unable to fetch account state: {self.describe_error(exc)}") from exc
+            raise BrokerConnectionError(f"Unable to fetch account state: {self.describe_error(exc)}") from None
 
     def get_positions(self) -> list[dict[str, Any]]:
         if self.client is None:
+            self._paper_connection_verified = False
+            self._verified_account = None
+            if self.settings.trading_mode == 'paper':
+                raise BrokerConnectionError('Alpaca Paper client is unavailable.')
             return []
         try:
-            return self.client.get_all_positions()
+            return self._validate_collection(self.client.get_all_positions(), 'positions')
         except Exception as exc:  # pragma: no cover
             self._paper_connection_verified = False
             self._verified_account = None
-            raise BrokerConnectionError(f"Unable to fetch positions: {self.describe_error(exc)}") from exc
+            raise BrokerConnectionError(f"Unable to fetch positions: {self.describe_error(exc)}") from None
 
     def get_orders(self) -> list[dict[str, Any]]:
         if self.client is None:
+            self._paper_connection_verified = False
+            self._verified_account = None
+            if self.settings.trading_mode == 'paper':
+                raise BrokerConnectionError('Alpaca Paper client is unavailable.')
             return []
         if GetOrdersRequest is None or QueryOrderStatus is None:
             raise BrokerConnectionError(
@@ -215,14 +267,14 @@ class AlpacaClient:
             )
         try:
             request = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=500)
-            orders = self.client.get_orders(filter=request)
+            orders = self._validate_collection(self.client.get_orders(filter=request), 'orders')
             if len(orders) >= 500:
                 raise BrokerConnectionError("Order history may be truncated; automation is blocked.")
             return orders
         except Exception as exc:  # pragma: no cover
             self._paper_connection_verified = False
             self._verified_account = None
-            raise BrokerConnectionError(f"Unable to fetch orders: {self.describe_error(exc)}") from exc
+            raise BrokerConnectionError(f"Unable to fetch orders: {self.describe_error(exc)}") from None
 
     def get_paper_snapshot(self) -> dict[str, Any]:
         status = self.verify_connection()
@@ -302,6 +354,8 @@ class AlpacaClient:
                     if start_time is not None
                     else min(10_000, max(limit, int(expected_bars * 1.05)))
                 )
+            # A capped ASC history can omit the latest bars; incremental backfill must stay ASC.
+            sort = "desc" if limit is not None and start_time is None else "asc"
             if is_crypto:
                 response = client.get_crypto_bars(
                     CryptoBarsRequest(
@@ -309,6 +363,7 @@ class AlpacaClient:
                         timeframe=frame,
                         start=start,
                         limit=request_limit,
+                        sort=sort,
                     )
                 )
                 source = "Dati storici reali Alpaca Crypto"
@@ -318,6 +373,7 @@ class AlpacaClient:
                     timeframe=frame,
                     start=start,
                     limit=request_limit,
+                    sort=sort,
                     feed=DataFeed.IEX,
                 )
                 response = client.get_stock_bars(request)
@@ -334,7 +390,13 @@ class AlpacaClient:
             required = {"timestamp", "open", "high", "low", "close", "volume"}
             if not required.issubset(bars.columns):
                 raise BrokerConnectionError("Market-data response is missing required OHLCV fields.")
-            bars["timestamp"] = pd.to_datetime(bars["timestamp"], utc=True)
+            timestamps = [pd.Timestamp(value) for value in bars["timestamp"]]
+            if any(pd.isna(value) or value.tzinfo is None for value in timestamps):
+                raise BrokerConnectionError("Market-data response has missing or timezone-free timestamps.")
+            observed_at = datetime.now(timezone.utc)
+            bars["timestamp"] = pd.to_datetime(timestamps, utc=True)
+            if (bars["timestamp"] > observed_at).any():
+                raise BrokerConnectionError("Market-data response contains future timestamps.")
             numeric_columns = ["open", "high", "low", "close", "volume"]
             bars[numeric_columns] = bars[numeric_columns].apply(
                 pd.to_numeric, errors="coerce"
@@ -366,7 +428,7 @@ class AlpacaClient:
             bars.attrs["bar_time_contract"] = "alpaca-start-v1"
             bars.attrs["bar_calendar"] = "24/7" if is_crypto else "NYSE"
             bars.attrs["session_scope"] = "continuous" if is_crypto else "all_sessions"
-            bars.attrs["fetched_at"] = datetime.now(timezone.utc).isoformat()
+            bars.attrs["fetched_at"] = observed_at.isoformat()
             bars.attrs["requested_start"] = start.isoformat()
             return bars.sort_values("timestamp").reset_index(drop=True)
         except BrokerConnectionError:
@@ -375,7 +437,7 @@ class AlpacaClient:
             self.logger.warning("Alpaca market-data request failed for %s.", symbol)
             raise BrokerConnectionError(
                 f"Market data unavailable for {symbol}. Verify data entitlements and the selected period."
-            ) from exc
+            ) from None
 
     def get_latest_quote(self, symbol: str) -> dict[str, Any]:
         is_crypto = "/" in symbol
@@ -394,6 +456,8 @@ class AlpacaClient:
             quote = quotes.get(symbol)
             if quote is None:
                 raise BrokerConnectionError(f"No latest quote was returned for {symbol}.")
+            if isinstance(quote.bid_price, bool) or isinstance(quote.ask_price, bool):
+                raise BrokerConnectionError(f'Alpaca returned a non-numeric bid/ask for {symbol}.')
             bid = float(quote.bid_price)
             ask = float(quote.ask_price)
             timestamp = pd.Timestamp(quote.timestamp)
@@ -405,9 +469,13 @@ class AlpacaClient:
                 or bid > ask
             ):
                 raise BrokerConnectionError(f"Alpaca returned no valid bid/ask for {symbol}.")
-            midpoint = (bid + ask) / 2
-            if pd.isna(timestamp):
-                raise BrokerConnectionError(f"Alpaca returned no valid quote timestamp for {symbol}.")
+            midpoint = bid + (ask - bid) / 2
+            if pd.isna(timestamp) or timestamp.tzinfo is None:
+                raise BrokerConnectionError(f"Alpaca returned no timezone-aware quote timestamp for {symbol}.")
+            timestamp = timestamp.tz_convert("UTC")
+            age = (pd.Timestamp(datetime.now(timezone.utc)) - timestamp).total_seconds()
+            if not 0 <= age <= 120:
+                raise BrokerConnectionError(f"Alpaca returned a stale or future quote for {symbol}.")
             return {
                 "bid": bid,
                 "ask": ask,
@@ -421,7 +489,7 @@ class AlpacaClient:
             self.logger.warning("Alpaca latest quote request failed for %s.", symbol)
             raise BrokerConnectionError(
                 f"Latest quote unavailable for {symbol}; last historical bar may still be available."
-            ) from exc
+            ) from None
 
     def get_instrument_availability(self, symbol: str) -> dict[str, Any]:
         if self.client is None:
@@ -472,6 +540,10 @@ class AlpacaClient:
             raise PermissionError("Only the dedicated Alpaca Paper client may submit orders.")
         if not self._paper_connection_verified:
             raise PermissionError("Verify the active Alpaca Paper account before submitting an order.")
+        if getattr(self.client, '_retry', 0) != 0:
+            self._paper_connection_verified = False
+            self._verified_account = None
+            raise PermissionError("Paper SDK write retries must remain disabled.")
         lease = kwargs.pop("_execution_lease", None)
         coordinator = self.paper_coordinator
         if (coordinator is None or not isinstance(lease, PaperExecutionLease)
@@ -495,22 +567,22 @@ class AlpacaClient:
             raise ValueError("Order quantity must be a finite positive number.")
 
         try:
-            account = self.client.get_account()
+            account = self._validate_account(self.client.get_account())
         except Exception as exc:
             self._paper_connection_verified = False
             self._verified_account = None
             raise BrokerConnectionError(
                 f"Unable to reverify the Alpaca Paper account before submission: {self.describe_error(exc)}"
-            ) from exc
+            ) from None
         account_status = getattr(account, "status", None)
-        trading_blocked = getattr(account, "trading_blocked", False)
-        account_blocked = getattr(account, "account_blocked", False)
+        trading_blocked = getattr(account, "trading_blocked", None)
+        account_blocked = getattr(account, "account_blocked", None)
         if isinstance(account, dict):
             account_status = account.get("status")
-            trading_blocked = account.get("trading_blocked", False)
-            account_blocked = account.get("account_blocked", False)
+            trading_blocked = account.get("trading_blocked")
+            account_blocked = account.get("account_blocked")
         account_status = str(getattr(account_status, "value", account_status) or "").lower()
-        if account_status != "active" or trading_blocked or account_blocked:
+        if account_status != "active" or trading_blocked is not False or account_blocked is not False:
             self._paper_connection_verified = False
             self._verified_account = None
             raise PermissionError("Active, unblocked Alpaca Paper account verification is required.")
@@ -528,17 +600,20 @@ class AlpacaClient:
         )
         try:
             order = self.client.submit_order(request)
+            if hasattr(order, "model_dump"):
+                order = order.model_dump(mode="json")
         except Exception as exc:
             self._paper_connection_verified = False
             self._verified_account = None
             raise BrokerConnectionError(
-                f"Alpaca Paper order request failed: {self.describe_error(exc)}"
-            ) from exc
-        if hasattr(order, "model_dump"):
-            return order.model_dump(mode="json")
-        if isinstance(order, dict):
+                f"Alpaca Paper order request failed; no verified order response: {self.describe_error(exc)}"
+            ) from None
+        if (isinstance(order, dict) and order.get("id") and order.get("status")
+                and order.get("client_order_id", client_order_id) == client_order_id):
             return dict(order)
-        raise BrokerConnectionError("Alpaca Paper returned an unrecognized order response.")
+        self._paper_connection_verified = False
+        self._verified_account = None
+        raise BrokerConnectionError("Alpaca Paper returned an unrecognized or mismatched order response.")
 
     def safe_account_summary(self) -> dict[str, Any]:
         account = self.get_account()
@@ -558,7 +633,7 @@ class AlpacaClient:
 
     def describe_error(self, exc: Exception) -> str:
         message = str(exc)
-        for secret in (self.settings.alpaca_api_key, self.settings.alpaca_secret_key):
-            if secret:
-                message = message.replace(secret, "<redacted>")
+        secrets = (self.settings.alpaca_api_key, self.settings.alpaca_secret_key)
+        for secret in sorted(filter(None, secrets), key=len, reverse=True):
+            message = message.replace(secret, "<redacted>")
         return message

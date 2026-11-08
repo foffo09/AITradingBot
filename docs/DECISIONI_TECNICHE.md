@@ -20,6 +20,12 @@ Stato: implementato. Rimossa la card duplicata dell'equity dalla panoramica; i n
 
 Il riepilogo esterno al monitor non duplica saldo/equity: questi valori restano nel monitor Paper e sono renderizzati soltanto con snapshot verificato. Un errore di refresh non deve lasciare valori precedenti visibili.
 
+L'indicatore principale legge lo stesso stato Streamlit aggiornato dal monitor,
+ma i fragment hanno rerun separati. Quando cambia verifica/errore, il monitor
+richiede un rerun app; un flag monouso evita una seconda chiamata snapshot
+durante tale riallineamento. Un errore invalida lo stato, elimina lo snapshot
+e arresta l'automazione.
+
 I valori mancanti o non finiti restano N/D; elenco posizioni assente e vuoto sono diversi. La variazione equity è `equity - last_equity`, non il P/L realizzato. Nessuna base di capitale mancante viene ricostruita dal ledger. Il valore di mercato non è chiamato capitale investito.
 
 Riesaminare con uno storico broker completo, flussi di cassa e valuta espliciti prima di aggiungere rendimenti cumulativi o metriche multivaluta.
@@ -27,6 +33,8 @@ Riesaminare con uno storico broker completo, flussi di cassa e valuta espliciti 
 ## D4 — Anteprima senza modificare l'invio preesistente
 
 Stato: implementato e testato solo con mock. `dry_run=True` entra negli stessi controlli disponibili e, in presenza di proposta valida, termina prima di `submit_order`. Nessun ordine è costruito come fill o salvato nel broker fittizio. Anche i casi senza segnale o bloccati restano senza invio.
+
+Il wrapper `execute_auto_paper_cycle` espone l'esito senza invio come `preview`, lasciando invariato `dry_run` nell'esecuzione sottostante e negli altri chiamanti. Gli esiti `submitted`, `NO_TRADE` e `blocked` non vengono rimappati.
 
 L'alternativa di cambiare il default della funzione esistente avrebbe alterato i suoi chiamanti. Per compatibilità il default della funzione rimane invariato; la UI aggiunge un pulsante di anteprima esplicito che non avvia il loop. L'automazione rimane arrestata all'avvio. Il comando legacy di avvio è separato e può inviare Paper: non è un DRY-RUN.
 
@@ -97,3 +105,42 @@ finanziari restano invariati. Errori di lock/journal non concedono autorità.
 `requirements-dev.txt` include gli SDK opzionali usati con mock dalla suite;
 FastAPI/HTTPX e gli altri import condivisi sono dipendenze dirette della base.
 Verifica Windows ancora non eseguita; nessuna attestazione multi-host.
+
+## D13 — Dashboard con tre contesti e dati verificabili
+
+Il contesto UI è distinto dal trading_mode backend: Demo e Simulazione usano
+impostazioni senza credenziali e ledger distinti; Paper usa solo dati conto
+broker. Cambiare contesto azzera lo stato operativo della sessione, non gli
+ordini del broker. Nessun DB viene migrato. Alias e hard link sono rifiutati.
+Il rendering conserva i metadati backend; un close storico non sostituisce
+una quote e una barra in formazione non produce un segnale reale idoneo.
+Snapshot Paper oltre 45 secondi, futuri o senza timezone sono invalidati.
+Le schede non modificano soglie di rischio né permessi del coordinatore.
+Contratti e limiti: [UI_HANDOFF](../UI_HANDOFF.md).
+
+### D13 — Idoneità dei dati e quota corrente
+
+La scheda segnale usa il gate backend, senza replicare calendario o soglie.
+Alla presentazione richiede anche la fonte prevista dal contratto e una quota
+corrente validata dal riepilogo UI esistente. Un refresh discordante resta un
+Errore esplicito e non aggiorna fetched_at. Il campo informativo operational_data
+non concede autorizzazione al motore o al coordinatore. Storico/backtest restano
+utilizzabili a fini analitici senza trasformarsi in dati operativi verificati.
+Dettagli e indicazioni Persona 3 in DASHBOARD_HANDOFF.md.
+
+## D14 — Proposte strategiche pure e protezione analitica
+
+Persona 3 aggiunge EMA crossover/trend con ATR/struttura e riusa SMA/risk manager.
+Il gate operativo resta select_completed_bars, mai reimplementato. La strategia
+non invia ordini: produce un contratto JSON e NO_TRADE se manca una verifica.
+SELL è riduzione del long verificato per quello stesso simbolo, non short;
+i suoi livelli ribassisti non sono bracket di un long residuo. Default rischio
+monetario 0,5%, DD10%, trade5/giorno oltre ai cap esistenti, mai aumentati.
+Snapshot Paper entro45s richiede peak/counter verificati, non derivati da N/D.
+Deduplica stateless per conto/simbolo/intervallo/lato/barra: ID consumati vanno
+persistiti dal consumer e non cambiano variando configurazione/rischio.
+Backtest opzionale TP/SL nel simulatore originale: next-open e stop-first su
+OHLC ambiguo. Replay con livelli non validi fallisce, senza disattivare protezione.
+Tranche fisse training/validation/OOS non sovrapposte e chiusura per-row esplicita.
+Nessuna validazione statistica, cambio UI o attivazione di trading impliciti.
+Dettagli: [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md).

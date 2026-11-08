@@ -237,3 +237,266 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
 - I tre worktree già registrati sono stati riutilizzati e fast-forwardati senza commit divergenti o modifiche locali: backend, UI e strategy erano puliti e ora condividono il BASE finale del team. Le directory di lavoro e i branch sono rimasti indipendenti.
 - Il worktree agent separato a `afdebe4` mantiene le sue modifiche locali in `app.py`, `src/broker/alpaca_client.py` e `tests/test_paper_safety.py`; non è stato toccato. I due backup verificati esistono ancora.
 - Stato finale del checkout centrale e dei tre worktree team: pulito. Nessun push forzato, modifica a `main`, file sensibile tracciato o operazione broker.
+
+## 2026-11-06 — Persona 1, fase 2 backend
+
+- Base f36f9e2 verificata nel worktree AITradingBot-backend, branch
+  feature/backend-market-data pulito; nessun merge o modifica ad altri branch.
+- Review di produttori SDK e chiamanti dashboard/selettore/esecuzione. Sono
+  riprodotti e corretti: tasso FX booleano/data futura, provenienza sintetica
+  o contraddittoria ammessa dal helper operativo, redazione parziale di segreti
+  sovrapposti e storico limitato ASC che può escludere le barre più recenti.
+- Invariati firme, soglie finanziarie, coordinator, timeout e policy HTTP.
+  Finestre limitate senza start_time richieste DESC e restituite ASC; storico
+  completo e backfill restano ASC. Impatto documentato prima della modifica.
+- Il sospetto 200 {} interpretato come conto vuoto non è stato confermato:
+  SDK e backend lo rifiutavano già. Aggiunti test, nessuna patch ridondante.
+- 33 nuovi casi offline in test_backend_integration.py. Mac/Python 3.12.14:
+  205 mirati passati in 1,72 s; suite 535 passati, 1 skip, un warning in
+  24,51 s. Guard rete 0/credenziali 0. Il test Windows Proactor resta saltato
+  sul Mac. Nessun test esistente eliminato, modificato o disattivato.
+- BACKEND_HANDOFF.md contiene contratti, decisioni, matrice delle prove e
+  richieste a Persona 2/3 senza modificare app.py o strategie. Limiti REST e
+  proposta analitica distinti dall'autorizzazione operativa.
+- Windows e broker autentici NON ESEGUITI. Nessun ordine, server, automazione,
+  file di credenziali o database personale aperto.
+
+## 2026-11-06 — Merge remoto verificato nel worktree Windows
+
+- Integrazione isolata in `integration/mie-modifiche-20261106`, partita da
+  `67f6a47085905b523ff11828866efdb653ccb744`, con `origin/mie-modifiche`
+  `1afd8fb58074209c0a050a8cb62677c8420d362d` come secondo genitore previsto.
+  Il branch backup continua a conservare il commit iniziale.
+- Risoluzioni mantenute entrambe le API temporali, il controllo `as_of`
+  timezone-aware e il contratto `preview` del wrapper. I 21 selettori AppTest
+  sono stati allineati all'etichetta reale. Le dipendenze SDK provider sono
+  collocate nell'extra Omega con i pin locali conservati; nessun pacchetto è
+  stato installato o aggiornato.
+- Conservate le protezioni Windows locali: guard Proactor e relativo test,
+  lettura stdin TUI con thread/queue e test TUI senza skip Windows. Il test
+  Paper Safety mantiene anche le asserzioni diagnostiche locali. Client Alpaca
+  e selettore strategia erano già identici nei due tree: nessuna copia duplicata.
+- Verifiche su Windows/Python 3.11.9, con l'interprete già esistente del
+  progetto: compileall exit 0; `pip check` senza requisiti rotti. I test mirati
+  (calendario, selettore, dashboard/AppTest, automazione Paper, sicurezza,
+  isolamento, TUI e broker) hanno concluso **193 passati, 0 falliti, 0 saltati**.
+  Il primo run ha evidenziato una sola asserzione non aggiornata al risultato
+  `preview`; corretta l'aspettativa preservando `dry_run=True` e zero submit.
+- Suite completa: **438 passati, 0 falliti, 0 saltati, 1 warning, 71,44 s**.
+  Warning preesistente `websockets.legacy` deprecato. Guard finale:
+  rete 0, credenziali 0. `git diff --check` e verifica finale d'indice eseguiti.
+- La prova Mac di 437 test del 30 ottobre resta attribuita esclusivamente a
+  macOS; i precedenti 436 test Windows del 2 novembre restano intatti. Questo
+  run verifica il worktree d'integrazione su Windows, non macOS, UX interattiva
+  completa o broker autentico.
+- Nessun `.env` o segreto aperto, nessuna dipendenza modificata nell'ambiente,
+  nessun server, automazione, ordine o richiesta broker avviati. Nessun push.
+
+## 2026-11-07 — Persona 2: dashboard e integrazione backend
+
+- Worktree dedicato AITradingBot-dashboard, branch feature/dashboard-ui.
+  Stato iniziale pulito a 67f6a47; integrazione backend con fast-forward a
+  1a68d5bbc25f3e1b6eceb0235f9ea2fdfa033240. Nessun merge su main; worktree
+  principale con modifiche preesistenti e branch delle altre persone intatti.
+- Dashboard esistente conservata: tema unico, metriche capitale/cash/P&L/
+  drawdown/esposizione, provenienza quote e schede rischio informative.
+  Plotly mantiene candele, volume, SMA/RSI e marker; aggiunge zoom/pan/reset,
+  intervalli rapidi e persistenza del range per strumento/intervallo.
+- Demo, Simulazione e Paper selezionabili con ledger distinti. Cambio contesto
+  cancella snapshot/verifica/automazione e risultati della sessione. Offline
+  elimina le credenziali runtime e non costruisce SDK Alpaca. Paper nasconde
+  le operazioni del ledger e non inizializza capitale locale. Nessuna migrazione
+  o eliminazione di dati. Alias e hard link fra contesti sono bloccati.
+- Nessuna reinterpretazione di metadati mancanti come fonte reale; fetched_at
+  resta quello del backend nel refresh. Quote invalide/vecchie: bid/ask/spread
+  N/D e close storico esplicito. Snapshot conto oltre 45 secondi, futuri o
+  privi di timezone: rimossi e verifica invalidata. Capitale/P&L cumulativo/
+  drawdown/commissioni Paper non forniti dal broker: N/D.
+- Segnale reale calcolato sulle barre ammesse dal calendario; gate non valido:
+  analisi storica non operativa. La revisione indipendente ha individuato una
+  scheda segnale esterna al refresh: corretto con fragment di 15 secondi che
+  rilegge frame e calendario. Test invoca il corpo reale ripetutamente senza
+  full rerun; timer browser non provato.
+- 48 casi nuovi, nessun test eliminato o disattivato. Fixture esistenti aggiornate
+  alla scelta sintetica esplicita e al contratto backend di fonte/intervallo;
+  snapshot fittizio aggiornato all'ora effettiva invece di una data fissa.
+- macOS, Python 3.12.14, ambiente virtuale backend con requisiti identici:
+  compileall -q app.py config src tests: exit 0, output vuoto.
+  Test mirati UI/isolation/Paper: 115 passati, 1 warning, 21,47 s.
+  Suite completa: 583 passati, 1 skip, 1 warning, 31,66 s.
+  TEST ISOLATION: network=0, credentials=0. Skip Windows Proactor sul Mac;
+  warning di deprecazione websockets.legacy preesistente.
+  pip check: No broken requirements found. git diff --check: exit 0.
+- Contratti/limiti in UI_HANDOFF.md; aggiornate guida operativa, guida completa,
+  decisioni, matrice e roadmap. Nessuna modifica a backend, strategie, rischio,
+  motore o soglie. Revisione del diff e scansione dei file da pubblicare senza
+  segreti letterali rilevati; nessun database o file generato nel commit.
+- Windows, broker autentico e resa/interazioni nel browser NON VERIFICATI per
+  questa consegna. Nessun ordine, server o automazione avviati; nessuna lettura
+  di file di credenziali o database personali. Restano i limiti REST, storico
+  contabile incompleto e coordinamento descritti nei due handoff.
+
+## 2026-11-07 — Persona 2: completamento contratti backend
+
+- Inizio dc3561c6aed28039585dd766cb4fa33a4eb6a18f, checkout pulito sul solo
+  feature/dashboard-ui. Backend 1a68d5b già antenato, nessun nuovo merge.
+- Riletto BACKEND_HANDOFF.md. La scheda segnale usava correttamente il gate
+  delle barre ma non rivalutava anche la quota corrente: ora quota assente,
+  vecchia, futura o non verificabile impone analisi storica non operativa.
+  Campo informativo operational_data distinto da qualsiasi permesso di invio.
+- Fonte storica mancante/discordante e data_quality contraddittoria impediscono
+  la presentazione come dato operativo verificato. Nessuna riscrittura di
+  metadati o delle regole del gate: calendario, chiusura e freschezza barre
+  restano in select_completed_bars. Distinto esplicitamente l'uso backtest.
+- Evidenziato e riprodotto un ulteriore problema: concat del refresh conservava
+  gli attrs vecchi anche con fonte/calendario/sessione/contratto discordanti.
+  Ora il refresh è rifiutato prima del concat; storico e fetched_at restano
+  invariati, errore visibile e scheda non operativa finché non si risolve.
+- 18 casi aggiunti, compreso il gate backend reale con input sintetici
+  controllati. Le regressioni sulle quote e sui metadati discordanti sono
+  fallite prima della patch. Rafforzato il test AppTest con confronto integrale
+  della quote (timestamp, fonte, metadati extra). Nessun test rimosso.
+- DASHBOARD_HANDOFF.md è il contratto canonico: architettura, componenti,
+  modalità, grafici, uso storico/backtest/operativo e indicazioni Persona 3.
+  UI_HANDOFF.md mantiene il collegamento compatibile. Matrice e decisioni
+  aggiornate. Revisione indipendente del diff senza altri problemi importanti.
+- macOS/Python 3.12.14, solo mock e DB temporanei:
+  compileall -q app.py config src tests: exit 0, nessun output.
+  Dashboard: 120 passati, 1 warning, 22,62 s.
+  Backend: 172 passati, 1 warning, 1,56 s.
+  Sicurezza: 39 passati, 1 skip, 1 warning, 2,25 s.
+  Suite completa: 601 passati, 1 skip, 1 warning, 36,66 s.
+  Zero falliti; TEST ISOLATION network=0, credentials=0. Skip Windows Proactor
+  sul Mac e deprecazione websockets.legacy preesistenti.
+  pip check: No broken requirements found. Diff-check: exit 0.
+- Nessuna modifica ai file backend, strategie, rischio, trading o backtest.
+  Solo Paper; nessun ordine, server o automazione avviato. Nessun file di
+  credenziali/database personale letto. Windows, broker autentico e timer/
+  resa interattiva nel browser non provati. L'idoneità UI non certifica la
+  sicurezza del trading automatico o una riconciliazione contabile completa.
+
+## 2026-11-07 — Persona 3: strategy engine, livelli e integrazione
+
+- Repository/worktree verificati prima di scrivere. Creato AITradingBot-strategy
+  sul solo feature/strategy-engine dal remoto 67f6a47; fast-forward a 432ecdd,
+  che include backend 1a68d5b. Nessun conflitto o modifica preesistente nel nuovo
+  worktree. Main, backend, dashboard e worktree altrui lasciati intatti.
+- Piano in docs/superpowers/plans/2026-11-07-strategy-engine.md. Aggiunti EMA9/21
+  con filtro50, diagnostici RSI14 e volume, riuso SMA invariata. MACD escluso
+  come filtro ridondante non validato. Indicatori e segnali causali verificati
+  su prefissi; solo incroci, WAIT quando manca un'opportunità valida.
+- StrategyEngine puro con gate operativo backend reale, metadata/source,
+  quote correnti, snapshot rischio Paper, entry ask/bid, ATR14/struttura,
+  stop/target e RR lordo/netto, expiry ancorata alla chiusura e quote.
+  Fonte sintetica/ignota/contraddittoria e quote scadute producono NO_TRADE.
+  Anche flag sintetico/quality contraddittori nelle quote sono respinti.
+- RiskManager esistente riutilizzato con budget stop/costi, esposizione
+  globale, DD e contatori. Nessuna martingala o aumento automatico dei cap.
+  La revisione indipendente ha individuato quantità senza simbolo: corretto
+  RiskSnapshot con position_symbol obbligatoriamente coerente, regressioni
+  BUY/SELL cross-symbol. SELL riduce soltanto un long verificato; i suoi
+  livelli ribassisti sono analitici e non bracket di un long residuo.
+- ID dell'evento stabile per conto/simbolo/intervallo/lato/chiusura; cambiare
+  rischio/configurazione non rinnova un evento consumato. Persistenza ID al
+  consumer. Contratto JSON di un rifiuto non si rompe con numeri non finiti:
+  serializzati N/D senza mutare gli input. Regressioni red/green eseguite.
+- BacktestEngine esteso opzionalmente a strategie causali e TP/SL: default
+  SMA invariato, next-open, livelli dal solo passato, gap prudenziali e
+  stop-first per barra ambigua, costi separati, expectancy/R. Livelli non
+  validi fanno fallire il replay, senza rimuovere protezioni. Dimensionamento
+  storico notional preesistente distinto dal nuovo budget multi-asset.
+- Nuove tranche fisse training/validation/OOS con closed_at per-row verificato
+  rispetto ad as_of, senza overlap o contaminazione futura, capitale e
+  indicatori indipendenti. Non costituisce ottimizzazione o validazione statistica.
+- Replay sintetico sinusoide 720 barre, tre tranche240, EMA fisse e costi
+  5/2/5bps effettivamente eseguito: senza protezione chiusi3/4/3 trade,
+  P/L chiuso51,4486/80,3066/54,1834 USD. Equity OOS include posizione aperta.
+  Con protezione predefinita replay bloccato da RR insufficiente rispetto
+  alla struttura. Nessun risultato protetto o redditività reale dichiarati.
+  Formula/parametri/esiti e limiti in STRATEGY_HANDOFF.md.
+- Nessuna modifica a app.py, UI, backend, configurazione o percorsi d'invio.
+  Nessun collegamento automatico nuovo a runner/selector. Contratto per la
+  successiva integrazione documentato; per peak_equity/counter mancanti
+  occorre contabilità Paper verificata, altrimenti NO_TRADE.
+- Verifica finale macOS/Python3.12.14: 146 nuovi casi, nessun test preesistente
+  modificato o eliminato. Gruppo strategia/rischio/backtest:232 passati,
+  1 warning,0,90s. Backend:172 passati,1 warning,1,39s. Sicurezza:39 passati,
+  1 skip,1 warning,1,98s. Suite completa:747 passati,1 skip,0 falliti,
+  1 warning,32,82s. Guard network=0,credentials=0. Skip Windows Proactor
+  sul Mac; warning websockets.legacy preesistente.
+- compileall -q app.py config src tests: exit0, output vuoto.
+  pip check: No broken requirements found. git diff --check: exit0.
+  Diff e contratti rivisti indipendentemente, problemi rilevati corretti.
+- Windows, broker autentico, performance e timer/browser NON VERIFICATI.
+  Nessun ordine/server/automazione, accesso a credenziali o DB personali.
+  Limiti residui e passi di integrazione generale in STRATEGY_HANDOFF.md.
+## 2026-11-08 — Indicatore stato connessione Paper
+
+- Nel worktree `integration/mie-modifiche-20261106`, il monitor Paper richiede
+  un rerun dell'app quando cambia l'esito di verifica o l'errore, così
+  l'indicatore fuori dal fragment riflette lo stesso aggiornamento.
+- Un flag consumato al rerun salta una sola lettura snapshot, evitando chiamate
+  broker duplicate. Un refresh fallito mantiene verificato=false, rimuove lo
+  snapshot precedente e arresta l'automazione.
+- Aggiunte asserzioni AppTest per stato Verificata/Errore e conteggio snapshot.
+  Su Windows/Python 3.11.9: i due test mirati hanno passato (2/2); dashboard,
+  sicurezza Paper e broker: 57 passati, 0 falliti, 0 saltati, 1 warning in
+  44,85 s. Guard rete/credenziali 0/0. Nessuna modifica a verifica Alpaca,
+  Demo, simulazione o backtest.
+
+## 2026-11-08 — Integrazione release su main
+
+- Nuova worktree `integration/release-20261108` creata dal tip verificato
+  `origin/main` `00898b3b18c4db769175a5a2fec3ddd80962b4a5`. Merge normale
+  `5dfaca0` integra `integration/sync-team-20261108`, incluso il fix Paper
+  `1c7a582` e i sei commit backend, dashboard e strategia. Nessun conflitto.
+- Audit dopo fetch: backend `1a68d5b`, dashboard `432ecdd` e strategia
+  `93fde78` sono antenati dell'integrazione; anche `prova-ai-locale` e
+  `chore/prepare-safe-commits` erano già antenati. I due genitori di
+  `origin/mie-modifiche` (`52d65db` e `2b2d35a`) sono anch'essi nella storia,
+  ma il merge remoto `1afd8fb` non è antenato e contiene risoluzioni storiche
+  da non applicare come snapshot ai file più recenti.
+- Riallineato il solo contratto mancante: `execute_auto_paper_cycle` espone
+  `preview` quando il ciclo sottostante restituisce `dry_run`; gli altri stati
+  e il comportamento di invio restano invariati. Le API temporali, il gate
+  delle barre e le protezioni Windows erano già presenti. Non adottati i pin
+  più vecchi né lo spostamento delle dipendenze condivise fuori da
+  `requirements.txt`. I risultati Windows/Mac storici, inclusi 436, 437 e 438,
+  restano distinti e attribuiti come nelle voci precedenti.
+- Windows/Python 3.11.9: test mirati dashboard/Paper: 102 passati. Suite:
+  **748 passati, 0 falliti, 0 saltati, 1 warning, 87,10 s**. Warning di
+  deprecazione `websockets.legacy`. `compileall` exit 0; `pip check` senza
+  requisiti rotti; guard test: rete 0, credenziali 0.
+- `.env` ignorato e non tracciato; `.env.example` controllato senza mostrare
+  valori, nessun valore credenziale letterale evidente. Nessun ordine, broker,
+  server o automazione avviati. Nessun push o modifica ai worktree esistenti;
+  modifiche non committate nell'altro worktree agente lasciate intatte.
+
+## 2026-11-08 — Riconciliazione modifiche worktree agente
+
+- Stato iniziale verificato: branch agente a `afdebe4`, tre file tracciati
+  modificati tutti unstaged, nessun untracked e nessuna operazione Git in corso.
+  Release iniziale pulita a
+  `09d3c0f`. Creato backup esterno con patch binaria e copie integrali dei tre
+  file; hash delle copie coincidenti e `git apply --check --reverse` riuscito.
+- `src/broker/alpaca_client.py`: il filtro `GetOrdersRequest(status=ALL)` e la
+  gestione errore erano già presenti. La release aggiunge inoltre `limit=500`,
+  valida la risposta e blocca la saturazione; la modifica agente non è stata
+  copiata perché avrebbe rimosso tale limite e i test di truncation.
+- `tests/test_paper_safety.py`: i test di filtro ordini e errore endpoint sono
+  già presenti. Il test dashboard agente riguarda la vecchia UI a letture
+  separate; AppTest nella release copre snapshot riuscito/fallito, rimozione
+  valori precedenti, stato errore e arresto dell'automazione.
+- `app.py`: la release usa un solo snapshot verificato per conto, posizioni e
+  ordini, mostra cash/equity/buying power e invalida lo snapshot e arresta
+  l'automazione su errore. Non importata la schermata agente obsoleta, che
+  effettuava letture broker separate e duplicava il monitor attuale.
+- Verifica ripetuta su Windows/Python 3.11.9: mirati Paper Safety, broker,
+  backend, dashboard e isolamento **175 passati**; suite completa **748
+  passati, 0 falliti, 0 saltati, 1 warning, 81,20 s**. `compileall` exit 0,
+  `pip check` senza requisiti rotti, rete 0/credenziali 0. Warning noto
+  `websockets.legacy`.
+- Nessuna modifica applicativa copiata perché tutte le parti utili risultano
+  già presenti, con protezioni più forti, nella release. Worktree agente e
+  repository principale lasciati intatti; nessun ordine, server, automazione
+  o push.
