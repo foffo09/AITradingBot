@@ -159,6 +159,7 @@ def test_paper_dashboard_displays_only_broker_snapshot_values_and_n_d_reasons(
     monkeypatch.setenv("AI_TRADINGBOT_PAPER_DB_PATH", str(paper_path))
     monkeypatch.delenv("AI_TRADINGBOT_DEMO_DB_PATH", raising=False)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    snapshot_calls = []
 
     class SnapshotBroker:
         paper_client_configured = True
@@ -178,6 +179,7 @@ def test_paper_dashboard_displays_only_broker_snapshot_values_and_n_d_reasons(
             }
 
         def get_paper_snapshot(self):
+            snapshot_calls.append(None)
             return {
                 "account": {
                     "status": "ACTIVE",
@@ -227,6 +229,9 @@ def test_paper_dashboard_displays_only_broker_snapshot_values_and_n_d_reasons(
     assert any("pending: 1" in item.value for item in app.caption)
     assert app.session_state["paper_verified"] is True
     assert app.session_state["paper_automation_active"] is False
+    assert any(item.value == "**Verificata**" for item in app.markdown)
+    assert app.session_state.get("_paper_status_sync_rerun") is None
+    assert len(snapshot_calls) == 1
 
 
 def test_paper_automation_requires_explicit_start_and_stop_is_persisted(

@@ -20,6 +20,12 @@ Stato: implementato. Rimossa la card duplicata dell'equity dalla panoramica; i n
 
 Il riepilogo esterno al monitor non duplica saldo/equity: questi valori restano nel monitor Paper e sono renderizzati soltanto con snapshot verificato. Un errore di refresh non deve lasciare valori precedenti visibili.
 
+L'indicatore principale legge lo stesso stato Streamlit aggiornato dal monitor,
+ma i fragment hanno rerun separati. Quando cambia verifica/errore, il monitor
+richiede un rerun app; un flag monouso evita una seconda chiamata snapshot
+durante tale riallineamento. Un errore invalida lo stato, elimina lo snapshot
+e arresta l'automazione.
+
 I valori mancanti o non finiti restano N/D; elenco posizioni assente e vuoto sono diversi. La variazione equity è `equity - last_equity`, non il P/L realizzato. Nessuna base di capitale mancante viene ricostruita dal ledger. Il valore di mercato non è chiamato capitale investito.
 
 Riesaminare con uno storico broker completo, flussi di cassa e valuta espliciti prima di aggiungere rendimenti cumulativi o metriche multivaluta.

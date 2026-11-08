@@ -393,18 +393,25 @@ def _paper_account_monitor() -> None:
     if not broker.paper_client_configured or settings.trading_mode != "paper":
         st.info("Broker disabilitato in questo contesto offline. Il conto locale è indipendente da Alpaca Paper.")
         return
+    skip_refresh = st.session_state.pop("_paper_status_sync_rerun", False)
+    previous_status = (
+        bool(st.session_state.get("paper_verified", False)),
+        st.session_state.get("paper_snapshot_error"),
+    )
     if not st.session_state.get("paper_verified", False):
         if st.button("Verifica e aggiorna conto Alpaca Paper", key="paper_verify_snapshot"):
-            try:
-                snapshot = broker.get_paper_snapshot()
-                st.session_state.paper_verified = True
-                st.session_state.paper_snapshot = snapshot
-                st.session_state.paper_snapshot_error = None
-            except BrokerConnectionError as exc:
-                st.session_state.paper_verified = False
-                st.session_state.pop("paper_snapshot", None)
-                st.session_state.paper_snapshot_error = str(exc)
-    elif st.session_state.get("paper_verified"):
+            if not skip_refresh:
+                try:
+                    snapshot = broker.get_paper_snapshot()
+                    st.session_state.paper_verified = True
+                    st.session_state.paper_snapshot = snapshot
+                    st.session_state.paper_snapshot_error = None
+                except BrokerConnectionError as exc:
+                    st.session_state.paper_verified = False
+                    st.session_state.paper_automation_active = False
+                    st.session_state.pop("paper_snapshot", None)
+                    st.session_state.paper_snapshot_error = str(exc)
+    elif not skip_refresh:
         try:
             snapshot = broker.get_paper_snapshot()
             st.session_state.paper_snapshot = snapshot
@@ -415,6 +422,13 @@ def _paper_account_monitor() -> None:
             st.session_state.pop("paper_snapshot", None)
             st.session_state.paper_snapshot_error = str(exc)
             st.error("Connessione Paper persa: automazione arrestata.")
+    current_status = (
+        bool(st.session_state.get("paper_verified", False)),
+        st.session_state.get("paper_snapshot_error"),
+    )
+    if current_status != previous_status:
+        st.session_state["_paper_status_sync_rerun"] = True
+        st.rerun(scope="app")
     if st.session_state.get("paper_snapshot_error"):
         st.error(f"Stato Paper non disponibile: {st.session_state.paper_snapshot_error}")
     snapshot = st.session_state.get("paper_snapshot")

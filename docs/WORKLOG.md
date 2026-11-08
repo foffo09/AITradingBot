@@ -261,6 +261,37 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
 - Windows e broker autentici NON ESEGUITI. Nessun ordine, server, automazione,
   file di credenziali o database personale aperto.
 
+## 2026-11-06 — Merge remoto verificato nel worktree Windows
+
+- Integrazione isolata in `integration/mie-modifiche-20261106`, partita da
+  `67f6a47085905b523ff11828866efdb653ccb744`, con `origin/mie-modifiche`
+  `1afd8fb58074209c0a050a8cb62677c8420d362d` come secondo genitore previsto.
+  Il branch backup continua a conservare il commit iniziale.
+- Risoluzioni mantenute entrambe le API temporali, il controllo `as_of`
+  timezone-aware e il contratto `preview` del wrapper. I 21 selettori AppTest
+  sono stati allineati all'etichetta reale. Le dipendenze SDK provider sono
+  collocate nell'extra Omega con i pin locali conservati; nessun pacchetto è
+  stato installato o aggiornato.
+- Conservate le protezioni Windows locali: guard Proactor e relativo test,
+  lettura stdin TUI con thread/queue e test TUI senza skip Windows. Il test
+  Paper Safety mantiene anche le asserzioni diagnostiche locali. Client Alpaca
+  e selettore strategia erano già identici nei due tree: nessuna copia duplicata.
+- Verifiche su Windows/Python 3.11.9, con l'interprete già esistente del
+  progetto: compileall exit 0; `pip check` senza requisiti rotti. I test mirati
+  (calendario, selettore, dashboard/AppTest, automazione Paper, sicurezza,
+  isolamento, TUI e broker) hanno concluso **193 passati, 0 falliti, 0 saltati**.
+  Il primo run ha evidenziato una sola asserzione non aggiornata al risultato
+  `preview`; corretta l'aspettativa preservando `dry_run=True` e zero submit.
+- Suite completa: **438 passati, 0 falliti, 0 saltati, 1 warning, 71,44 s**.
+  Warning preesistente `websockets.legacy` deprecato. Guard finale:
+  rete 0, credenziali 0. `git diff --check` e verifica finale d'indice eseguiti.
+- La prova Mac di 437 test del 30 ottobre resta attribuita esclusivamente a
+  macOS; i precedenti 436 test Windows del 2 novembre restano intatti. Questo
+  run verifica il worktree d'integrazione su Windows, non macOS, UX interattiva
+  completa o broker autentico.
+- Nessun `.env` o segreto aperto, nessuna dipendenza modificata nell'ambiente,
+  nessun server, automazione, ordine o richiesta broker avviati. Nessun push.
+
 ## 2026-11-07 — Persona 2: dashboard e integrazione backend
 
 - Worktree dedicato AITradingBot-dashboard, branch feature/dashboard-ui.
@@ -399,3 +430,16 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
 - Windows, broker autentico, performance e timer/browser NON VERIFICATI.
   Nessun ordine/server/automazione, accesso a credenziali o DB personali.
   Limiti residui e passi di integrazione generale in STRATEGY_HANDOFF.md.
+## 2026-11-08 — Indicatore stato connessione Paper
+
+- Nel worktree `integration/mie-modifiche-20261106`, il monitor Paper richiede
+  un rerun dell'app quando cambia l'esito di verifica o l'errore, così
+  l'indicatore fuori dal fragment riflette lo stesso aggiornamento.
+- Un flag consumato al rerun salta una sola lettura snapshot, evitando chiamate
+  broker duplicate. Un refresh fallito mantiene verificato=false, rimuove lo
+  snapshot precedente e arresta l'automazione.
+- Aggiunte asserzioni AppTest per stato Verificata/Errore e conteggio snapshot.
+  Su Windows/Python 3.11.9: i due test mirati hanno passato (2/2); dashboard,
+  sicurezza Paper e broker: 57 passati, 0 falliti, 0 saltati, 1 warning in
+  44,85 s. Guard rete/credenziali 0/0. Nessuna modifica a verifica Alpaca,
+  Demo, simulazione o backtest.

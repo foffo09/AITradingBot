@@ -280,6 +280,10 @@ def test_paper_dashboard_hides_previous_values_when_refresh_fails(
     assert not any("987,654,322" in metric.value for metric in app.metric), [
         (metric.label, metric.value) for metric in app.metric
     ]
+    assert any(item.value == "**Errore**" for item in app.markdown)
+    assert app.session_state["paper_automation_active"] is False
+    assert app.session_state.get("_paper_status_sync_rerun") is None
+    assert len(snapshot_fetches) == 2
 
 
 def test_asset_availability_includes_fractional_and_quantity_rules(monkeypatch):
