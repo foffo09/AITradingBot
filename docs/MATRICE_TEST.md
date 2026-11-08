@@ -10,7 +10,7 @@ Piattaforme effettivamente provate: macOS (`.venv` Python 3.12.14, esecuzioni st
 | Numeri e formule UI | `test_ui_presentation.py` | Zero/None distinti, stringhe invalide, bool, NaN/infinito, denominatore zero, overflow, aggregati broker | Nessun servizio autentico |
 | Dati e segnale UI | `test_ui_presentation.py`, `test_dashboard_validation.py` | Fresh/stale/future/invalid, SMA, dati insufficienti, fonte sintetica, timestamp della quotazione | Calendario NYSE/intraday verificato con fixture; protocollo autentico e aggregati non supportati esclusi |
 | Grafico | Sei casi parametrizzati in `test_dashboard_validation.py`, test helper | Ledger vuoto/chiuso, pending/fill, prezzi dei marker, SMA/volume/RSI; dati vuoti/incompleti; Demo senza overlay Paper | Resa visuale manuale e responsive NON VERIFICATE |
-| Snapshot Paper | `test_dashboard_validation.py`, `test_paper_safety.py` | Campi broker e N/D; errore aggiornamento elimina anche la vecchia equity | MOCK; nessuna verifica contabile autentica |
+| Snapshot Paper | `test_dashboard_validation.py`, `test_paper_safety.py` | Campi broker e N/D; refresh riuscito mostra `Verificata`; errore mostra `Errore`, rimuove la vecchia equity e arresta l'automazione; rerun app di sincronizzazione senza snapshot duplicato | MOCK; nessuna verifica contabile autentica |
 | Isolamento DB | `test_dashboard_validation.py`, `test_simulation_ledger.py` | Percorso personale rifiutato, modalità diverse, hard link e inizializzazione bloccata prima del broker | File esclusivamente temporanei |
 | Ledger | `test_simulation_ledger.py` | Costi, uscite parziali, duplicati letterali, riavvio, timestamp fuori ordine e dati legacy | Crescita di mesi e stress concorrente prolungato FUTURI |
 | Cambio | `test_fx_rates.py` | Risposte simulate, valori/date invalidi, timeout richiesto, valore/data mantenuti | Fonte live NON interrogata |
@@ -66,3 +66,43 @@ con spazi e #. `test_paper_coordinator.py` conserva i test di esclusione,
 deadline e incertezza e aggiunge errore backend senza autorità.
 Esecuzione effettiva su macOS; Windows NON ESEGUITO. Procedura e limiti in
 [INSTALLAZIONE_WINDOWS](INSTALLAZIONE_WINDOWS.md). Nessun test preesistente rimosso.
+
+## Consolidamento dashboard Persona 2 — 7 novembre 2026
+
+| Test | Casi nuovi |
+| --- | --- |
+| `test_dashboard_metrics.py` | Metriche locali/Paper separate, N/D, quote stale/future/invalide, provenienza, storico esplicito |
+| `test_signal_refresh.py` | Invocazioni ripetute del fragment senza full rerun: nuovo frame, gate scaduto e selezione cambiata; timer browser non provato |
+| `test_ui_charts.py` | Candele/volume/SMA/RSI, range intraday/daily, zoom/pan/reset, uirevision |
+| `test_ui_workspaces.py` | Tre percorsi distinti, alias/hard link rifiutati, percorsi Unicode, DB personale escluso |
+| `test_dashboard_contexts.py` | AppTest: cambi contesto, azzeramento stato, zero SDK offline, saldi e storico separati, snapshot scaduti/futuri |
+| `test_dashboard_validation.py` | Metadati non reinterpretati, acquisizione backend conservata, segnale filtrato sulle barre concluse |
+
+Test con mock e file temporanei. Browser visuale, Windows e broker autentici
+non verificati per questa modifica. Restano i limiti del backend e del
+coordinamento descritti nel relativo handoff.
+
+### Contratti effettivi backend — completamento Persona 2
+
+`test_signal_refresh.py` invoca anche il gate backend reale: quota corrente,
+assente/scaduta/futura, fonti mancanti o contraddittorie, righe sintetiche,
+contratto temporale assente, barre vecchie e refresh fallito. Verifica che
+`operational_data` non diventi True e che gli input restino invariati.
+`test_dashboard_validation.py` verifica conservazione integrale dei metadati
+quote e rifiuto di refresh con fonte/calendario/sessione/contratto discordanti.
+Il contratto aggiornato è [DASHBOARD_HANDOFF](../DASHBOARD_HANDOFF.md).
+
+## Persona 3 — Motore strategie
+
+| Test nuovo | Evidenza |
+| --- | --- |
+| test_trend_strategy | EMA causali, BUY/SELL/WAIT, filtro trend, no segnali ripetuti, prefissi invarianti, RSI/volume diagnostici |
+| test_trade_levels | ATR/struttura, ordinamento livelli, spread, RR insufficiente, dati mancanti/invalidi |
+| test_strategy_risk | Budget stop/costi, cap notional/globali, DD/perdita/counter, cash, long-only, simbolo, nessuna crescita rischio dopo perdita |
+| test_strategy_engine | Gate reale e provenienza, quote, entry, expiry, ID replay/config, snapshot Paper e simbolo, JSON rifiuti, nessun submit |
+| test_strategy_backtest | Next-open, TP/SL/gap/ambiguità, costi, expectancy/R e causalità, SMA default invariata |
+| test_strategy_partitions | Tranche disgiunte, closed_at, barre incomplete escluse, capitale/indicatori indipendenti, nessuna contaminazione futura |
+
+Fonte sintetica controllata, non redditività di mercato. Nessuna verifica
+Windows/broker autentico in questa fase. Contratti e limiti nel
+[STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md); esiti delle suite nel WORKLOG.

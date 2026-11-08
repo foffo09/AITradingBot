@@ -39,17 +39,17 @@ def plot_market_chart(
     )
     fig.add_trace(go.Candlestick(
         x=data["timestamp"], open=data["open"], high=data["high"], low=data["low"], close=data["close"],
-        name=symbol, increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
+        name=symbol, increasing_line_color="#36c99b", decreasing_line_color="#f17c83",
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=signals["timestamp"], y=signals["short_ma"], mode="lines", name=f"MA breve ({short_window})",
-        line={"color": "#ffca28", "width": 1.5},
+        line={"color": "#d5b777", "width": 1.5},
     ), row=1, col=1)
     if latest_quote and finite_number(latest_quote.get("price")) is not None and float(latest_quote["price"]) > 0:
         fig.add_hline(
             y=float(latest_quote["price"]),
             line_dash="dot",
-            line_color="#00e5ff",
+            line_color="#89c5dc",
             annotation_text=(
                 f"Mid quote UTC {latest_quote.get('timestamp', 'n/d')} — non è una candela OHLC"
             ),
@@ -59,14 +59,14 @@ def plot_market_chart(
         )
     fig.add_trace(go.Scatter(
         x=signals["timestamp"], y=signals["long_ma"], mode="lines", name=f"MA lunga ({long_window})",
-        line={"color": "#42a5f5", "width": 1.5},
+        line={"color": "#7fa7d8", "width": 1.5},
     ), row=1, col=1)
 
     buys = signals[signals["signal"] == 1]
     sells = signals[signals["signal"] == -1]
     for points, name, color, marker in (
-        (buys, "Segnale acquisto", "#00c853", "triangle-up"),
-        (sells, "Segnale uscita", "#ff1744", "triangle-down"),
+        (buys, "Segnale acquisto", "#36c99b", "triangle-up"),
+        (sells, "Segnale uscita", "#f17c83", "triangle-down"),
     ):
         if not points.empty:
             fig.add_trace(go.Scatter(
@@ -126,7 +126,7 @@ def plot_market_chart(
             y=[float(fill_price)],
             mode="markers",
             name="Fill Paper confermato",
-            marker={"symbol": "circle", "color": "#00e676", "size": 11},
+            marker={"symbol": "circle", "color": "#36c99b", "size": 11},
             text=[f"Quantità fill: {order.get('filled_qty', 'n/d')}"],
             hovertemplate="Fill Paper %{x}<br>$%{y:.4f}<br>%{text}<extra></extra>",
             showlegend=False,
@@ -134,7 +134,7 @@ def plot_market_chart(
 
     fig.add_trace(go.Bar(
         x=data["timestamp"], y=data["volume"], name="Volume",
-        marker_color="#78909c", opacity=0.65,
+        marker_color="#7293b5", opacity=0.65,
     ), row=2, col=1)
     if show_rsi:
         delta = data["close"].diff()
@@ -145,22 +145,48 @@ def plot_market_chart(
         rsi = rsi.mask((gain == 0) & (loss == 0), 50)
         fig.add_trace(go.Scatter(
             x=data["timestamp"], y=rsi, mode="lines", name="RSI 14",
-            line={"color": "#ce93d8"},
+            line={"color": "#b3a2cf"},
         ), row=3, col=1)
-        fig.add_hline(y=70, line_dash="dot", line_color="#ef5350", row=3, col=1)
-        fig.add_hline(y=30, line_dash="dot", line_color="#26a69a", row=3, col=1)
+        fig.add_hline(y=70, line_dash="dot", line_color="#f17c83", row=3, col=1)
+        fig.add_hline(y=30, line_dash="dot", line_color="#36c99b", row=3, col=1)
         fig.update_yaxes(range=[0, 100], row=3, col=1)
 
+    interval = data.attrs.get("interval", "unknown")
+    intraday = interval in {"1Min", "5Min", "15Min", "1Hour"}
+    range_buttons = (
+        [{"count": 30, "step": "minute", "stepmode": "backward", "label": "30min"},
+         {"count": 1, "step": "day", "stepmode": "backward", "label": "1g"}]
+        if intraday else
+        [{"count": 1, "step": "month", "stepmode": "backward", "label": "1m"},
+         {"count": 3, "step": "month", "stepmode": "backward", "label": "3m"}]
+    )
+    range_buttons.extend([
+        {"count": 1, "step": "month" if intraday else "year", "stepmode": "backward",
+         "label": "1m" if intraday else "1a"},
+        {"step": "all", "label": "Tutto"},
+    ])
+    fig.update_xaxes(showgrid=True, gridcolor="#203149", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="#203149", zeroline=False, automargin=True)
     fig.update_layout(
         title=f"{symbol} · {'SYNTHETIC / DEMO' if data.attrs.get('quality') == 'synthetic' else 'Storico OHLC'}",
         height=760 if show_rsi else 650,
         template="plotly_dark",
-        paper_bgcolor="#0b0f14",
-        plot_bgcolor="#0b0f14",
+        paper_bgcolor="#101c2e",
+        plot_bgcolor="#101c2e",
         font={"color": "#dce6ef"},
         xaxis_rangeslider_visible=False,
         hovermode="x unified",
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
-        margin={"l": 20, "r": 20, "t": 70, "b": 20},
+        hoverlabel={"bgcolor": "#17283f", "bordercolor": "#7293b5", "font": {"color": "#edf3fa"}},
+        dragmode="pan",
+        uirevision=f"market:{symbol.upper()}:{interval}",
+        xaxis_rangeselector={"buttons": range_buttons, "bgcolor": "#203149",
+                             "activecolor": "#42618a", "font": {"color": "#edf3fa"}, "y": 1.06},
+        legend={"orientation": "h", "yanchor": "top", "y": -0.12, "x": 0},
+        margin={"l": 20, "r": 20, "t": 110, "b": 90},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", theme=None, config={
+        "scrollZoom": True,
+        "displayModeBar": True,
+        "displaylogo": False,
+        "modeBarButtons": [["zoom2d", "pan2d", "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d"]],
+    })

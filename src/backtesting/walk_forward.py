@@ -7,7 +7,8 @@ from numbers import Integral
 import numpy as np
 import pandas as pd
 
-from src.backtesting.engine import BacktestEngine, BacktestResult
+from src.backtesting.engine import BacktestEngine, BacktestResult, BacktestStrategy
+from src.strategy.levels import LevelConfig
 
 
 @dataclass
@@ -190,3 +191,83 @@ def walk_forward_evaluate(
         folds=folds,
         excluded_folds=excluded_folds,
     )
+
+
+def evaluate_strategy_partitions(
+    data: pd.DataFrame,
+    *,
+    engine: BacktestEngine,
+    strategy: BacktestStrategy,
+    training_bars: int,
+    validation_bars: int,
+    as_of: object,
+    data_source: str,
+    protection: LevelConfig | None = None,
+    backtest_options: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    """Evaluate one fixed causal strategy on three independent historical slices.
+
+    The caller's feed attests each timezone-aware ``closed_at``; completion is
+    never inferred from a bar-start timestamp or operational freshness rules.
+    Indicators and capital restart within each partition. There is no fitting,
+    parameter selection, shared warm-up or claim of operational eligibility.
+    The supplied strategy must be stateless across generate_signals calls.
+    """
+    from src.data.bar_timing import utc_timestamp
+
+    if not isinstance(data, pd.DataFrame) or data.empty:
+        raise ValueError("Partition data must be a non-empty dataframe.")
+    if not isinstance(data_source, str) or not data_source.strip():
+        raise ValueError("A non-empty data source label is required.")
+    for name, value in (("training_bars", training_bars), ("validation_bars", validation_bars)):
+        if isinstance(value, bool) or not isinstance(value, Integral) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer.")
+    if not {"timestamp", "closed_at"}.issubset(data.columns):
+        raise ValueError("Partition data requires timestamp and closed_at columns.")
+    cutoff = utc_timestamp(as_of, "Partition reference time")
+    timestamps = pd.DatetimeIndex([utc_timestamp(value, "Bar timestamp") for value in data["timestamp"]])
+    closes = pd.DatetimeIndex([utc_timestamp(value, "Bar closed_at") for value in data["closed_at"]])
+    if any(values.has_duplicates or not values.is_monotonic_increasing for values in (timestamps, closes)):
+        raise ValueError("Partition timestamps and closed_at must be strictly increasing and unique.")
+    if (closes <= timestamps).any():
+        raise ValueError("Each closed_at must be after its bar timestamp.")
+    if (closes[:-1] > timestamps[1:]).any():
+        raise ValueError("Historical bar intervals must not overlap.")
+    frame = data.loc[closes <= cutoff].copy()
+    options = dict(backtest_options or {})
+    if {"strategy", "protection"} & options.keys():
+        raise ValueError("Strategy and protection must be supplied explicitly.")
+    long_window = options.get("long_window")
+    if long_window is None:
+        long_window = getattr(strategy, "long_window", engine.settings.long_window)
+    if isinstance(long_window, bool) or not isinstance(long_window, Integral) or long_window < 1:
+        raise ValueError("Strategy long_window must be a positive integer.")
+    warmup = getattr(strategy, "warmup_bars", long_window + 1)
+    if isinstance(warmup, bool) or not isinstance(warmup, Integral) or warmup < 1:
+        raise ValueError("Strategy warmup_bars must be a positive integer.")
+    minimum_bars = max(2, int(warmup) + 1)
+    bounds = (
+        ("training", 0, int(training_bars)),
+        ("validation", int(training_bars), int(training_bars + validation_bars)),
+        ("out_of_sample", int(training_bars + validation_bars), len(frame)),
+    )
+    if any(end - start < minimum_bars for _, start, end in bounds):
+        raise ValueError(f"Each completed partition needs at least {minimum_bars} bars, including warm-up.")
+    results: dict[str, object] = {
+        "data_source": data_source.strip(),
+        "as_of": cutoff.isoformat(),
+        "excluded_incomplete_bars": len(data) - len(frame),
+    }
+    for name, start, end in bounds:
+        partition = frame.iloc[start:end].copy()
+        result = engine.run(partition, strategy=strategy, protection=protection, **options)
+        results[name] = {
+            "start": start,
+            "end": end,
+            "bars": len(partition),
+            "start_timestamp": utc_timestamp(partition.iloc[0]["timestamp"], "Bar timestamp").isoformat(),
+            "end_timestamp": utc_timestamp(partition.iloc[-1]["timestamp"], "Bar timestamp").isoformat(),
+            "last_closed_at": utc_timestamp(partition.iloc[-1]["closed_at"], "Bar closed_at").isoformat(),
+            "metrics": result.to_dict(),
+        }
+    return results

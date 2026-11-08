@@ -199,3 +199,24 @@ Le verifiche locali osservate su Windows 10/Python 3.11.9 sono: compilazione riu
 **Stato:** merge non committato, nessun push, `main` invariato. La compatibilità Windows non è verificata; la suite completa non è verde, quindi non si pubblica.
 
 **Prossimo passo:** riprendere dal checkout atteso o confermare quello corretto; integrare `origin/main` a `2b2d35a`, eseguire la suite integrale nel checkout Mac richiesto e una prova Windows completa mantenendo attivo il guard. Commit del merge e push ordinario a `origin/mie-modifiche` solo dopo esiti positivi effettivi.
+
+### Consegna dashboard Persona 2 — 7 novembre 2026
+
+Implementati selettore a tre contesti, isolamento della sessione e dei ledger,
+schede mercato/rischio con N/D e grafici navigabili. Backend 1a68d5b integrato
+senza modificarne i moduli. [UI_HANDOFF](../UI_HANDOFF.md) descrive i contratti.
+Restano da provare su Windows e browser: avvio, passaggio fra contesti, leggibilità
+su schermi stretti e interazione zoom/pan. Snapshot REST sequenziali e storico
+ordini limitato non equivalgono a riconciliazione contabile completa; nessuna
+nuova autorizzazione all'automazione è introdotta.
+
+### Persona 3 — Engine e contratto di integrazione
+
+Aggiunti segnali EMA/SMA puri, livelli ATR/struttura, budget stop/costi e gate
+backend condiviso; JSON per dashboard, expiry e ID stabili. Simulatore esistente
+esteso opzionalmente a TP/SL e tre tranche storiche disgiunte. Nessun collegamento
+automatico al runner/UI, ordine autentico o modifica del backend. Restano:
+consumer UI concordato, persistenza ID consumati, contabilità Paper verificata
+per peak/counter, rivalidazione esecutiva e prove Windows. Il replay sintetico
+non valida performance; quello protetto si blocca sui livelli non idonei.
+Vedere STRATEGY_HANDOFF.md prima dell'integrazione generale.

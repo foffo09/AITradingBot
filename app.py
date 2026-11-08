@@ -21,9 +21,13 @@ from src.data.fx_rates import fetch_eur_usd_rate
 from src.data.instruments import CRYPTO_SYMBOLS, EQUITY_SYMBOLS, INSTRUMENTS
 from src.data.market_data import generate_synthetic_market_data
 from src.data.bar_timing import BarTimingError, select_completed_bars
-from src.simulation.ledger import SimulationLedger, resolve_simulation_database_path
+from src.simulation.ledger import SimulationLedger
 from src.strategy.moving_average import MovingAverageStrategy
 from src.ui.charts import plot_market_chart as _plot_market_chart
+from src.ui.workspaces import WORKSPACES, workspace_database
+from src.ui.dashboard_style import CSS as DASHBOARD_CSS
+from src.ui.dashboard_panels import account_extras, risk_summary, market_cards
+from src.ui.dashboard_metrics import dashboard_summary, market_summary
 from src.ui.presentation import (data_status, finite_number, freshness_limit as _freshness_limit,
                                  money as _money_or_unavailable, paper_metrics, signal_view, unique_orders)
 from src.trading.paper_automation import (
@@ -34,75 +38,42 @@ from src.trading.paper_automation import (
 
 
 st.set_page_config(page_title="AI Trading Bot | Paper & Demo", page_icon="📈", layout="wide")
-st.markdown(
-    """
-    <style>
-    :root { color-scheme: dark; }
-    .stApp { background: #0b0f14; color: #e6edf3; }
-    [data-testid="stHeader"] { background: rgba(11, 15, 20, 0.92); }
-    [data-testid="stSidebar"] { background: #111820; border-right: 1px solid #263342; }
-    [data-testid="stMetric"] {
-        background: #121a23; border: 1px solid #263342; border-radius: 10px;
-        padding: 12px 14px;
-    }
-    [data-testid="stTabs"] button[role="tab"] { color: #b7c5d3; }
-    [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-        color: #69b7ff; border-bottom-color: #2785d8;
-    }
-    [data-testid="stDataFrame"], [data-testid="stPlotlyChart"] {
-        border: 1px solid #263342; border-radius: 8px; overflow: hidden;
-    }
-    div[data-testid="stAlert"] { border-radius: 8px; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
 
 ROOT = Path(__file__).resolve().parent
-settings = AppSettings.from_env()
+configured_settings = AppSettings.from_env()
+with st.sidebar:
+    st.caption("AMBIENTE DI LAVORO")
+    workspace_label = st.selectbox(
+        "Contesto", list(WORKSPACES),
+        index=2 if configured_settings.trading_mode == "paper" else 0,
+        key="ui_workspace",
+        help="Conti e storico distinti. Demo e Simulazione non collegano Alpaca.",
+    )
+workspace = WORKSPACES[workspace_label]
+previous_workspace = st.session_state.get("_workspace_previous")
+if previous_workspace != workspace:
+    for state_key in list(st.session_state):
+        if state_key not in {"ui_workspace", "_workspace_previous"}:
+            del st.session_state[state_key]
+    st.session_state.paper_automation_active = False
+st.session_state._workspace_previous = workspace
+if workspace == "paper":
+    if configured_settings.trading_mode != "paper":
+        st.session_state.paper_automation_active = False
+        st.session_state.pop("paper_snapshot", None)
+        st.warning("Alpaca Paper non configurato. Avvia il launcher Paper con credenziali nell'ambiente; nessun conto è stato aperto.")
+        st.stop()
+    settings = configured_settings
+else:
+    settings = replace(configured_settings, trading_mode="demo", auto_trade_enabled=False,
+                       alpaca_api_key=None, alpaca_secret_key=None)
 DEMO_DB_PATH_ENV = "AI_TRADINGBOT_DEMO_DB_PATH"
 PAPER_DB_PATH_ENV = "AI_TRADINGBOT_PAPER_DB_PATH"
-if settings.trading_mode == "demo" and DEMO_DB_PATH_ENV not in os.environ:
-    if PAPER_DB_PATH_ENV in os.environ:
-        raise RuntimeError(
-            "Paper configuration was not available and runtime mode fell back to demo. "
-            "Check local Paper setup or start the isolated demo launcher; no Paper/personal database was opened."
-        )
-    raise RuntimeError(
-        "Demo mode requires an isolated database path. Start the app with .\\avvia_demo.ps1 "
-        "or set AI_TRADINGBOT_DEMO_DB_PATH to an absolute path outside the personal ledger."
-    )
-if settings.trading_mode == "demo":
-    DB_PATH = resolve_simulation_database_path(ROOT, os.environ[DEMO_DB_PATH_ENV])
-elif settings.trading_mode == "paper":
-    if PAPER_DB_PATH_ENV in os.environ:
-        configured_paper_path = os.environ[PAPER_DB_PATH_ENV]
-    else:
-        local_app_data = os.getenv("LOCALAPPDATA")
-        if not local_app_data:
-            raise RuntimeError(
-                "Paper mode requires AI_TRADINGBOT_PAPER_DB_PATH or LOCALAPPDATA "
-                "to keep its database separate from the personal ledger."
-            )
-        configured_paper_path = str(
-            Path(local_app_data) / "AITradingBot" / "paper" / "simulation.sqlite3"
-        )
-    DB_PATH = resolve_simulation_database_path(ROOT, configured_paper_path)
-else:
-    raise RuntimeError("Unsupported trading mode; start in demo or paper mode.")
-
-other_mode = "paper" if settings.trading_mode == "demo" else "demo"
-other_database_path = os.environ.get(PAPER_DB_PATH_ENV if other_mode == "paper" else DEMO_DB_PATH_ENV)
-if not other_database_path and os.getenv("LOCALAPPDATA"):
-    other_database_path = str(
-        Path(os.environ["LOCALAPPDATA"]) / "AITradingBot" / other_mode / "simulation.sqlite3"
-    )
-if other_database_path:
-    resolved_other_path = resolve_simulation_database_path(ROOT, other_database_path)
-    if DB_PATH == resolved_other_path or (
-        DB_PATH.exists() and resolved_other_path.exists() and DB_PATH.samefile(resolved_other_path)
-    ):
-        raise RuntimeError("Paper and demo modes must use separate database files.")
+if workspace == "demo" and DEMO_DB_PATH_ENV not in os.environ and PAPER_DB_PATH_ENV in os.environ:
+    raise RuntimeError("Paper configuration was not available and runtime mode fell back to demo. "
+                       "Check local Paper setup or start the isolated demo launcher; no Paper/personal database was opened.")
+DB_PATH = workspace_database(ROOT, workspace, os.environ)
 
 @st.cache_resource(show_spinner=False)
 def _runtime_resources(session_id: str, database_path: str, _settings: AppSettings):
@@ -170,8 +141,8 @@ def _load_data(symbol: str, interval: str, period: str, demo: bool) -> tuple[pd.
     )
     if result is None or result.empty:
         raise BrokerConnectionError("Nessuna barra disponibile per la selezione corrente.")
-    result.attrs["quality"] = "real"
-    result.attrs["interval"] = interval
+    if result.attrs.get("quality") != "real" or result.attrs.get("interval") != interval:
+        raise BrokerConnectionError("Provenienza o intervallo del backend non verificati; nessun dato sostitutivo.")
     return result, str(result.attrs.get("source", "Alpaca market data"))
 
 
@@ -186,6 +157,20 @@ def _model_dict(item: object) -> dict:
 
 
 def _show_paper_snapshot(snapshot: dict) -> None:
+    try:
+        acquired = pd.Timestamp(snapshot.get("updated_at"))
+        if pd.isna(acquired) or acquired.tzinfo is None:
+            raise ValueError("Missing timezone")
+        age = (pd.Timestamp.now(tz="UTC") - acquired.tz_convert("UTC")).total_seconds()
+        if not 0 <= age <= 45:
+            raise ValueError("Snapshot is not current")
+    except (ValueError, TypeError, OverflowError):
+        st.session_state.paper_verified = False
+        st.session_state.paper_automation_active = False
+        st.session_state.pop("paper_snapshot", None)
+        st.session_state.paper_snapshot_error = "Snapshot assente, scaduto o con timestamp non verificabile. Valori correnti: N/D."
+        st.warning(st.session_state.paper_snapshot_error)
+        return
     account = snapshot.get("account") or {}
     account = _model_dict(account)
 
@@ -197,6 +182,14 @@ def _show_paper_snapshot(snapshot: dict) -> None:
     daily_change, daily_percent = values["daily_change"], values["daily_percent"]
     market_value, unrealized = values["market_value"], values["unrealized"]
     unavailable_message = "N/D — il broker non ha fornito un valore valido."
+    summary_view = dashboard_summary("paper", account=account,
+                                     positions=positions if raw_positions is not None else None)
+    account_extras(summary_view, "Paper")
+    risk_summary(summary_view, "Paper", trade_limit=max_trade_fraction,
+                 exposure_limit=max_exposure_fraction, daily_loss_limit=daily_loss_fraction,
+                 order_limit=paper_max_daily_orders, offline=False,
+                 coordinator_available=getattr(broker, "paper_coordinator", None) is not None)
+
 
     account_metrics = st.columns(3)
     account_metrics[0].metric(
@@ -325,7 +318,7 @@ def _show_paper_snapshot(snapshot: dict) -> None:
                             else "N/D (campo non valido)"
                         )
                 position_rows.append(row)
-            st.dataframe(pd.DataFrame(position_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(position_rows), width="stretch", hide_index=True)
         else:
             st.caption("Nessuna posizione aperta." if raw_positions is not None else "Posizioni N/D: elenco non fornito dal broker.")
     with orders_col:
@@ -375,7 +368,9 @@ def _show_paper_snapshot(snapshot: dict) -> None:
                 }
                 for order in selected_orders
             ]
-            st.dataframe(pd.DataFrame(order_rows), use_container_width=True, hide_index=True)
+            for row in order_rows:
+                row["Commissioni (USD)"] = "N/D — non fornite dal broker"
+            st.dataframe(pd.DataFrame(order_rows), width="stretch", hide_index=True)
             st.caption(
                 f"Ordini aperti/pending: {len(pending)} · mostrati anche gli ultimi "
                 f"{max(0, len(selected_orders) - len(pending))} ordini recenti."
@@ -387,7 +382,7 @@ def _show_paper_snapshot(snapshot: dict) -> None:
                 st.markdown("**Esecuzioni confermate dal broker (anche parziali)**")
                 st.dataframe(pd.DataFrame([{name: order.get(name, "N/D") for name in
                     ("symbol", "filled_qty", "filled_avg_price", "filled_at")} for order in confirmed]),
-                    use_container_width=True, hide_index=True)
+                    width="stretch", hide_index=True)
         else:
             st.caption("Nessun ordine restituito dall'account.")
 
@@ -396,20 +391,27 @@ def _show_paper_snapshot(snapshot: dict) -> None:
 def _paper_account_monitor() -> None:
     st.subheader("Monitoraggio conto Alpaca Paper")
     if not broker.paper_client_configured or settings.trading_mode != "paper":
-        st.info("Account Paper non configurato. Il ledger locale rimane disponibile in modalità demo.")
+        st.info("Broker disabilitato in questo contesto offline. Il conto locale è indipendente da Alpaca Paper.")
         return
+    skip_refresh = st.session_state.pop("_paper_status_sync_rerun", False)
+    previous_status = (
+        bool(st.session_state.get("paper_verified", False)),
+        st.session_state.get("paper_snapshot_error"),
+    )
     if not st.session_state.get("paper_verified", False):
         if st.button("Verifica e aggiorna conto Alpaca Paper", key="paper_verify_snapshot"):
-            try:
-                snapshot = broker.get_paper_snapshot()
-                st.session_state.paper_verified = True
-                st.session_state.paper_snapshot = snapshot
-                st.session_state.paper_snapshot_error = None
-            except BrokerConnectionError as exc:
-                st.session_state.paper_verified = False
-                st.session_state.pop("paper_snapshot", None)
-                st.session_state.paper_snapshot_error = str(exc)
-    elif st.session_state.get("paper_verified"):
+            if not skip_refresh:
+                try:
+                    snapshot = broker.get_paper_snapshot()
+                    st.session_state.paper_verified = True
+                    st.session_state.paper_snapshot = snapshot
+                    st.session_state.paper_snapshot_error = None
+                except BrokerConnectionError as exc:
+                    st.session_state.paper_verified = False
+                    st.session_state.paper_automation_active = False
+                    st.session_state.pop("paper_snapshot", None)
+                    st.session_state.paper_snapshot_error = str(exc)
+    elif not skip_refresh:
         try:
             snapshot = broker.get_paper_snapshot()
             st.session_state.paper_snapshot = snapshot
@@ -420,6 +422,13 @@ def _paper_account_monitor() -> None:
             st.session_state.pop("paper_snapshot", None)
             st.session_state.paper_snapshot_error = str(exc)
             st.error("Connessione Paper persa: automazione arrestata.")
+    current_status = (
+        bool(st.session_state.get("paper_verified", False)),
+        st.session_state.get("paper_snapshot_error"),
+    )
+    if current_status != previous_status:
+        st.session_state["_paper_status_sync_rerun"] = True
+        st.rerun(scope="app")
     if st.session_state.get("paper_snapshot_error"):
         st.error(f"Stato Paper non disponibile: {st.session_state.paper_snapshot_error}")
     snapshot = st.session_state.get("paper_snapshot")
@@ -436,6 +445,74 @@ def _paper_account_monitor() -> None:
         "Aggiornamento account, posizioni e ordini ogni 15 secondi mentre la dashboard è aperta. "
         "Se la richiesta fallisce, lo snapshot viene nascosto finché la connessione non viene riverificata."
     )
+
+
+@st.fragment(run_every="15s")
+def _signal_monitor(request, short_window, long_window) -> None:
+    if st.session_state.get("market_request") != request or "market_frame" not in st.session_state:
+        st.info("Segnale non disponibile per i dati correnti. Seleziona la fonte e premi Carica dati / applica selezione.")
+        return
+    data = st.session_state.market_frame.copy()
+    quality = st.session_state.market_quality
+    interval = st.session_state.market_interval
+    try:
+        strategy = MovingAverageStrategy(short_window, long_window)
+        signals = strategy.generate_signals(data)
+    except ValueError as exc:
+        st.warning(f"Segnale non disponibile: {exc}")
+        return
+    decision_time = datetime.now(timezone.utc)
+    timing_error = None
+    if quality == "real":
+        try:
+            eligible = select_completed_bars(data, st.session_state.market_symbol, decision_time)
+            if eligible.empty:
+                raise BarTimingError("Nessuna barra operativa conclusa disponibile.")
+            signals = strategy.generate_signals(eligible)
+        except BarTimingError as exc:
+            timing_error = str(exc)
+    if quality == "real" and timing_error is None:
+        expected_source = ("Dati storici reali Alpaca Crypto" if "/" in st.session_state.market_symbol
+                           else "Dati storici reali Alpaca IEX (copertura venue parziale)")
+        if (data.attrs.get("source") != expected_source
+                or ("data_quality" in data and not data["data_quality"].eq(expected_source).all())):
+            timing_error = "Fonte storica assente o contraddittoria rispetto al contratto backend."
+    if quality == "real" and timing_error is None and st.session_state.get("market_incremental_error"):
+        timing_error = "Aggiornamento dello storico non verificato; analisi storica soltanto."
+    quote_state = market_summary(quote=st.session_state.get("market_quote"),
+                                 quality=quality, now=decision_time)["state"]
+    if quality == "real" and quote_state != "fresh" and timing_error is None:
+        timing_error = "Quotazione corrente assente, scaduta o non verificabile; analisi storica soltanto."
+    latest_signal_summary = signal_view(
+        signals, st.session_state.market_symbol, interval, quality,
+        int(short_window), int(long_window),
+    )
+    if latest_signal_summary["state"] == "DATI INSUFFICIENTI":
+        st.warning("Dati insufficienti per calcolare le due medie mobili.")
+    if timing_error:
+        latest_signal_summary.update(state="ANALISI STORICA — NON OPERATIVA", reason=timing_error)
+    latest_signal_summary["operational_data"] = quality == "real" and timing_error is None
+    latest_signal_summary["quote_state"] = quote_state
+    view = latest_signal_summary
+    st.markdown(f"**{view['state']}** · {view['symbol']} · {view['interval']} · {view['parameters']}")
+    st.caption(f"Motivazione: {view['reason']}")
+    st.caption("Dati: barre ammesse dal gate backend e quota corrente verificata. Non è un permesso di invio."
+               if view["operational_data"] else
+               "Dati: analisi storica/backtest o dimostrazione sintetica; idoneità operativa non verificata.")
+    if view["quality"] == "synthetic":
+        st.warning("SYNTHETIC / DEMO — segnale dimostrativo, escluso dall'automazione Paper.")
+    signal_columns = st.columns(3)
+    signal_columns[0].metric("Close barra di riferimento", _money_or_unavailable(view["price"]),
+                            help="Close storico della barra usata per il segnale; non è un fill né una quotazione corrente.")
+    signal_columns[1].metric("SMA breve", _money_or_unavailable(view["short_ma"]))
+    signal_columns[2].metric("SMA lunga", _money_or_unavailable(view["long_ma"]))
+    st.caption(f"Timestamp barra UTC: {view['timestamp']}. Le barre reali idonee sono filtrate dal calendario backend; un'analisi non operativa può includere barre in formazione. I controlli dell'automazione sono separati.")
+    st.info("Un segnale tecnico non autorizza un ordine. Per una decisione operativa servono account, barra completata, quotazione e rischio verificati.")
+    with st.expander("Dettagli del segnale e proposta teorica"):
+        st.json(view)
+        st.write("Ingresso di riferimento: close della barra, non prezzo garantito. Stop-loss, take-profit, rischio monetario e rapporto rischio/rendimento: N/D; la strategia SMA non definisce questi livelli.")
+        st.write("Quantità operativa: N/D finché non viene completata una valutazione del conto e del rischio. Un'eventuale anteprima DRY-RUN non invia ordini.")
+        st.caption("Le stime non garantiscono esecuzione: spread, slippage, gap e liquidità possono cambiare il risultato.")
 
 
 @st.fragment(run_every="15s")
@@ -474,13 +551,18 @@ def _live_quote_monitor(
                     start_time=(last_timestamp - timedelta(seconds=interval_seconds)).to_pydatetime(),
                 )
                 if not incremental.empty:
+                    if incremental.attrs.get("quality") != "real" or incremental.attrs.get("interval") != interval:
+                        raise BrokerConnectionError("Metadati del refresh non verificati; storico mantenuto.")
+                    origin_keys = ("source", "bar_time_contract", "bar_calendar", "session_scope")
+                    if any(incremental.attrs.get(key) != current_data.attrs.get(key) for key in origin_keys):
+                        raise BrokerConnectionError("Metadati di origine del refresh discordanti; storico mantenuto.")
                     combined = pd.concat([current_data, incremental], ignore_index=True)
                     combined = combined.drop_duplicates("timestamp", keep="last")
                     combined = combined.sort_values("timestamp").tail(10_000).reset_index(drop=True)
                     combined.attrs.update(current_data.attrs)
                     combined.attrs["quality"] = "real"
                     combined.attrs["interval"] = interval
-                    combined.attrs["fetched_at"] = datetime.now(timezone.utc).isoformat()
+                    combined.attrs["fetched_at"] = incremental.attrs.get("fetched_at")
                     st.session_state.market_frame = combined
                     current_data = combined
                 st.session_state.market_incremental_error = None
@@ -517,6 +599,10 @@ def _live_quote_monitor(
             )
             st.warning(f"Ultima quotazione scaduta o con timestamp futuro ({age.total_seconds() / 60:.1f} min).")
         else:
+            quote_view = market_summary(quote=quote, quality="real")
+            if quote_view["state"] != "fresh":
+                raise BrokerConnectionError("Bid/ask, fonte o timestamp della quotazione non verificati.")
+            quote = dict(quote, price=quote_view["price"], bid=quote_view["bid"], ask=quote_view["ask"])
             st.session_state.market_quote = quote
             st.session_state.market_quote_error = None
             local_account = ledger.account()
@@ -527,15 +613,12 @@ def _live_quote_monitor(
                     str(quote["timestamp"]),
                     str(quote["source"]),
                 )
-            columns = st.columns(3)
-            columns[0].metric("Quotazione aggiornata", f"${float(quote['price']):,.4f}")
-            columns[1].metric("Timestamp quotazione UTC", str(quote["timestamp"]))
-            columns[2].metric("Fonte feed", str(quote["source"]))
         latest_data = (
             current_data.copy()
             if isinstance(current_data, pd.DataFrame)
             else data.copy()
         )
+        market_cards(quote, latest_data, "real", symbol)
         st.caption(
             f"Ultima barra OHLC disponibile: {_latest_timestamp(latest_data)} · "
             f"fonte: {st.session_state.get('market_source', 'n/d')}."
@@ -559,6 +642,7 @@ def _live_quote_monitor(
         st.session_state.market_quote_error = str(exc)
         st.warning(f"Feed quotazioni non disponibile; grafico storico invariato: {exc}")
         fallback_data = st.session_state.get("market_frame", data)
+        market_cards(None, fallback_data, "real", symbol)
         signals = MovingAverageStrategy(short_window, long_window).generate_signals(fallback_data)
         snapshot = st.session_state.get("paper_snapshot") or {}
         _plot_market_chart(
@@ -619,7 +703,7 @@ def _paper_automation_panel(
             st.caption("Ultimi 25 eventi locali. Timeframe, versione strategia e fonte non registrati nei vecchi eventi restano N/D; non vengono ricostruiti dai parametri correnti.")
             st.dataframe(
                 frame,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
             st.download_button("Scarica decisioni CSV (eventi mostrati)", frame.to_csv(index=False),
@@ -861,7 +945,7 @@ def _show_simulation_account(spread_bps: float) -> None:
                 xaxis_title="Data",
                 yaxis_title="USD",
             ),
-            use_container_width=True,
+            width="stretch",
         )
         curve_frame = pd.DataFrame(summary["equity_curve"])
         if len(curve_frame) > 1:
@@ -910,7 +994,7 @@ def _show_simulation_account(spread_bps: float) -> None:
                         xaxis_title="Mese",
                         yaxis_title="Variazione equity %",
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
                 st.caption(
                     "Rendimento mensile calcolato sulle equity mensili salvate; il mese corrente è "
@@ -932,7 +1016,7 @@ def _show_simulation_account(spread_bps: float) -> None:
                     title="Drawdown — ledger locale",
                     yaxis_title="Drawdown %",
                 ),
-                use_container_width=True,
+                width="stretch",
             )
     closed_history = [
         item for item in ledger.history()
@@ -960,7 +1044,7 @@ def _show_simulation_account(spread_bps: float) -> None:
                     xaxis_title="Mese",
                     yaxis_title="USD",
                 ),
-                use_container_width=True,
+                width="stretch",
             )
         with chart_columns[1]:
             st.plotly_chart(
@@ -976,7 +1060,7 @@ def _show_simulation_account(spread_bps: float) -> None:
                     xaxis_title="P/L netto USD",
                     yaxis_title="Numero chiusure",
                 ),
-                use_container_width=True,
+                width="stretch",
             )
     st.caption("Profit factor = somma dei profitti netti realizzati / valore assoluto delle perdite nette realizzate.")
 
@@ -987,7 +1071,7 @@ def _show_simulation_account(spread_bps: float) -> None:
             "symbol": "Strumento", "quantity": "Quantità", "average_entry": "Prezzo medio ingresso",
             "market_price": "Ultimo prezzo", "mark_timestamp": "Timestamp dato", "mark_source": "Fonte",
         })
-        st.dataframe(pos_frame, use_container_width=True, hide_index=True)
+        st.dataframe(pos_frame, width="stretch", hide_index=True)
     else:
         st.info("Nessuna posizione aperta.")
 
@@ -995,44 +1079,7 @@ def _show_simulation_account(spread_bps: float) -> None:
 st.title("AI Trading Bot")
 st.caption(
     "Monitora il conto, l'andamento del mercato e le attività recenti. "
-    "Demo locale, backtest e Alpaca Paper restano contesti separati."
-)
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background: #0b1118;
-    }
-    [data-testid="stMetric"] {
-        background: #111a24;
-        border: 1px solid #263442;
-        border-radius: 10px;
-        padding: 0.8rem 1rem;
-    }
-    [data-testid="stPlotlyChart"] {
-        background: #0b0f14;
-        border: 1px solid #263442;
-        border-radius: 12px;
-        padding: 0.35rem;
-    }
-    [data-testid="stExpander"] {
-        border: 1px solid #263442;
-        border-radius: 10px;
-    }
-    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"] {
-        color: #35c98b;
-    }
-    [data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"] {
-        color: #f06468;
-    }
-    @media (max-width: 720px) {
-        [data-testid="stMetric"] {
-            padding: 0.55rem 0.65rem;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+    "Demo · Simulazione offline · Alpaca Paper — capitale, posizioni e storico distinti."
 )
 st.session_state.setdefault("paper_automation_active", False)
 simulation_notice = st.session_state.pop("simulation_notice", None)
@@ -1097,11 +1144,11 @@ with st.container():
         if st.session_state.get("paper_snapshot_error")
         else "Non verificata"
         if settings.trading_mode == "paper"
-        else "N/D · modalità Demo"
+        else "Disabilitato · contesto offline"
     )
     with mode_status[0]:
         st.caption("Modalità")
-        st.markdown(f"**{'Alpaca Paper' if settings.trading_mode == 'paper' else 'Demo locale'}**")
+        st.markdown(f"**{workspace_label}**")
     with mode_status[1]:
         st.caption("Connessione account")
         st.markdown(f"**{connection_status}**")
@@ -1117,8 +1164,8 @@ with st.container():
         st.caption("Aggiornamento dati")
         st.markdown(f"**{last_market_update if last_market_update is not None else 'N/D'}**")
     st.caption(
-        "Per cambiare modalità riavvia con avvia_demo.ps1 o avvia_paper.ps1; "
-        "Demo locale, simulazione e Alpaca Paper non condividono il capitale."
+        "Il contesto selezionato usa un conto e uno storico dedicati. Demo e Simulazione "
+        "sono offline; Alpaca Paper richiede il launcher e una verifica esplicita."
     )
     if settings.trading_mode == "paper":
         st.caption(
@@ -1156,7 +1203,7 @@ with st.container():
                 if initial_capital > 0 else None
             )
             local_metrics = st.columns(4)
-            local_metrics[0].metric("Equity Demo", f"${overview['current_capital']:,.2f}")
+            local_metrics[0].metric(f"Equity {workspace_label}", f"${overview['current_capital']:,.2f}")
             local_metrics[1].metric(
                 "P/L realizzato oggi",
                 f"${realized_today:+,.2f}",
@@ -1177,8 +1224,17 @@ with st.container():
                 f"Capitale iniziale: ${initial_capital:,.2f} · "
                 f"Saldo disponibile: ${overview['cash']:,.2f}"
             )
+    if workspace != "paper":
+        local_view = dashboard_summary(workspace, account=local_account,
+            overview=ledger.summary(float(commission_bps), float(slippage_bps), float(spread_bps)) if local_account else None,
+            positions=ledger.positions() if local_account else None,
+            history=ledger.history() if local_account else None)
+        account_extras(local_view, workspace_label)
+        risk_summary(local_view, workspace_label, trade_limit=max_trade_fraction,
+                     exposure_limit=max_exposure_fraction, daily_loss_limit=daily_loss_fraction,
+                     order_limit=paper_max_daily_orders, offline=True)
     st.caption(
-        "Il win rate considera soltanto operazioni chiuse; il P/L odierno Demo è realizzato. "
+        "Il win rate considera soltanto operazioni chiuse; il P/L odierno locale è realizzato. "
         "Equity e risultati di backtest sono metriche distinte."
     )
     if settings.trading_mode == "demo" and local_account is not None and closed_count < 30:
@@ -1194,11 +1250,11 @@ with st.container():
         market_group = st.selectbox("Categoria", categories, key="dashboard_market_group")
     group_symbols = EQUITY_SYMBOLS if market_group == "ETF e azioni" else CRYPTO_SYMBOLS
     demo_mode = st.checkbox(
-        "Usa serie sintetica demo", value=False,
+        "Usa serie sintetica demo", value=(workspace != "paper"), disabled=(workspace == "paper"),
         help="Scelta esplicita: prezzi generati per provare l'app, non dati di mercato.",
     )
     if settings.trading_mode == "demo":
-        st.caption("Per iniziare senza broker: attiva la serie sintetica, seleziona 1Day e premi Aggiorna dati. Il conto virtuale si crea nella scheda Simulazione.")
+        st.caption("Per iniziare senza broker: attiva la serie sintetica, seleziona 1Day e premi Carica dati / applica selezione. Il conto virtuale si crea nella scheda Simulazione.")
     with st.expander("Impostazioni avanzate"):
         query = st.text_input("Cerca per ticker o nome")
         show_rsi = st.checkbox("Mostra RSI (14)", value=False)
@@ -1392,7 +1448,6 @@ with st.container():
             current_data,
             automation_settings,
         )
-    latest_signal_summary = None
     if not market_data_current:
         if st.session_state.get("market_error_request") == current_market_request:
             st.warning(f"Dati non disponibili per la selezione corrente: {st.session_state.market_load_error}")
@@ -1472,12 +1527,8 @@ with st.container():
             if quality == "real":
                 data = st.session_state.get("market_frame", data).copy()
                 signals = strategy.generate_signals(data)
-            latest_signal_summary = signal_view(
-                signals, st.session_state.market_symbol, interval, quality,
-                int(short_window), int(long_window),
-            )
-            if latest_signal_summary["state"] == "DATI INSUFFICIENTI":
-                st.warning("Dati insufficienti per calcolare le due medie mobili.")
+            if quality != "real":
+                market_cards(None, data, quality, st.session_state.market_symbol)
             if quality != "real":
                 _plot_market_chart(
                     data, signals, st.session_state.market_symbol,
@@ -1492,26 +1543,7 @@ with st.container():
 
     st.divider()
     st.subheader("Segnale tecnico (SMA crossover)")
-    if latest_signal_summary is None:
-        st.info("Segnale non disponibile per i dati correnti. Seleziona la fonte e premi Aggiorna dati.")
-    else:
-        view = latest_signal_summary
-        st.markdown(f"**{view['state']}** · {view['symbol']} · {view['interval']} · {view['parameters']}")
-        st.caption(f"Motivazione: {view['reason']}")
-        if view["quality"] == "synthetic":
-            st.warning("SYNTHETIC / DEMO — segnale dimostrativo, escluso dall'automazione Paper.")
-        signal_columns = st.columns(3)
-        signal_columns[0].metric("Close barra di riferimento", _money_or_unavailable(view["price"]),
-                                help="Close storico della barra usata per il segnale; non è un fill né una quotazione corrente.")
-        signal_columns[1].metric("SMA breve", _money_or_unavailable(view["short_ma"]))
-        signal_columns[2].metric("SMA lunga", _money_or_unavailable(view["long_ma"]))
-        st.caption(f"Timestamp barra UTC: {view['timestamp']}. La barra mostrata può essere in formazione; i controlli dell'automazione sono separati.")
-        st.info("Un segnale tecnico non autorizza un ordine. Per una decisione operativa servono account, barra completata, quotazione e rischio verificati.")
-        with st.expander("Dettagli del segnale e proposta teorica"):
-            st.json(view)
-            st.write("Ingresso di riferimento: close della barra, non prezzo garantito. Stop-loss, take-profit, rischio monetario e rapporto rischio/rendimento: N/D; la strategia SMA non definisce questi livelli.")
-            st.write("Quantità operativa: N/D finché non viene completata una valutazione del conto e del rischio. Un'eventuale anteprima DRY-RUN non invia ordini.")
-            st.caption("Le stime non garantiscono esecuzione: spread, slippage, gap e liquidità possono cambiare il risultato.")
+    _signal_monitor(current_market_request, int(short_window), int(long_window))
 
     if st.session_state.get("paper_snapshot_error"):
         st.error(f"Alpaca Paper: {st.session_state.paper_snapshot_error}")
@@ -1544,7 +1576,7 @@ with st.container():
             ]
             st.dataframe(
                 positions_frame[position_columns] if position_columns else positions_frame,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         else:
@@ -1563,7 +1595,7 @@ with st.container():
             ]
             st.dataframe(
                 orders_frame[order_columns].head(5) if order_columns else orders_frame.head(5),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         elif settings.trading_mode == "paper":
@@ -1586,7 +1618,7 @@ with st.container():
             ]
             st.dataframe(
                 closed_frame[closed_columns].head(5),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         else:
@@ -1649,8 +1681,8 @@ with st.container():
                 .rename("P/L netto realizzato (USD)")
             )
             with performance_cols[0]:
-                st.markdown("**P/L giornaliero realizzato — Demo**")
-                st.bar_chart(daily_pnl, use_container_width=True)
+                st.markdown(f"**P/L giornaliero realizzato — {workspace_label}**")
+                st.bar_chart(daily_pnl, width="stretch")
             weekly_pnl = (
                 closed_chart.assign(
                     week=closed_chart["closed_at"]
@@ -1663,8 +1695,8 @@ with st.container():
                 .rename("P/L netto realizzato (USD)")
             )
             with performance_cols[1]:
-                st.markdown("**P/L settimanale realizzato — Demo**")
-                st.bar_chart(weekly_pnl, use_container_width=True)
+                st.markdown(f"**P/L settimanale realizzato — {workspace_label}**")
+                st.bar_chart(weekly_pnl, width="stretch")
     else:
         performance_cols[0].info("Storico P/L giornaliero non disponibile.")
         performance_cols[1].info("Storico P/L settimanale non disponibile.")
@@ -1690,7 +1722,7 @@ with st.container():
                         plot_bgcolor="#0b0f14",
                         margin={"l": 10, "r": 10, "t": 20, "b": 10},
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.caption("Distribuzione esposizione non disponibile.")
@@ -1699,176 +1731,178 @@ with st.container():
     else:
         st.caption("Portafoglio senza posizioni aperte da distribuire.")
 
-with st.expander("Simulazione locale", expanded=False):
-    _show_simulation_account(float(spread_bps))
-    account = ledger.account()
-    data = st.session_state.get("market_frame") if market_data_current else None
-    active_symbol = st.session_state.get("market_symbol") if market_data_current else None
-    if account is not None:
-        st.divider()
-        st.subheader("Entry / uscita — simulazione locale")
-        st.caption("I pulsanti registrano transazioni nel database locale. Non inviano ordini ad Alpaca.")
-        positions = ledger.positions()
-        held_position = next((pos for pos in positions if pos["symbol"] == active_symbol), None)
-        stale_other_positions = [
-            position for position in positions
-            if position["symbol"] != active_symbol
-            and (
-                not position.get("mark_timestamp")
-                or not _data_is_fresh(position["mark_timestamp"], st.session_state.get("market_interval", "1Day"))
+if workspace != "paper":
+    with st.expander("Simulazione locale", expanded=False):
+        _show_simulation_account(float(spread_bps))
+        account = ledger.account()
+        data = st.session_state.get("market_frame") if market_data_current else None
+        active_symbol = st.session_state.get("market_symbol") if market_data_current else None
+        if account is not None:
+            st.divider()
+            st.subheader("Entry / uscita — simulazione locale")
+            st.caption("I pulsanti registrano transazioni nel database locale. Non inviano ordini ad Alpaca.")
+            positions = ledger.positions()
+            held_position = next((pos for pos in positions if pos["symbol"] == active_symbol), None)
+            stale_other_positions = [
+                position for position in positions
+                if position["symbol"] != active_symbol
+                and (
+                    not position.get("mark_timestamp")
+                    or not _data_is_fresh(position["mark_timestamp"], st.session_state.get("market_interval", "1Day"))
+                )
+            ]
+            quote = st.session_state.get("market_quote")
+            order_timestamp = quote["timestamp"] if quote and quote.get("price") else (
+                str(_latest_timestamp(data)) if data is not None else ""
             )
-        ]
-        quote = st.session_state.get("market_quote")
-        order_timestamp = quote["timestamp"] if quote and quote.get("price") else (
-            str(_latest_timestamp(data)) if data is not None else ""
-        )
-        fresh = bool(
-            data is not None and active_symbol
-            and st.session_state.get("market_symbol") == active_symbol
-            and _data_is_fresh(order_timestamp, st.session_state.market_interval)
-        )
-        if data is None or not active_symbol:
-            st.warning("Carica prima dati reali o attiva esplicitamente la modalità demo nella Dashboard.")
-        elif not fresh:
-            st.error("L'ultimo dato è obsoleto per l'intervallo selezionato: ordini locali bloccati.")
-        else:
-            price = float(quote["price"]) if quote and quote.get("price") else float(data["close"].iloc[-1])
-            source_timestamp = order_timestamp
-            source = str(quote["source"]) if quote and quote.get("price") else st.session_state.market_source + " — ultimo close barra"
-            buy_col, sell_col = st.columns(2)
-            with buy_col:
-                with st.form("local_sim_buy"):
-                    qty = st.number_input("Quantità da acquistare", min_value=0.000001, value=0.01, format="%.6f")
-                    reason = st.text_input("Motivo ingresso", value="Entry manuale utente")
-                    buy_submit = st.form_submit_button(f"Conferma acquisto simulato — ${price:.4f}")
-                if buy_submit:
-                    request_id = st.session_state.setdefault("order_request_id", str(uuid.uuid4()))
-                    try:
-                        if stale_other_positions:
-                            raise ValueError(
-                                "Nuovi acquisti bloccati: aggiorna prima le quotazioni delle altre posizioni aperte."
-                            )
-                        result = ledger.buy(
-                            symbol=active_symbol, quantity=float(qty), market_price=price,
-                            commission_bps=float(commission_bps), spread_bps=float(spread_bps),
-                            slippage_bps=float(slippage_bps),
-                            max_trade_fraction=max_trade_fraction, max_exposure_fraction=max_exposure_fraction,
-                            daily_loss_limit_fraction=daily_loss_fraction, data_timestamp=source_timestamp,
-                            data_source=source, reason=reason,
-                            max_data_age_seconds=_freshness_limit(st.session_state.market_interval).total_seconds(),
-                            max_positions=settings.max_positions,
-                            idempotency_key=request_id,
-                        )
-                        st.session_state.order_request_id = str(uuid.uuid4())
-                        st.session_state.simulation_notice = (
-                            "Acquisto registrato nella simulazione locale."
-                            if not result["duplicate"]
-                            else "Richiesta duplicata ignorata."
-                        )
-                        st.rerun()
-                    except (ValueError, RuntimeError) as exc:
-                        st.error(f"Acquisto non registrato: {exc}")
-            with sell_col:
-                if held_position is None:
-                    st.info("Nessuna posizione aperta su questo strumento.")
-                else:
-                    with st.form("local_sim_sell"):
-                        max_qty = float(held_position["quantity"])
-                        sell_qty = st.number_input(
-                            f"Quantità da vendere (massimo {max_qty:.6f})",
-                            min_value=0.000001, max_value=max_qty, value=max_qty, format="%.6f",
-                        )
-                        sell_reason = st.text_input("Motivo uscita", value="Uscita manuale utente")
-                        sell_submit = st.form_submit_button(f"Conferma vendita simulata — ${price:.4f}")
-                    if sell_submit:
+            fresh = bool(
+                data is not None and active_symbol
+                and st.session_state.get("market_symbol") == active_symbol
+                and _data_is_fresh(order_timestamp, st.session_state.market_interval)
+            )
+            if data is None or not active_symbol:
+                st.warning("Carica prima dati reali o attiva esplicitamente la modalità demo nella Dashboard.")
+            elif not fresh:
+                st.error("L'ultimo dato è obsoleto per l'intervallo selezionato: ordini locali bloccati.")
+            else:
+                price = float(quote["price"]) if quote and quote.get("price") else float(data["close"].iloc[-1])
+                source_timestamp = order_timestamp
+                source = str(quote["source"]) if quote and quote.get("price") else st.session_state.market_source + " — ultimo close barra"
+                buy_col, sell_col = st.columns(2)
+                with buy_col:
+                    with st.form("local_sim_buy"):
+                        qty = st.number_input("Quantità da acquistare", min_value=0.000001, value=0.01, format="%.6f")
+                        reason = st.text_input("Motivo ingresso", value="Entry manuale utente")
+                        buy_submit = st.form_submit_button(f"Conferma acquisto simulato — ${price:.4f}")
+                    if buy_submit:
                         request_id = st.session_state.setdefault("order_request_id", str(uuid.uuid4()))
                         try:
-                            result = ledger.sell(
-                                symbol=active_symbol, quantity=float(sell_qty), market_price=price,
+                            if stale_other_positions:
+                                raise ValueError(
+                                    "Nuovi acquisti bloccati: aggiorna prima le quotazioni delle altre posizioni aperte."
+                                )
+                            result = ledger.buy(
+                                symbol=active_symbol, quantity=float(qty), market_price=price,
                                 commission_bps=float(commission_bps), spread_bps=float(spread_bps),
                                 slippage_bps=float(slippage_bps),
-                                reason=sell_reason, data_timestamp=source_timestamp,
-                                data_source=source,
+                                max_trade_fraction=max_trade_fraction, max_exposure_fraction=max_exposure_fraction,
+                                daily_loss_limit_fraction=daily_loss_fraction, data_timestamp=source_timestamp,
+                                data_source=source, reason=reason,
                                 max_data_age_seconds=_freshness_limit(st.session_state.market_interval).total_seconds(),
+                                max_positions=settings.max_positions,
                                 idempotency_key=request_id,
                             )
                             st.session_state.order_request_id = str(uuid.uuid4())
                             st.session_state.simulation_notice = (
-                                f"Vendita registrata localmente. P/L netto realizzato: "
-                                f"${result.get('net_pnl', 0):+.2f}"
+                                "Acquisto registrato nella simulazione locale."
+                                if not result["duplicate"]
+                                else "Richiesta duplicata ignorata."
                             )
                             st.rerun()
                         except (ValueError, RuntimeError) as exc:
-                            st.error(f"Vendita non registrata: {exc}")
+                            st.error(f"Acquisto non registrato: {exc}")
+                with sell_col:
+                    if held_position is None:
+                        st.info("Nessuna posizione aperta su questo strumento.")
+                    else:
+                        with st.form("local_sim_sell"):
+                            max_qty = float(held_position["quantity"])
+                            sell_qty = st.number_input(
+                                f"Quantità da vendere (massimo {max_qty:.6f})",
+                                min_value=0.000001, max_value=max_qty, value=max_qty, format="%.6f",
+                            )
+                            sell_reason = st.text_input("Motivo uscita", value="Uscita manuale utente")
+                            sell_submit = st.form_submit_button(f"Conferma vendita simulata — ${price:.4f}")
+                        if sell_submit:
+                            request_id = st.session_state.setdefault("order_request_id", str(uuid.uuid4()))
+                            try:
+                                result = ledger.sell(
+                                    symbol=active_symbol, quantity=float(sell_qty), market_price=price,
+                                    commission_bps=float(commission_bps), spread_bps=float(spread_bps),
+                                    slippage_bps=float(slippage_bps),
+                                    reason=sell_reason, data_timestamp=source_timestamp,
+                                    data_source=source,
+                                    max_data_age_seconds=_freshness_limit(st.session_state.market_interval).total_seconds(),
+                                    idempotency_key=request_id,
+                                )
+                                st.session_state.order_request_id = str(uuid.uuid4())
+                                st.session_state.simulation_notice = (
+                                    f"Vendita registrata localmente. P/L netto realizzato: "
+                                    f"${result.get('net_pnl', 0):+.2f}"
+                                )
+                                st.rerun()
+                            except (ValueError, RuntimeError) as exc:
+                                st.error(f"Vendita non registrata: {exc}")
 
-        st.divider()
-        st.subheader("Storico completo delle operazioni")
-        history = ledger.history()
-        if history:
-            history_frame = pd.DataFrame(history)
-            filters = st.columns(3)
-            with filters[0]:
-                date_filter = st.date_input("Data apertura da", value=None)
-            with filters[1]:
-                symbol_filter = st.multiselect("Filtra strumenti", sorted(history_frame["symbol"].unique()))
-            with filters[2]:
-                status_filter = st.multiselect("Filtra stato", ["open", "closed", "cancelled"], default=["open", "closed"])
-            if date_filter:
-                history_frame = history_frame[
-                    pd.to_datetime(history_frame["opened_at"], utc=True).dt.date >= date_filter
+            st.divider()
+            st.subheader("Storico completo delle operazioni")
+            history = ledger.history()
+            if history:
+                history_frame = pd.DataFrame(history)
+                filters = st.columns(3)
+                with filters[0]:
+                    date_filter = st.date_input("Data apertura da", value=None)
+                with filters[1]:
+                    symbol_filter = st.multiselect("Filtra strumenti", sorted(history_frame["symbol"].unique()))
+                with filters[2]:
+                    status_filter = st.multiselect("Filtra stato", ["open", "closed", "cancelled"], default=["open", "closed"])
+                if date_filter:
+                    history_frame = history_frame[
+                        pd.to_datetime(history_frame["opened_at"], utc=True).dt.date >= date_filter
+                    ]
+                if symbol_filter:
+                    history_frame = history_frame[history_frame["symbol"].isin(symbol_filter)]
+                if status_filter:
+                    history_frame = history_frame[history_frame["status"].isin(status_filter)]
+                history_frame["net_pnl_eur"] = history_frame["net_pnl"] / float(account["eur_usd_rate"])
+                history_frame["return_pct"] = history_frame.apply(
+                    lambda row: (row["net_pnl"] / row["entry_invested"] * 100)
+                    if pd.notna(row["net_pnl"]) and row["entry_invested"] else None,
+                    axis=1,
+                )
+                history_frame = history_frame.rename(columns={
+                    "id": "ID posizione", "close_id": "ID chiusura", "symbol": "Strumento", "opened_at": "Apertura UTC",
+                    "closed_at": "Chiusura UTC", "direction": "Direzione", "quantity": "Quantità",
+                    "entry_price": "Prezzo ingresso", "exit_price": "Prezzo uscita",
+                    "entry_notional": "Valore entry", "entry_fee_alloc": "Commissione entry",
+                    "entry_invested": "Capitale impiegato entry",
+                    "exit_notional": "Valore uscita",
+                    "exit_fee": "Commissione uscita", "entry_spread_alloc": "Spread entry",
+                    "exit_spread": "Spread uscita", "entry_slippage_alloc": "Slippage entry",
+                    "exit_slippage": "Slippage uscita", "gross_pnl": "P/L lordo USD",
+                    "net_pnl": "P/L netto USD", "net_pnl_eur": "P/L netto EUR (FX iniziale)",
+                    "return_pct": "Rendimento % capitale impiegato", "entry_reason": "Motivo ingresso",
+                    "exit_reason": "Motivo uscita", "status": "Stato",
+                    "entry_data_source": "Fonte dati entry", "exit_data_source": "Fonte dati uscita",
+                    "exit_data_timestamp": "Timestamp dati uscita",
+                })
+                preferred = [
+                    "ID posizione", "ID chiusura", "Strumento", "Apertura UTC", "Chiusura UTC", "Direzione", "Quantità",
+                    "Prezzo ingresso", "Prezzo uscita", "Valore entry", "Valore uscita", "Commissione entry", "Commissione uscita",
+                    "Capitale impiegato entry", "Spread entry", "Spread uscita",
+                    "Slippage entry", "Slippage uscita", "P/L lordo USD", "P/L netto USD",
+                    "P/L netto EUR (FX iniziale)", "Rendimento % capitale impiegato",
+                    "Motivo ingresso", "Motivo uscita", "Stato", "Fonte dati entry",
+                    "Fonte dati uscita", "Timestamp dati uscita",
                 ]
-            if symbol_filter:
-                history_frame = history_frame[history_frame["symbol"].isin(symbol_filter)]
-            if status_filter:
-                history_frame = history_frame[history_frame["status"].isin(status_filter)]
-            history_frame["net_pnl_eur"] = history_frame["net_pnl"] / float(account["eur_usd_rate"])
-            history_frame["return_pct"] = history_frame.apply(
-                lambda row: (row["net_pnl"] / row["entry_invested"] * 100)
-                if pd.notna(row["net_pnl"]) and row["entry_invested"] else None,
-                axis=1,
-            )
-            history_frame = history_frame.rename(columns={
-                "id": "ID posizione", "close_id": "ID chiusura", "symbol": "Strumento", "opened_at": "Apertura UTC",
-                "closed_at": "Chiusura UTC", "direction": "Direzione", "quantity": "Quantità",
-                "entry_price": "Prezzo ingresso", "exit_price": "Prezzo uscita",
-                "entry_notional": "Valore entry", "entry_fee_alloc": "Commissione entry",
-                "entry_invested": "Capitale impiegato entry",
-                "exit_notional": "Valore uscita",
-                "exit_fee": "Commissione uscita", "entry_spread_alloc": "Spread entry",
-                "exit_spread": "Spread uscita", "entry_slippage_alloc": "Slippage entry",
-                "exit_slippage": "Slippage uscita", "gross_pnl": "P/L lordo USD",
-                "net_pnl": "P/L netto USD", "net_pnl_eur": "P/L netto EUR (FX iniziale)",
-                "return_pct": "Rendimento % capitale impiegato", "entry_reason": "Motivo ingresso",
-                "exit_reason": "Motivo uscita", "status": "Stato",
-                "entry_data_source": "Fonte dati entry", "exit_data_source": "Fonte dati uscita",
-                "exit_data_timestamp": "Timestamp dati uscita",
-            })
-            preferred = [
-                "ID posizione", "ID chiusura", "Strumento", "Apertura UTC", "Chiusura UTC", "Direzione", "Quantità",
-                "Prezzo ingresso", "Prezzo uscita", "Valore entry", "Valore uscita", "Commissione entry", "Commissione uscita",
-                "Capitale impiegato entry", "Spread entry", "Spread uscita",
-                "Slippage entry", "Slippage uscita", "P/L lordo USD", "P/L netto USD",
-                "P/L netto EUR (FX iniziale)", "Rendimento % capitale impiegato",
-                "Motivo ingresso", "Motivo uscita", "Stato", "Fonte dati entry",
-                "Fonte dati uscita", "Timestamp dati uscita",
-            ]
-            st.dataframe(history_frame[[col for col in preferred if col in history_frame]], use_container_width=True, hide_index=True)
-            st.caption("P/L lordo prima di commissioni, spread e slippage; P/L netto dopo tali costi. Il P/L netto EUR usa il cambio salvato all'inizializzazione del conto, non un cambio corrente. Le posizioni aperte non sono profitti realizzati.")
-        else:
-            st.info("Nessuna operazione registrata.")
+                st.dataframe(history_frame[[col for col in preferred if col in history_frame]], width="stretch", hide_index=True)
+                st.caption("P/L lordo prima di commissioni, spread e slippage; P/L netto dopo tali costi. Il P/L netto EUR usa il cambio salvato all'inizializzazione del conto, non un cambio corrente. Le posizioni aperte non sono profitti realizzati.")
+            else:
+                st.info("Nessuna operazione registrata.")
 
-        st.divider()
-        reset_confirm = st.checkbox("Confermo di voler azzerare il conto virtuale e cancellare il relativo storico.")
-        if st.button("Azzera simulazione locale", disabled=not reset_confirm, type="secondary"):
-            ledger.reset(
-                initial_eur=float(account["initial_eur"]),
-                eur_usd_rate=float(account["eur_usd_rate"]),
-                fx_source=str(account["fx_source"]),
-                fx_timestamp=str(account["fx_timestamp"]),
-            )
-            st.rerun()
+            st.divider()
+            reset_confirm = st.checkbox("Confermo di voler azzerare il conto virtuale e cancellare il relativo storico.")
+            if st.button("Azzera simulazione locale", disabled=not reset_confirm, type="secondary"):
+                ledger.reset(
+                    initial_eur=float(account["initial_eur"]),
+                    eur_usd_rate=float(account["eur_usd_rate"]),
+                    fx_source=str(account["fx_source"]),
+                    fx_timestamp=str(account["fx_timestamp"]),
+                )
+                st.rerun()
 
 with st.expander("Backtest e validazione walk-forward", expanded=False):
+    st.caption("Uso storico/backtesting: dati e risultati restano separati dal conto e dai permessi Paper. Uno storico può essere utile al backtest senza superare il gate operativo; non è un prezzo corrente né una validazione operativa.")
     st.subheader("Backtesting — risultati separati")
     st.caption("Il backtest è separato dal conto simulato e dall'account Alpaca. Segnale calcolato alla chiusura della barra; esecuzione simulata all'apertura della barra successiva.")
     if not market_data_current:
@@ -2055,10 +2089,10 @@ with st.expander("Backtest e validazione walk-forward", expanded=False):
                     xaxis_title="Barra",
                     yaxis_title="USD",
                 ),
-                use_container_width=True,
+                width="stretch",
             )
             if result.get("trade_history"):
-                st.dataframe(pd.DataFrame(result["trade_history"]), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(result["trade_history"]), width="stretch", hide_index=True)
             if result.get("open_position_quantity"):
                 st.caption(
                     f"Posizione finale ancora aperta: {result['open_position_quantity']:.6f}; "
