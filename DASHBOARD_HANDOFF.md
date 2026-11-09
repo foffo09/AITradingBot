@@ -15,6 +15,13 @@ Contratti di riferimento: [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md).
 - `src/ui/charts.py`: figure Plotly, volume, SMA/RSI, marker e navigazione.
 - Backend, strategie, rischio e motore preesistenti restano invariati.
 
+## Presentazione compatta
+
+Il tema usa una palette scura ardesia con accenti viola, spaziature ridotte e
+grafico OHLC più compatto (420 px, 500 px con RSI). Gli avvisi restano visibili
+e i valori assenti restano N/D: la UI non li trasforma in zeri. Non vengono
+aggiunti bot, profili o azioni di creazione non supportati dal backend.
+
 ## Contesti e persistenza
 
 Il selettore **Contesto** offre tre ambienti. Cambiare contesto ferma
@@ -78,8 +85,21 @@ contabile completo: non presentare questi elenchi come riconciliazione esaustiva
 ## Verifica e limiti
 
 La scheda segnale rilegge frame e calendario ogni 15 secondi, anche senza
-un rerun completo. Una regressione invoca ripetutamente il corpo reale del
-fragment; non verifica il timer nel browser.
+un rerun completo. Quando cambia lo stato/verifica o il contenuto Paper
+(account, posizioni, ordini), oppure quote/storico modificano i dati visibili,
+viene richiesto un singolo rerun dell'app per riallineare le superfici esterne
+ai fragment. Un aggiornamento del solo timestamp Paper non provoca un rerun:
+il fragment mostra comunque il nuovo timestamp. Flag monouso fanno saltare la
+lettura del fragment durante il rerun e impediscono richieste duplicate; i flag
+sono limitati ai fragment attivi e rimossi al cambio contesto. La frequenza
+dichiarata resta 15 secondi.
+
+Il rerun non rende atomiche le fonti: account, storico e quote sono acquisiti
+separatamente e possono avere timestamp diversi. Ogni pannello continua a
+mostrare la propria fonte/freschezza; dopo errori o dati scaduti/futuri i valori
+non verificati vengono invalidati, non ri-etichettati come correnti. Una
+regressione invoca ripetutamente i corpi reali dei fragment; non verifica il
+timer nel browser.
 
 I test UI usano Streamlit AppTest, broker finti e DB temporanei; i grafici
 verificano oggetti Plotly e configurazione di navigazione. I risultati puntuali

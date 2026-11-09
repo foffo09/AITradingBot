@@ -500,3 +500,30 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   già presenti, con protezioni più forti, nella release. Worktree agente e
   repository principale lasciati intatti; nessun ordine, server, automazione
   o push.
+
+## 2026-11-09 — Sincronizzazione refresh e vista compatta
+
+- Workspace: branch `agents/p1-dashboard-refresh-20261109`, base verificata
+  `fe988394d6ecdcb56763a81c627943b4cbe684e1`. La worktree attiva è isolata,
+  ma annidata un livello più in profondità rispetto al percorso inizialmente
+  richiesto; il precedente tentativo di spostamento è fallito per permessi.
+  Nessun altro checkout è stato modificato.
+- Refresh Paper: confronto del contenuto di account, posizioni e ordini;
+  il solo timestamp nuovo non provoca un rerun completo. Variazioni di stato,
+  errore o contenuto mantengono il rerun one-shot e saltano la richiesta
+  duplicata. Aggiunto un test in cui timestamp-only refresh non rilancia la
+  dashboard. Gli errori snapshot con timestamp invalido/scaduto restano visibili
+  come warning anche dopo il rerun.
+- UI: tema scuro ardesia/viola più compatto, padding e KPI ridotti, grafico OHLC
+  da 650/760 a 420/500 px e selettore temporale indaco. Le notifiche non sono
+  nascoste, i dati mancanti restano N/D secondo il contratto di progetto; non
+  sono stati inventati bot, metriche o azioni non supportati.
+- Test mirati UI/refresh/contesti: **98 passati, 0 falliti, 0 saltati, 1 warning**
+  (deprecazione `websockets.legacy`). Suite Windows/Python 3.11: **756 passati,
+  0 falliti, 0 saltati, 1 warning, 390,30 s**; guard isolamento rete/credenziali
+  **0/0**. `compileall` exit 0, `pip check` senza requisiti rotti e
+  `git diff --check` senza errori.
+- Nessun server Streamlit, broker, ordine o automazione avviati. Screenshot e
+  verifica visuale browser non eseguiti. Prossimo passo concreto: controllo
+  manuale locale della responsività desktop/mobile senza attivare operazioni
+  Paper.
