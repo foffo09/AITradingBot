@@ -106,3 +106,36 @@ Il contratto aggiornato è [DASHBOARD_HANDOFF](../DASHBOARD_HANDOFF.md).
 Fonte sintetica controllata, non redditività di mercato. Nessuna verifica
 Windows/broker autentico in questa fase. Contratti e limiti nel
 [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md); esiti delle suite nel WORKLOG.
+
+## Sprint 02 — CI Windows / Python 3.11 (11 novembre 2026)
+
+Base ricontrollata: `fe988394d6ecdcb56763a81c627943b4cbe684e1`.
+Workflow: [windows-ci.yml](../.github/workflows/windows-ci.yml), runner
+`windows-latest`, Python `3.11`. Trigger PR verso `main` e `workflow_dispatch`;
+permesso unico `contents: read`, credenziali checkout non persistite, nessun
+secret broker. Contesto Demo, automazione/esecuzione disabilitate e dotenv
+spento. Nessuna modifica a codice, test, requisiti o guard di isolamento.
+
+| Sistema / prova | Stato | Evidenza |
+| --- | --- | --- |
+| macOS 27.2.1 arm64 / Python 3.11.18 | PASS baseline locale del 10 novembre | 152 mirati; suite 747 passati, 0 falliti, 1 skip Windows Proactor; guard rete/credenziali 0/0; compilazione, pip check e diff-check PASS. Non è una nuova esecuzione Sprint 02. |
+| macOS / Python 3.11.18 | PASS ricontrollo locale dell’11 novembre | Stesso codice base: 747 passati, 0 falliti, 1 skip Proactor in 34,87 s; guard 0/0. Compilazione e pip check PASS. Non è una prova Windows. |
+| Windows / Python 3.11 / GitHub Actions | NON VERIFICATO — in attesa di run reale | Scrivere il workflow non prova la portabilità. Run e risultati saranno registrati dopo l'esecuzione Windows. |
+| Altri sistemi/versioni, broker autentico, multi-host e UI interattiva | NON VERIFICATO in questa consegna | Nessun avvio server, feed o trading. Restano valide le sole evidenze storiche già datate sopra. |
+
+La sequenza CI installa `requirements-dev.txt`, compila app/config/src/tests,
+esegue i sei file mirati assegnati e la suite completa `pytest -q -rs`, quindi
+pip check e diff-check. Il report JUnit verifica che il caso Windows Proactor
+sia presente, eseguito e non saltato. I log di entrambi i gruppi devono contenere
+il riepilogo del guard a zero; i controlli originali non sono alterati.
+Il controllo whitespace verifica anche il delta base/head della PR (e non
+solo il checkout pulito); nel dispatch verifica l’ultimo commit.
+I check di isolamento, dipendenze e whitespace proseguono anche dopo errori dei
+test per raccogliere evidenza, senza trasformare un fallimento in successo.
+
+Per il primo run è necessaria una PR: il dispatch manuale richiede che il
+workflow sia già presente sul branch predefinito. Questo incarico non autorizza
+il merge su main. [Documentazione GitHub sul dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+Le azioni ufficiali sono bloccate ai commit delle release
+[checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) e
+[setup-python v7.1.0](https://github.com/actions/setup-python/releases/tag/v7.1.0).
