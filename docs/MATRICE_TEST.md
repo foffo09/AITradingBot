@@ -106,3 +106,49 @@ Il contratto aggiornato è [DASHBOARD_HANDOFF](../DASHBOARD_HANDOFF.md).
 Fonte sintetica controllata, non redditività di mercato. Nessuna verifica
 Windows/broker autentico in questa fase. Contratti e limiti nel
 [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md); esiti delle suite nel WORKLOG.
+
+## Sprint 02 — CI Windows / Python 3.11 (11 novembre 2026)
+
+Base ricontrollata: `fe988394d6ecdcb56763a81c627943b4cbe684e1`.
+Workflow: [windows-ci.yml](../.github/workflows/windows-ci.yml), runner
+`windows-latest`, Python `3.11`. Trigger PR verso `main` e `workflow_dispatch`;
+permesso unico `contents: read`, credenziali checkout non persistite, nessun
+secret broker. Contesto Demo, automazione/esecuzione disabilitate e dotenv
+spento. Nessuna modifica a codice, test, requisiti o guard di isolamento.
+
+| Sistema / prova | Stato | Evidenza |
+| --- | --- | --- |
+| macOS 27.2.1 arm64 / Python 3.11.18 | PASS baseline locale del 10 novembre | 152 mirati; suite 747 passati, 0 falliti, 1 skip Windows Proactor; guard rete/credenziali 0/0; compilazione, pip check e diff-check PASS. Non è una nuova esecuzione Sprint 02. |
+| macOS / Python 3.11.18 | PASS ricontrollo locale dell’11 novembre | Stesso codice base: 747 passati, 0 falliti, 1 skip Proactor in 34,87 s; guard 0/0. Compilazione e pip check PASS. Non è una prova Windows. |
+| Windows Server 2025 x64 / Python 3.11.9 / GitHub Actions | PASS esecuzione nativa dell’11 novembre | [Run 42920818052](https://github.com/foffo09/AITradingBot/actions/runs/42920818052): 152 mirati (6,59 s), suite 748 passati (193,30 s), 0 falliti e 0 saltati. Guard rete/credenziali 0/0 in entrambi i gruppi; Proactor presente e superato senza skip. Compilazione, pip check e diff-check PASS. |
+| Altri sistemi/versioni, broker autentico, multi-host e UI interattiva | NON VERIFICATO in questa consegna | Nessun avvio server, feed o trading. Restano valide le sole evidenze storiche già datate sopra. |
+
+La sequenza CI installa `requirements-dev.txt`, compila app/config/src/tests,
+esegue i sei file mirati assegnati e la suite completa `pytest -q -rs`, quindi
+pip check e diff-check. Il report JUnit verifica che il caso Windows Proactor
+sia presente, eseguito e non saltato. I log di entrambi i gruppi devono contenere
+il riepilogo del guard a zero; i controlli originali non sono alterati.
+Il controllo whitespace verifica anche il delta base/head della PR (e non
+solo il checkout pulito); nel dispatch verifica l’ultimo commit.
+I check di isolamento, dipendenze e whitespace proseguono anche dopo errori dei
+test per raccogliere evidenza, senza trasformare un fallimento in successo.
+
+Per il primo run è necessaria una PR: il dispatch manuale richiede che il
+workflow sia già presente sul branch predefinito. Questo incarico non autorizza
+il merge su main. [Documentazione GitHub sul dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+Le azioni ufficiali sono bloccate ai commit delle release
+[checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) e
+[setup-python v7.1.0](https://github.com/actions/setup-python/releases/tag/v7.1.0).
+
+Evidenza Windows: [PR #5](https://github.com/foffo09/AITradingBot/pull/5),
+head `065859dced4db1253172ea1f8c01081ad20cd496`, job `windows-tests`.
+Il label richiesto è `windows-latest`; il run ha usato l’immagine reale
+`windows-2025-vs2026`, versione `20261103.298.1`, Microsoft Windows Server 2025.
+Python effettivo `3.11.9`, verificato anche mediante `sys.platform == win32`.
+Il controllo JUnit riporta `Windows Proactor executed: PASS`; tutti gli step
+conclusi con successo. Un warning preesistente `websockets.legacy` per gruppo.
+Non è una prova dell’interfaccia su Windows 11 desktop o di broker autentici.
+Questa evidenza aggiorna la precedente assenza di CI: la pipeline ora è
+riconosciuta da GitHub Actions ed è stata eseguita su una PR senza merge.
+Il dispatch manuale è configurato ma non provato, poiché il workflow non è
+ancora sul branch predefinito e il merge resta fuori ambito.

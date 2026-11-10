@@ -1,0 +1,91 @@
+name: Windows CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-tests:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      TRADING_MODE: demo
+      AUTO_TRADE: "false"
+      PAPER_EXECUTION_SCOPE: disabled
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Verify native Windows and Python
+        run: |
+          python -c "import platform, sys; print(platform.platform()); print(sys.version); assert sys.platform == 'win32'; assert sys.version_info[:2] == (3, 11)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip --version
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Compile Python
+        run: python -m compileall -q app.py config src tests
+
+      - name: Targeted offline tests
+        run: |
+          python -m pytest -q tests/test_backend_contract.py tests/test_broker.py tests/test_paper_safety.py tests/test_config.py tests/test_fx_rates.py tests/test_bar_timing.py | Tee-Object -FilePath windows-targeted.log
+          exit $LASTEXITCODE
+
+      - name: Full offline suite
+        run: |
+          python -m pytest -q -rs --junitxml=windows-test-results.xml | Tee-Object -FilePath windows-full.log
+          exit $LASTEXITCODE
+
+      - name: Verify isolation reports and Proactor execution
+        if: ${{ !cancelled() }}
+        run: |
+          @'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          guard = "TEST ISOLATION: {'network': 0, 'credentials': 0}"
+          for name in ('windows-targeted.log', 'windows-full.log'):
+              if guard not in Path(name).read_text(encoding='utf-8-sig'):
+                  raise SystemExit(f'Missing zero-access isolation report: {name}')
+          cases = ET.parse('windows-test-results.xml').findall('.//testcase')
+          proactor = [case for case in cases if case.get('name') == 'test_windows_proactor_self_pipe_is_not_counted_as_external_network']
+          if len(proactor) != 1 or any(proactor[0].find(tag) is not None for tag in ('skipped', 'failure', 'error')):
+              raise SystemExit('Windows Proactor must execute successfully without a skip')
+          print('Isolation network=0 credentials=0; Windows Proactor executed: PASS')
+          '@ | python -
+
+      - name: Check installed dependencies
+        if: ${{ !cancelled() }}
+        run: python -m pip check
+
+      - name: Check whitespace
+        if: ${{ !cancelled() }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            git diff --check $env:PR_BASE_SHA $env:PR_HEAD_SHA
+          } else {
+            git show --format= --check HEAD
+          }
+          exit $LASTEXITCODE
