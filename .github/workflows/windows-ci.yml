@@ -2,7 +2,8 @@ name: Windows CI
 
 on:
   pull_request:
-    branches: [main]
+    # The stacked Sprint 03 PR also needs both checks before PR #5 is merged.
+    branches: [main, agents/p4-windows-ci-20261110]
   workflow_dispatch:
 
 permissions:
@@ -89,3 +90,82 @@ jobs:
             git show --format= --check HEAD
           }
           exit $LASTEXITCODE
+
+  macos-tests:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      TRADING_MODE: demo
+      AUTO_TRADE: "false"
+      PAPER_EXECUTION_SCOPE: disabled
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Verify native macOS and Python
+        run: |
+          python -c "import platform, sys; print(platform.platform()); print(platform.machine()); print(sys.version); assert sys.platform == 'darwin'; assert sys.version_info[:2] == (3, 11)"
+          python -m pip --version
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Compile Python
+        run: python -m compileall -q app.py config src tests
+
+      - name: Targeted offline tests
+        run: |
+          python -m pytest -q tests/test_backend_contract.py tests/test_broker.py tests/test_paper_safety.py tests/test_config.py tests/test_fx_rates.py tests/test_bar_timing.py | tee macos-targeted.log
+
+      - name: Full offline suite
+        run: |
+          python -m pytest -q -rs --junitxml=macos-test-results.xml | tee macos-full.log
+
+      - name: Verify isolation reports and platform skip
+        if: ${{ !cancelled() }}
+        run: |
+          python - <<'PYTHON'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          guard = "TEST ISOLATION: {'network': 0, 'credentials': 0}"
+          for name in ('macos-targeted.log', 'macos-full.log'):
+              if guard not in Path(name).read_text(encoding='utf-8'):
+                  raise SystemExit(f'Missing zero-access isolation report: {name}')
+          cases = ET.parse('macos-test-results.xml').findall('.//testcase')
+          proactor = [case for case in cases if case.get('name') == 'test_windows_proactor_self_pipe_is_not_counted_as_external_network']
+          if len(proactor) != 1 or any(proactor[0].find(tag) is not None for tag in ('failure', 'error')):
+              raise SystemExit('Missing or failed Windows-specific Proactor test')
+          skipped = proactor[0].find('skipped')
+          if skipped is None or skipped.get('message') != 'Windows Proactor uses an IPv4 loopback self-pipe':
+              raise SystemExit('Expected only the existing platform condition for Proactor')
+          print('Isolation network=0 credentials=0; Windows Proactor platform skip: EXPECTED')
+          PYTHON
+
+      - name: Check installed dependencies
+        if: ${{ !cancelled() }}
+        run: python -m pip check
+
+      - name: Check whitespace
+        if: ${{ !cancelled() }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --check
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            git diff --check "$PR_BASE_SHA" "$PR_HEAD_SHA"
+          else
+            git show --format= --check HEAD
+          fi
