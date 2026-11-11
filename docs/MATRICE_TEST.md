@@ -178,9 +178,44 @@ I conteggi storici dello Sprint 02 non sostituiscono le nuove esecuzioni.
 
 | Sistema / nuova prova Sprint 03 | Stato | Evidenza |
 | --- | --- | --- |
-| Windows CI | NON VERIFICATO | In attesa del run del nuovo branch. |
-| macOS CI | NON VERIFICATO | In attesa del run del nuovo branch. |
+| Windows Server 2025 x64 / Python 3.11.9 | PASS | [Job windows-tests](https://github.com/foffo09/AITradingBot/actions/runs/43120507994/job/130859457869): 152 mirati, 0 falliti/skip, 1 warning, 4,38 s; suite 748 passati, 0 falliti/skip, 1 warning, 93,98 s. Guard 0/0 nei due gruppi; Proactor eseguito PASS. Compileall, pip check e diff-check PASS. |
+| macOS 26.7.2 arm64 / Python 3.11.9 | PASS | [Job macos-tests](https://github.com/foffo09/AITradingBot/actions/runs/43120507994/job/130859457482): 152 mirati, 0 falliti/skip, 1 warning, 6,26 s; suite 747 passati, 0 falliti, 1 skip, 1 warning, 97,81 s. Guard 0/0 nei due gruppi; solo skip Windows Proactor condizionale previsto. Compileall, pip check e diff-check PASS. |
 
 Limiti: Windows 11 desktop/UI, broker autentici, feed, trading, multi-host e
 dispatch manuale non sono verificati da questo incarico. Nessuna release o
 integrazione della PR #5 autorizzata.
+
+Nuova evidenza Sprint 03, 12 novembre 2026 Europe/Rome:
+[run 43120507994](https://github.com/foffo09/AITradingBot/actions/runs/43120507994)
+concluso SUCCESS, evento `pull_request` sulla
+[PR #6 impilata](https://github.com/foffo09/AITradingBot/pull/6).
+Head verificato `1e4346672a0508d5fb6a54187dbd49bd9112bc50`;
+checkout effettivamente testato da entrambi i job:
+`e3ac5e53717b57614b49308428ca636d226ee3d9`, ref temporaneo `refs/pull/6/merge`
+creato da GitHub per la prova PR. Non è un merge effettuato sul branch o su main.
+
+Runner Windows: label `windows-latest`, immagine `windows-2025-vs2026`,
+versione `20261103.298.1`, OS `10.0.26100`, Python AMD64.
+Runner macOS: label `macos-latest`, immagine `macos-26-arm64`, versione
+`20261102.0473.1`, OS build `25G332`, Python arm64.
+Tutti gli step dei due job sono conclusi SUCCESS; `pip check` riporta
+`No broken requirements found.`. Warning noto `websockets.legacy`, uno per
+gruppo su ciascuna piattaforma. Il JUnit macOS conferma la motivazione originale
+`Windows Proactor uses an IPv4 loopback self-pipe`; nessuno skip aggiunto.
+
+Ricontrollo locale dello Sprint 03: macOS/Python 3.11.18, 152 mirati (2,02 s),
+747 completi (33,44 s), 0 falliti, 1 skip Proactor solo nella suite completa e
+1 warning per gruppo; guard 0/0. Compileall, pip check e diff-check exit 0.
+Confronto testuale: intero job Windows invariato. YAML e Bash controllati;
+prova sintetica del nuovo checker: guard zero/skip atteso accettati, guard
+nonzero e skip con motivazione diversa rifiutati. Un primo avvio di questa
+prova locale mancava di Python nel PATH della shell figlia: ripetuto con il
+PATH della venv, senza modifiche al workflow o ai test.
+
+Il trigger `main` è verificato nel file; il run reale usa la base impilata
+prescritta. Nessuna ulteriore PR verso main aperta per questa prova. La nuova
+copertura è provata sui runner indicati, non sul desktop Windows 11. Le
+modifiche restano limitate ai due file autorizzati; PR #5 invariata e nessun
+merge/release. Il commit documentale successivo registra questa esecuzione:
+i numeri qui sopra restano attribuiti al relativo head e checkout, non a un
+commit futuro.
