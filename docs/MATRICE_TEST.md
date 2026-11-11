@@ -152,3 +152,35 @@ Questa evidenza aggiorna la precedente assenza di CI: la pipeline ora è
 riconosciuta da GitHub Actions ed è stata eseguita su una PR senza merge.
 Il dispatch manuale è configurato ma non provato, poiché il workflow non è
 ancora sul branch predefinito e il merge resta fuori ambito.
+
+## Sprint 03 — CI multipiattaforma / Python 3.11 (12 novembre 2026)
+
+Base impilata: `5e759404ef574c1dacc22a79a417f29362a8a2ef`, branch remoto
+`agents/p4-windows-ci-20261110`, [PR #5](https://github.com/foffo09/AITradingBot/pull/5)
+ancora in bozza e non integrata. Nuovo branch
+`agents/p4-cross-platform-ci-20261112`; nessun merge su main.
+Solo workflow e questa matrice possono cambiare.
+
+Il job `windows-tests` e tutti i suoi step sono conservati integralmente.
+Aggiunto `macos-tests` indipendente su `macos-latest`, Python 3.11, shell Bash
+con `-e -o pipefail` fornita da Actions: un errore pytest non viene nascosto da
+`tee`. Stessi SHA ufficiali checkout/setup-python, permessi minimi, nessuna
+credenziale persistita e stesse impostazioni conservative dello Sprint 02.
+Il trigger PR verso `main` resta presente; è aggiunto esclusivamente il branch
+base della PR impilata per poter provare entrambi i job prima del merge della
+PR #5. `workflow_dispatch` resta presente, senza dichiararne una prova manuale.
+
+Controlli macOS: compilazione, sei file mirati, suite completa con JUnit,
+report rete/credenziali 0/0 in entrambi i gruppi, verifica dello skip Proactor
+con la motivazione condizionale originale, pip check e diff del delta base/head
+PR. Nessun test, requisito, guard, codice trading o soglia finanziaria modificati.
+I conteggi storici dello Sprint 02 non sostituiscono le nuove esecuzioni.
+
+| Sistema / nuova prova Sprint 03 | Stato | Evidenza |
+| --- | --- | --- |
+| Windows CI | NON VERIFICATO | In attesa del run del nuovo branch. |
+| macOS CI | NON VERIFICATO | In attesa del run del nuovo branch. |
+
+Limiti: Windows 11 desktop/UI, broker autentici, feed, trading, multi-host e
+dispatch manuale non sono verificati da questo incarico. Nessuna release o
+integrazione della PR #5 autorizzata.
