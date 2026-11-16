@@ -1,0 +1,2 @@
+# Optional native Windows terminal reader; never installed/imported on macOS.
+MetaTrader5==5.0.6231; sys_platform == "win32" and platform_machine == "AMD64"

@@ -1,0 +1,3 @@
+# Install after the repository runtime requirements; build only on the target OS/architecture.
+uvicorn==0.54.0
+PyInstaller==6.16.0

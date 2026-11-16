@@ -78,12 +78,20 @@ def test_switch_clears_paper_snapshot_automation_and_market_state(contexts):
     app.session_state['paper_automation_active'] = True
     app.session_state['market_symbol'] = 'MSFT'
     app.session_state['market_quote'] = {'price': 987654.32}
+    app.session_state['market_quote_error'] = 'old quote error'
+    app.session_state['market_incremental_error'] = 'old history error'
+    app.session_state['_paper_status_sync_rerun'] = True
+    app.session_state['_market_status_sync_rerun'] = True
     widget(app.selectbox, 'Contesto').select('Demo').run()
     assert not app.exception
     assert app.session_state['paper_automation_active'] is False
     assert not state_value(app, 'paper_verified', False)
     assert state_value(app, 'paper_snapshot') is None
     assert state_value(app, 'market_quote') is None
+    assert state_value(app, 'market_quote_error') is None
+    assert state_value(app, 'market_incremental_error') is None
+    assert state_value(app, '_paper_status_sync_rerun') is None
+    assert state_value(app, '_market_status_sync_rerun') is None
     assert all('54,321' not in metric.value for metric in app.metric)
     before = len(calls)
     widget(app.selectbox, 'Contesto').select('Simulazione').run()

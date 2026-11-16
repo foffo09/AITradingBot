@@ -4,7 +4,14 @@ Dashboard locale per analisi, backtest, simulazione locale e monitoraggio Alpaca
 
 La [revisione di qualità e roadmap](docs/REVIEW_QUALITA_E_ROADMAP.md) distingue correzioni verificate, limiti operativi e interventi ancora necessari.
 
-## Avvio in tre passaggi
+## Nuova applicazione React / browser e desktop
+
+La migrazione integrata si prova con `./avvia_web.ps1 -Build` dalla radice del
+progetto. Leggi la [guida di avvio, contratti e limiti](docs/LOCAL_APPLICATION.md).
+Demo e Simulazione hanno ledger separati; Alpaca Paper e MT5 sono di sola
+lettura nella nuova UI, automazione arrestata. Streamlit resta disponibile.
+
+## Avvio Streamlit legacy in tre passaggi
 
 1. In PowerShell, dalla cartella del progetto, prepara l'ambiente solo se non esiste:
    ```powershell

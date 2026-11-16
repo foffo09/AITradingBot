@@ -5,7 +5,6 @@ from pathlib import Path
 
 
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
-LOG_DIR.mkdir(exist_ok=True)
 
 
 def configure_logging(level: str = "INFO") -> logging.Logger:
@@ -14,6 +13,7 @@ def configure_logging(level: str = "INFO") -> logging.Logger:
     logger.propagate = False
 
     if not logger.handlers:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler(LOG_DIR / "aitradingbot.log", encoding="utf-8")
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)

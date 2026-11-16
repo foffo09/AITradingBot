@@ -144,3 +144,33 @@ OHLC ambiguo. Replay con livelli non validi fallisce, senza disattivare protezio
 Tranche fisse training/validation/OOS non sovrapposte e chiusura per-row esplicita.
 Nessuna validazione statistica, cambio UI o attivazione di trading impliciti.
 Dettagli: [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md).
+
+## D15 — Rerun solo quando cambia il contenuto del riepilogo
+
+Stato: verificato con AppTest e fragment invocati direttamente. La revisione
+dello snapshot Paper confronta account, posizioni e ordini; un nuovo
+`updated_at` da solo viene mostrato dal monitor ma non forza un rerun completo.
+Stato di verifica, errori e contenuti diversi continuano a riallineare le
+superfici esterne ai fragment. I flag monouso evitano la seconda lettura.
+
+Motivo: il timestamp descrive l'acquisizione, non una variazione dei valori
+esposti fuori dal fragment. Includerlo nella revisione provocava rerun anche
+quando il contenuto era identico e poteva interrompere un'azione UI in corso.
+Quote e OHLC mantengono invece timestamp e metadati propri; nessuna fonte viene
+fusa in uno snapshot atomico.
+
+## D16 — UI condivisa, servizio locale senza autorità di ordine
+
+Mandato master16novembre: React/TypeScript/Vite e Tauri2 aggiunti senza rimuovere
+Streamlit. FastAPIv1 serve asset/API stessa origine127.0.0.1 su socket mantenuto
+aperto dal bind; cookieHttpOnly/SameSiteStrict, Host/Origin/X-Local-Request.
+GET non crea capitale né invia ordini. POST virtuali espliciti e ledger separati;
+Paper è lettura con trasporto non scrivibile, MT5 read-only solo Demo verificata.
+Proposta pura riusa il gate originale e non deduce peak/counter del rischio:
+NO_TRADE quando lo snapshot non è verificato. Metadati attrs conservati fino al
+consumer React; qualità/storico non diventano automaticamente feed operativo.
+
+Shell possiede Child/pipe, mai PID arbitrari daHTTP; PyInstalleronefile comunica
+PIDworker e supervisorOS per handshake. Browser e desktop hanno directoryapp
+distinte e non sommano capitali. Chiusura/EOF termina il sidecar. Nessun deploy,
+mainmerge o release impliciti; Windows11/conti autentici richiedono prove distinte.

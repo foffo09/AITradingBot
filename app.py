@@ -105,6 +105,50 @@ def _latest_timestamp(data: pd.DataFrame) -> pd.Timestamp:
     return pd.Timestamp(data["timestamp"].iloc[-1])
 
 
+def _paper_snapshot_revision(snapshot: dict | None) -> tuple | None:
+    if not isinstance(snapshot, dict):
+        return None
+    return tuple(repr(snapshot.get(key)) for key in ("account", "positions", "orders"))
+
+
+def _market_view_revision() -> tuple:
+    frame = st.session_state.get("market_frame")
+    if isinstance(frame, pd.DataFrame) and not frame.empty:
+        frame_revision = (
+            len(frame),
+            tuple(str(value) for value in frame.iloc[-1].tolist()),
+            tuple(
+                (key, str(frame.attrs.get(key)))
+                for key in ("quality", "interval", "source", "fetched_at",
+                            "bar_time_contract", "bar_calendar", "session_scope")
+            ),
+        )
+    else:
+        frame_revision = None
+    quote = st.session_state.get("market_quote")
+    quote_revision = repr(quote) if quote is not None else None
+    return (
+        st.session_state.get("market_request"),
+        frame_revision,
+        quote_revision,
+        repr(st.session_state.get("market_quote_refreshed_at")),
+        st.session_state.get("market_quote_error"),
+        st.session_state.get("market_incremental_error"),
+    )
+
+
+def _sync_dashboard_views() -> None:
+    if getattr(broker, "paper_client_configured", False):
+        st.session_state["_paper_status_sync_rerun"] = True
+    else:
+        st.session_state.pop("_paper_status_sync_rerun", None)
+    if st.session_state.get("market_quality") == "real":
+        st.session_state["_market_status_sync_rerun"] = True
+    else:
+        st.session_state.pop("_market_status_sync_rerun", None)
+    st.rerun(scope="app")
+
+
 def _data_is_fresh(timestamp: object, interval: str) -> bool:
     return data_status(timestamp, interval, "real")["state"] == "fresh"
 
@@ -398,6 +442,7 @@ def _paper_account_monitor() -> None:
         bool(st.session_state.get("paper_verified", False)),
         st.session_state.get("paper_snapshot_error"),
     )
+    previous_revision = _paper_snapshot_revision(st.session_state.get("paper_snapshot"))
     if not st.session_state.get("paper_verified", False):
         if st.button("Verifica e aggiorna conto Alpaca Paper", key="paper_verify_snapshot"):
             if not skip_refresh:
@@ -422,18 +467,22 @@ def _paper_account_monitor() -> None:
             st.session_state.pop("paper_snapshot", None)
             st.session_state.paper_snapshot_error = str(exc)
             st.error("Connessione Paper persa: automazione arrestata.")
+    if st.session_state.get("paper_snapshot_error"):
+        snapshot_error = st.session_state.paper_snapshot_error
+        if "timestamp non verificabile" in snapshot_error:
+            st.warning(f"Stato Paper non disponibile: {snapshot_error}")
+        else:
+            st.error(f"Stato Paper non disponibile: {snapshot_error}")
+    snapshot = st.session_state.get("paper_snapshot")
+    if snapshot and st.session_state.get("paper_verified"):
+        _show_paper_snapshot(snapshot)
     current_status = (
         bool(st.session_state.get("paper_verified", False)),
         st.session_state.get("paper_snapshot_error"),
     )
-    if current_status != previous_status:
-        st.session_state["_paper_status_sync_rerun"] = True
-        st.rerun(scope="app")
-    if st.session_state.get("paper_snapshot_error"):
-        st.error(f"Stato Paper non disponibile: {st.session_state.paper_snapshot_error}")
-    snapshot = st.session_state.get("paper_snapshot")
-    if snapshot and st.session_state.get("paper_verified"):
-        _show_paper_snapshot(snapshot)
+    current_revision = _paper_snapshot_revision(st.session_state.get("paper_snapshot"))
+    if current_status != previous_status or current_revision != previous_revision:
+        _sync_dashboard_views()
     if st.session_state.get("paper_verified"):
         if st.button("Disconnetti monitor Paper", key="paper_disconnect"):
             st.session_state.paper_verified = False
@@ -526,59 +575,70 @@ def _live_quote_monitor(
 ) -> None:
     if source_quality != "real":
         return
-    try:
-        current_data = st.session_state.get("market_frame")
-        if (
-            isinstance(current_data, pd.DataFrame)
-            and st.session_state.get("market_symbol") == symbol
-        ):
-            interval = str(st.session_state.get("market_interval", ""))
-            interval_seconds = {
-                "1Min": 60,
-                "5Min": 300,
-                "15Min": 900,
-                "1Hour": 3600,
-                "1Day": 86_400,
-                "1Week": 604_800,
-            }.get(interval)
-            if interval_seconds is not None and not current_data.empty:
-                last_timestamp = pd.Timestamp(current_data["timestamp"].iloc[-1])
-                incremental = broker.get_market_data(
-                    symbol,
-                    timeframe=interval,
-                    period="1M",
-                    limit=100,
-                    start_time=(last_timestamp - timedelta(seconds=interval_seconds)).to_pydatetime(),
-                )
-                if not incremental.empty:
-                    if incremental.attrs.get("quality") != "real" or incremental.attrs.get("interval") != interval:
-                        raise BrokerConnectionError("Metadati del refresh non verificati; storico mantenuto.")
-                    origin_keys = ("source", "bar_time_contract", "bar_calendar", "session_scope")
-                    if any(incremental.attrs.get(key) != current_data.attrs.get(key) for key in origin_keys):
-                        raise BrokerConnectionError("Metadati di origine del refresh discordanti; storico mantenuto.")
-                    combined = pd.concat([current_data, incremental], ignore_index=True)
-                    combined = combined.drop_duplicates("timestamp", keep="last")
-                    combined = combined.sort_values("timestamp").tail(10_000).reset_index(drop=True)
-                    combined.attrs.update(current_data.attrs)
-                    combined.attrs["quality"] = "real"
-                    combined.attrs["interval"] = interval
-                    combined.attrs["fetched_at"] = incremental.attrs.get("fetched_at")
-                    st.session_state.market_frame = combined
-                    current_data = combined
-                st.session_state.market_incremental_error = None
-    except BrokerConnectionError as exc:
-        st.session_state.market_incremental_error = str(exc)
-        st.warning(f"Aggiornamento incrementale OHLC non disponibile; storico già caricato mantenuto: {exc}")
+    skip_refresh = st.session_state.pop("_market_status_sync_rerun", False)
+    previous_revision = _market_view_revision()
+    current_data = st.session_state.get("market_frame")
+    if not skip_refresh:
+        try:
+            if (
+                isinstance(current_data, pd.DataFrame)
+                and st.session_state.get("market_symbol") == symbol
+            ):
+                interval = str(st.session_state.get("market_interval", ""))
+                interval_seconds = {
+                    "1Min": 60,
+                    "5Min": 300,
+                    "15Min": 900,
+                    "1Hour": 3600,
+                    "1Day": 86_400,
+                    "1Week": 604_800,
+                }.get(interval)
+                if interval_seconds is not None and not current_data.empty:
+                    last_timestamp = pd.Timestamp(current_data["timestamp"].iloc[-1])
+                    incremental = broker.get_market_data(
+                        symbol,
+                        timeframe=interval,
+                        period="1M",
+                        limit=100,
+                        start_time=(last_timestamp - timedelta(seconds=interval_seconds)).to_pydatetime(),
+                    )
+                    if not incremental.empty:
+                        if incremental.attrs.get("quality") != "real" or incremental.attrs.get("interval") != interval:
+                            raise BrokerConnectionError("Metadati del refresh non verificati; storico mantenuto.")
+                        origin_keys = ("source", "bar_time_contract", "bar_calendar", "session_scope")
+                        if any(incremental.attrs.get(key) != current_data.attrs.get(key) for key in origin_keys):
+                            raise BrokerConnectionError("Metadati di origine del refresh discordanti; storico mantenuto.")
+                        combined = pd.concat([current_data, incremental], ignore_index=True)
+                        combined = combined.drop_duplicates("timestamp", keep="last")
+                        combined = combined.sort_values("timestamp").tail(10_000).reset_index(drop=True)
+                        combined.attrs.update(current_data.attrs)
+                        combined.attrs["quality"] = "real"
+                        combined.attrs["interval"] = interval
+                        combined.attrs["fetched_at"] = incremental.attrs.get("fetched_at")
+                        st.session_state.market_frame = combined
+                        current_data = combined
+                    st.session_state.market_incremental_error = None
+        except BrokerConnectionError as exc:
+            st.session_state.market_incremental_error = str(exc)
+            st.warning(f"Aggiornamento incrementale OHLC non disponibile; storico già caricato mantenuto: {exc}")
     try:
         refreshed_at = st.session_state.get("market_quote_refreshed_at")
         quote = st.session_state.get("market_quote")
         if (
-            not quote
-            or not refreshed_at
-            or (datetime.now(timezone.utc) - refreshed_at).total_seconds() >= 10
+            not skip_refresh
+            and (
+                not quote
+                or not refreshed_at
+                or (datetime.now(timezone.utc) - refreshed_at).total_seconds() >= 10
+            )
         ):
             quote = broker.get_latest_quote(symbol)
             st.session_state.market_quote_refreshed_at = datetime.now(timezone.utc)
+        if not quote:
+            raise BrokerConnectionError(
+                st.session_state.get("market_quote_error")
+                or "Quotazione corrente non disponibile."
+            )
         try:
             observed = pd.Timestamp(quote.get("timestamp"))
             if pd.isna(observed):
@@ -656,6 +716,8 @@ def _live_quote_monitor(
             latest_quote=None,
             local_history=ledger.history(),
         )
+    if _market_view_revision() != previous_revision:
+        _sync_dashboard_views()
 
 
 @st.fragment(run_every="15s")
@@ -1076,7 +1138,7 @@ def _show_simulation_account(spread_bps: float) -> None:
         st.info("Nessuna posizione aperta.")
 
 
-st.title("AI Trading Bot")
+st.title("Trading Dashboard")
 st.caption(
     "Monitora il conto, l'andamento del mercato e le attività recenti. "
     "Demo · Simulazione offline · Alpaca Paper — capitale, posizioni e storico distinti."
@@ -1433,6 +1495,8 @@ with st.container():
     current_quality = st.session_state.get("market_quality") if market_data_current else None
     current_symbol = st.session_state.get("market_symbol") if market_data_current else None
     current_interval = st.session_state.get("market_interval") if market_data_current else None
+    if not market_data_current:
+        st.session_state.pop("_market_status_sync_rerun", None)
     automation_settings = replace(
         settings,
         risk_max_trade_fraction=float(max_trade_fraction),

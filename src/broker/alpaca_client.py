@@ -266,11 +266,60 @@ class AlpacaClient:
                 "Alpaca order-query support is unavailable in the installed SDK."
             )
         try:
-            request = GetOrdersRequest(status=QueryOrderStatus.ALL, limit=500)
-            orders = self._validate_collection(self.client.get_orders(filter=request), 'orders')
-            if len(orders) >= 500:
-                raise BrokerConnectionError("Order history may be truncated; automation is blocked.")
-            return orders
+            result = []
+            seen = {}
+            overlap = {}
+            until = None
+            previous_oldest = None
+            for page_number in range(100):
+                request = GetOrdersRequest(
+                    status=QueryOrderStatus.ALL, limit=500, direction='desc', until=until
+                )
+                orders = self._validate_collection(self.client.get_orders(filter=request), 'orders')
+                if page_number == 0 and len(orders) < 500:
+                    return orders
+                if len(orders) > 500:
+                    raise BrokerConnectionError('Order history may be truncated: oversized page.')
+                metadata = {}
+                timestamps = []
+                for order in orders:
+                    identity = order.get('id') if isinstance(order, dict) else getattr(order, 'id', None)
+                    submitted = order.get('submitted_at') if isinstance(order, dict) else getattr(order, 'submitted_at', None)
+                    if not identity or isinstance(identity, bool) or not isinstance(submitted, (str, datetime, pd.Timestamp)):
+                        raise BrokerConnectionError('Order history may be truncated: missing pagination metadata.')
+                    identity = str(identity)
+                    timestamp = pd.Timestamp(submitted)
+                    if pd.isna(timestamp) or timestamp.tzinfo is None or identity in metadata:
+                        raise BrokerConnectionError('Order history may be truncated: ambiguous pagination metadata.')
+                    timestamp = timestamp.tz_convert('UTC')
+                    if until is not None and timestamp >= until:
+                        raise BrokerConnectionError('Order history may be truncated: cursor was not respected.')
+                    if timestamps and timestamp > timestamps[-1]:
+                        raise BrokerConnectionError('Order history may be truncated: unordered page.')
+                    metadata[identity] = timestamp
+                    timestamps.append(timestamp)
+                if any(metadata.get(identity) != timestamp for identity, timestamp in overlap.items()):
+                    raise BrokerConnectionError('Order history may be truncated: boundary overlap changed or missing.')
+                for order, (identity, timestamp) in zip(orders, metadata.items()):
+                    if identity in seen:
+                        if seen[identity] != timestamp:
+                            raise BrokerConnectionError('Order history may be truncated: order timestamp changed.')
+                    else:
+                        result.append(order)
+                        seen[identity] = timestamp
+                if len(orders) < 500:
+                    return result
+                oldest = timestamps[-1]
+                if previous_oldest is not None and oldest >= previous_oldest:
+                    raise BrokerConnectionError('Order history may be truncated: timestamp cursor did not progress.')
+                # until is exclusive: overlap the oldest group rather than skipping tied orders.
+                pivot = next((timestamp for timestamp in reversed(timestamps) if timestamp > oldest), None)
+                if pivot is None:
+                    raise BrokerConnectionError('Order history may be truncated: timestamp boundary is ambiguous.')
+                overlap = {identity: timestamp for identity, timestamp in metadata.items() if timestamp < pivot}
+                until = pivot.to_pydatetime()
+                previous_oldest = oldest
+            raise BrokerConnectionError('Order history may be truncated: pagination budget exhausted.')
         except Exception as exc:  # pragma: no cover
             self._paper_connection_verified = False
             self._verified_account = None
