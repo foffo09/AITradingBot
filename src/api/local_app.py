@@ -7,6 +7,7 @@ from pathlib import Path
 import secrets
 import sqlite3
 import threading
+from uuid import UUID
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Request
@@ -19,10 +20,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from config.settings import AppSettings
 from src.backtesting.engine import BacktestEngine
 from src.broker.alpaca_client import AlpacaClient
-from src.broker.mt5_readonly import MT5ReadOnly, MT5ReadError
+from src.broker.mt5_readonly import MT5ReadError
+from src.broker.mt5_process import MT5Process
+from src.trading.offline_executor import OfflineExecutor, OfflineExecutionError
 from src.data.instruments import INSTRUMENTS
 from src.data.market_data import generate_demo_prices
-from src.simulation.ledger import SimulationLedger
+from src.simulation.ledger import SimulationLedger, IdempotencyConflictError
+from src.strategy.moving_average import MovingAverageStrategy
+from src.strategy.trend import EMACrossoverStrategy
 from src.strategy.engine import SignalProposal
 
 Context = Literal['demo', 'simulation', 'paper', 'mt5']
@@ -43,7 +48,15 @@ class TradeInput(BaseModel):
     context: LocalContext
     symbol: str
     side: Literal['buy', 'sell']
+    idempotency_key: UUID
     quantity: Positive
+
+
+class AutomationInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    context: LocalContext
+    command: Literal['start', 'pause', 'stop', 'cycle']
+    request_id: UUID
 
 
 class BacktestInput(BaseModel):
@@ -58,6 +71,24 @@ def _symbol(symbol: str) -> str:
     if symbol not in INSTRUMENTS:
         raise HTTPException(422, 'Unknown instrument.')
     return symbol
+
+
+
+def _indicators(data, currency):
+    """Chart diagnostics reuse the causal strategy calculations, not UI formulas."""
+    sma = MovingAverageStrategy().generate_signals(data)
+    ema = EMACrossoverStrategy().generate_signals(data)
+    result = []
+    for identity, column, values, window, method in (
+        ('sma10', 'short_ma', sma, 10, 'SMA'), ('sma30', 'long_ma', sma, 30, 'SMA'),
+        ('ema9', 'short_ma', ema, 9, 'EMA'), ('ema21', 'long_ma', ema, 21, 'EMA'),
+        ('ema50', 'ema50', ema, 50, 'EMA'), ('rsi14', 'rsi14', ema, 14, 'Wilder EWM'),
+    ):
+        result.append(dict(id=identity, label=identity.upper(), pane='rsi' if identity == 'rsi14' else 'price',
+            unit='index' if identity == 'rsi14' else currency, method=method, parameters={'window': window},
+            points=[{'time': int(pd.Timestamp(timestamp).timestamp()), 'value': float(value) if pd.notna(value) and math.isfinite(value) else None}
+                for timestamp, value in zip(data['timestamp'], values[column])]))
+    return result
 
 
 def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -> FastAPI:
@@ -76,7 +107,8 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     host = f'127.0.0.1:{port}'
     lock = threading.RLock()
     paper = None
-    mt5 = MT5ReadOnly()
+    mt5 = MT5Process()
+    controls = {context: OfflineExecutor(root, context) for context in ('demo', 'simulation', 'paper', 'mt5')}
     settings = AppSettings(trading_mode='demo', paper_trading_enabled=False)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -153,7 +185,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             'api_version': '1', 'context': context,
             'connection': {'status': 'disconnected', 'reason': 'Explicit connection required.'},
             'account': None, 'positions': [], 'orders': [], 'trades': [],
-            'automation': {'state': 'stopped', 'reason': 'This service never submits broker orders.'},
+            'automation': controls[context].status(),
         }
         if context in paths:
             result['connection'] = {'status': 'local', 'reason': 'Local ledger; synthetic prices, USD.'}
@@ -208,13 +240,14 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     @app.get('/api/v1/market')
     def market(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
-        result = {'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'status': 'unavailable', 'reason': 'Market data unavailable; no fallback.', 'source': None, 'as_of': None, 'bars': [], 'quote': None, 'metadata': {}}
+        result = {'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'status': 'unavailable', 'reason': 'Market data unavailable; no fallback.', 'source': None, 'as_of': None, 'bars': [], 'quote': None, 'metadata': {}, 'indicators': []}
         with lock:
             try:
                 data = frame(context, symbol, interval)
                 if context == 'mt5':
                     result['quote'] = mt5.latest_quote(symbol)
                 result.update(status='ready', reason='Synthetic data, not a broker price.' if context in paths else 'Historical bars; feed coverage and freshness require verification.', metadata=dict(data.attrs), source=data.attrs['source'], as_of=data.attrs.get('fetched_at', pd.Timestamp.now(tz='UTC').isoformat()), bars=[{'time': int(pd.Timestamp(row.timestamp).timestamp()), **{key: float(getattr(row, key)) for key in ('open', 'high', 'low', 'close', 'volume')}} for row in data.itertuples()])
+                result['indicators'] = _indicators(data, 'N/D' if context == 'mt5' else 'USD')
                 if context == 'paper':
                     try:
                         result['quote'] = paper.get_latest_quote(symbol)
@@ -244,17 +277,19 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
         _symbol(body.symbol)
         with lock:
             if not paths[body.context].exists() or ledger(body.context).account() is None:
-                raise HTTPException(409, 'Initialize the local account explicitly first.')
+                raise HTTPException(409, 'Initialize the local account explicitly first.', headers={'X-Request-Outcome': 'rejected'})
             local = ledger(body.context)
             data = frame(body.context, body.symbol, '1Day')
-            kwargs = dict(symbol=body.symbol, quantity=body.quantity, market_price=float(data.iloc[-1]['close']), commission_bps=settings.commission_bps, slippage_bps=settings.slippage_bps, spread_bps=settings.spread_bps, reason='Explicit local simulated trade', data_timestamp=data.iloc[-1]['timestamp'].isoformat(), data_source='synthetic-demo')
+            kwargs = dict(symbol=body.symbol, quantity=body.quantity, market_price=float(data.iloc[-1]['close']), commission_bps=settings.commission_bps, slippage_bps=settings.slippage_bps, spread_bps=settings.spread_bps, reason='Explicit local simulated trade', data_timestamp=data.iloc[-1]['timestamp'].isoformat(), data_source='synthetic-demo', idempotency_key=str(body.idempotency_key))
             try:
                 if body.side == 'buy':
                     fill = local.buy(**kwargs, max_trade_fraction=settings.risk_max_trade_fraction, max_exposure_fraction=settings.risk_max_exposure_fraction, daily_loss_limit_fraction=settings.daily_loss_limit_pct, max_positions=settings.max_positions)
                 else:
                     fill = local.sell(**kwargs)
+            except IdempotencyConflictError:
+                raise HTTPException(409, 'Request identity already belongs to another operation; verify history.') from None
             except ValueError:
-                raise HTTPException(409, 'Simulated trade blocked by account, position or risk limits.') from None
+                raise HTTPException(409, 'Simulated trade blocked by account, position or risk limits.', headers={'X-Request-Outcome': 'rejected'}) from None
             return {**state(body.context), 'fill': fill}
 
     @app.post('/api/v1/backtest')
@@ -270,7 +305,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 raise HTTPException(409, 'Backtest unavailable for the requested data and parameters.') from None
         trades = result.pop('trade_history')
         curve = result.pop('equity_curve')
-        return {'api_version': '1', 'context': body.context, 'symbol': body.symbol, 'source': data.attrs['source'], 'metrics': result, 'trades': trades, 'equity': [{'time': int(pd.Timestamp(timestamp).timestamp()), 'value': value} for timestamp, value in zip(data['timestamp'], curve)]}
+        return {'api_version': '1', 'context': body.context, 'symbol': body.symbol, 'source': data.attrs['source'], 'strategy': 'sma', 'parameters': {'short_window': body.short_window, 'long_window': body.long_window}, 'interval': '1Day', 'sample': {'start': data.iloc[0]['timestamp'].isoformat(), 'end': data.iloc[-1]['timestamp'].isoformat(), 'bars': len(data)}, 'validation': {'kind': 'single_sample', 'out_of_sample': None}, 'metrics': result, 'trades': trades, 'equity': [{'time': int(pd.Timestamp(timestamp).timestamp()), 'value': value} for timestamp, value in zip(data['timestamp'], curve)]}
 
     @app.get('/api/v1/proposal')
     def proposal(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
@@ -282,12 +317,22 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 data = frame(context, symbol, interval)
                 quote = paper.get_latest_quote(symbol) if context == 'paper' and paper else None
                 result = evaluate_proposal(settings=paper.settings if context == 'paper' and paper else settings, bars=data, quote=quote, source=data.attrs['source'], as_of=pd.Timestamp.now(tz='UTC'), symbol=symbol, interval=interval, risk_snapshot=None, context=context)
-                return {**result, 'api_version': '1', 'context': context}
+                return {**result, 'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval}
             except ImportError:
                 fallback['reason'] = 'Strategy service unavailable; no proposal can be verified.'
             except Exception:
                 fallback['reason'] = 'Current market data or risk snapshot unavailable; no proposal can be verified.'
         return fallback
+
+    @app.post('/api/v1/automation')
+    def automation(body: AutomationInput):
+        with lock:
+            try:
+                controls[body.context].command(body.command, str(body.request_id),
+                    evaluate=lambda: proposal(body.context, 'AAPL', '1Day'))
+            except OfflineExecutionError:
+                raise HTTPException(409, 'Dry-run ownership or transition could not be verified; no retry was performed.') from None
+            return state(body.context)
 
     @app.post('/api/v1/connections/paper')
     def connect_paper():
@@ -315,7 +360,14 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             mt5.connect()
             return state('mt5')
 
-    app.state.close = mt5.close
+    def close():
+        try:
+            mt5.close()
+        finally:
+            for control in controls.values():
+                control.close()
+
+    app.state.close = close
     if ui_dir is not None:
         ui = Path(ui_dir).resolve(strict=True)
         if not (ui / 'index.html').is_file():

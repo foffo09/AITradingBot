@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,14 +31,14 @@ def test_local_accounts_are_explicit_separate_and_persistent(tmp_path):
     assert r.json()['account']['cash'] == 10000
     assert c.get('/api/v1/state?context=simulation').json()['account'] is None
     assert c.post('/api/v1/local-account', json={'context': 'demo', 'initial_cash': 99}, headers=headers).status_code == 409
-    r = c.post('/api/v1/local-trades', json={'context': 'demo', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1}, headers=headers)
+    r = c.post('/api/v1/local-trades', json={'context': 'demo', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1, 'idempotency_key': str(uuid4())}, headers=headers)
     assert r.status_code == 200, r.text
     assert r.json()['positions'][0]['quantity'] == 1
     c2 = client(tmp_path)
     authorize(c2)
     assert c2.get('/api/v1/state?context=demo').json()['positions'][0]['quantity'] == 1
     assert c2.get('/api/v1/state?context=paper').json()['account'] is None
-    assert c.post('/api/v1/local-trades', json={'context': 'paper', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1}, headers=headers).status_code == 422
+    assert c.post('/api/v1/local-trades', json={'context': 'paper', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1, 'idempotency_key': str(uuid4())}, headers=headers).status_code == 422
 
 
 def test_security_rejects_rebinding_csrf_and_untrusted_bootstrap(tmp_path):
@@ -161,8 +162,8 @@ def test_mt5_reads_whitelisted_methods_only(monkeypatch):
         def positions_get(self): return ()
         def orders_get(self): return ()
         def order_send(self, *args): pytest.fail('No MT5 orders permitted')
-    monkeypatch.setattr(mt5_readonly.sys, 'platform', 'win32')
-    monkeypatch.setattr(mt5_readonly.importlib, 'import_module', lambda name: Terminal())
+    monkeypatch.setattr(mt5_readonly, 'sys', SimpleNamespace(platform='win32'))
+    monkeypatch.setattr(mt5_readonly, 'importlib', SimpleNamespace(import_module=lambda name: Terminal()))
     reader = mt5_readonly.MT5ReadOnly()
     reader.connect()
     assert reader.snapshot()['account']['cash'] == 100
@@ -201,14 +202,14 @@ def test_local_equity_and_profitable_sell_have_json_safe_metrics(tmp_path, monke
     h = authorize(c)
     state = c.post('/api/v1/local-account', json={'context': 'demo', 'initial_cash': 10000}, headers=h).json()
     assert state['account']['equity'] == 10000
-    c.post('/api/v1/local-trades', json={'context': 'demo', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1}, headers=h)
+    c.post('/api/v1/local-trades', json={'context': 'demo', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1, 'idempotency_key': str(uuid4())}, headers=h)
     original = local_app.generate_demo_prices
     def higher(*args, **kwargs):
         data = original(*args, **kwargs)
         data['close'] *= 2
         return data
     monkeypatch.setattr(local_app, 'generate_demo_prices', higher)
-    response = c.post('/api/v1/local-trades', json={'context': 'demo', 'symbol': 'AAPL', 'side': 'sell', 'quantity': 1}, headers=h)
+    response = c.post('/api/v1/local-trades', json={'context': 'demo', 'symbol': 'AAPL', 'side': 'sell', 'quantity': 1, 'idempotency_key': str(uuid4())}, headers=h)
     assert response.status_code == 200
     assert response.json()['account']['profit_factor'] is None
     assert response.json()['account']['equity'] > 10000
@@ -297,3 +298,70 @@ def test_demo_proposal_reaches_pure_service_and_keeps_its_rejection_provenance(t
     assert proposal['provenance']['bars']['source'] == 'synthetic-demo'
     assert proposal['provenance']['bars']['interval'] == '5Min'
     assert proposal['validation_state'] == 'NO_TRADE'
+
+
+def test_api_trade_replay_is_idempotent_across_restart_and_payload_is_bound(tmp_path):
+    from uuid import uuid4
+    c = client(tmp_path)
+    h = authorize(c)
+    c.post('/api/v1/local-account', json={'context': 'demo', 'initial_cash': 10000}, headers=h)
+    body = dict(context='demo', symbol='AAPL', side='buy', quantity=1, idempotency_key=str(uuid4()))
+    first = c.post('/api/v1/local-trades', json=body, headers=h)
+    assert first.status_code == 200, first.text
+    again = c.post('/api/v1/local-trades', json=body, headers=h)
+    assert again.json()['positions'][0]['quantity'] == 1
+    assert again.json()['fill']['duplicate'] is True
+    restarted = client(tmp_path)
+    h2 = authorize(restarted)
+    replay = restarted.post('/api/v1/local-trades', json=body, headers=h2)
+    assert replay.json()['fill']['duplicate'] is True
+    assert restarted.post('/api/v1/local-trades', json={**body, 'quantity': 2}, headers=h2).status_code == 409
+
+
+def test_market_indicators_and_backtest_sample_are_explicit(tmp_path):
+    c = client(tmp_path)
+    h = authorize(c)
+    market = c.get('/api/v1/market?context=demo&symbol=AAPL').json()
+    indicators = {item['id']: item for item in market['indicators']}
+    assert set(indicators) == {'sma10', 'sma30', 'ema9', 'ema21', 'ema50', 'rsi14'}
+    assert indicators['sma10']['points'][0]['value'] is None
+    assert indicators['rsi14']['method'] == 'Wilder EWM'
+    result = c.post('/api/v1/backtest', json={'context': 'demo', 'symbol': 'AAPL'}, headers=h).json()
+    assert result['validation'] == {'kind': 'single_sample', 'out_of_sample': None}
+    assert result['sample']['bars'] == 200
+    assert c.get('/api/v1/proposal?interval=5Min').json()['interval'] == '5Min'
+
+
+def test_automation_is_explicit_offline_idempotent_and_context_isolated(tmp_path):
+    c = client(tmp_path)
+    h = authorize(c)
+    assert c.get('/api/v1/state').json()['automation']['state'] == 'STOPPED'
+    assert not list(tmp_path.glob('*control.sqlite3'))
+    body = dict(context='demo', command='start', request_id=str(uuid4()))
+    started = c.post('/api/v1/automation', json=body, headers=h)
+    assert started.status_code == 200, started.text
+    assert started.json()['automation']['execution_enabled'] is False
+    assert started.json()['automation']['state'] == 'RUNNING'
+    cycle = dict(context='demo', command='cycle', request_id=str(uuid4()))
+    first = c.post('/api/v1/automation', json=cycle, headers=h).json()['automation']
+    again = c.post('/api/v1/automation', json=cycle, headers=h).json()['automation']
+    assert first['proposals'] == again['proposals'] == 1
+    assert first['intents'] == 0  # Pure strategy rejects synthetic operational data.
+    assert c.get('/api/v1/state?context=simulation').json()['automation']['state'] == 'STOPPED'
+    assert c.post('/api/v1/automation', json={**body, 'context': 'paper'}, headers=h).status_code == 422
+    c.app.state.close()
+
+
+def test_definitive_risk_rejection_is_distinct_from_idempotency_conflict(tmp_path):
+    c = client(tmp_path)
+    h = authorize(c)
+    c.post('/api/v1/local-account', json={'context': 'demo', 'initial_cash': 10000}, headers=h)
+    body = dict(context='demo', symbol='AAPL', side='buy', quantity=10000, idempotency_key=str(uuid4()))
+    rejected = c.post('/api/v1/local-trades', json=body, headers=h)
+    assert rejected.status_code == 409
+    assert rejected.headers['X-Request-Outcome'] == 'rejected'
+    body.update(quantity=1, idempotency_key=str(uuid4()))
+    assert c.post('/api/v1/local-trades', json=body, headers=h).status_code == 200
+    conflict = c.post('/api/v1/local-trades', json={**body, 'quantity': 2}, headers=h)
+    assert conflict.status_code == 409
+    assert conflict.headers.get('X-Request-Outcome') != 'rejected'

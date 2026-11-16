@@ -11,6 +11,7 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+import uuid
 
 from scripts.start_local import wait_ready, shutdown_child, _NoRedirect
 
@@ -18,9 +19,10 @@ from scripts.start_local import wait_ready, shutdown_child, _NoRedirect
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', type=Path)
+    parser.add_argument('--ui-dir', type=Path)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    ui = root / 'frontend' / 'dist'
+    ui = (args.ui_dir or root / 'frontend' / 'dist').resolve()
     assert (ui / 'index.html').is_file(), 'Build the React frontend first.'
     env = {key: value for key, value in os.environ.items()
            if not any(word in key.upper() for word in ('KEY', 'SECRET', 'TOKEN', 'PASSWORD', 'ALPACA', 'MT5'))}
@@ -59,11 +61,17 @@ def main():
             assert request('state?context=demo')['account'] is None
             demo = request('local-account', {'context': 'demo', 'initial_cash': 10000.0})
             assert demo['account']['cash'] == 10000
-            traded = request('local-trades', {'context': 'demo', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1.0})
+            trade = {'context': 'demo', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1.0,
+                     'idempotency_key': str(uuid.uuid4())}
+            traded = request('local-trades', trade)
             assert len(traded['positions']) == 1
+            replay = request('local-trades', trade)
+            assert replay['fill']['duplicate'] is True and replay['fill']['id'] == traded['fill']['id']
+            assert replay['positions'] == traded['positions'] and replay['trades'] == traded['trades']
+            assert all(replay['account'][key] == traded['account'][key] for key in ('cash', 'equity', 'fees', 'spread', 'slippage')), 'Retry changed the balance or costs.'
             assert request('state?context=simulation')['account'] is None
             assert request('state?context=paper')['account'] is None
-            assert request('state?context=paper')['automation']['state'] == 'stopped'
+            assert request('state?context=paper')['automation']['state'] == 'STOPPED'
             market = request('market?context=demo&symbol=AAPL&interval=1Day')
             assert len(market['bars']) == 200 and market['source'] == 'synthetic-demo'
             proposal = request('proposal?context=demo')

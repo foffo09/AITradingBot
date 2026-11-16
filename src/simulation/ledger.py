@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
+class IdempotencyConflictError(ValueError):
+    """An existing intention cannot be reinterpreted as another operation."""
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -257,16 +261,24 @@ class SimulationLedger:
                     (_utc_now(), account["cash"] + market_value),
                 )
 
-    def _find_duplicate(self, db: sqlite3.Connection, key: str) -> dict[str, Any] | None:
-        row = db.execute("SELECT id FROM trades WHERE idempotency_key=?", (key,)).fetchone()
+    def _find_duplicate(self, db: sqlite3.Connection, key: str, symbol: str,
+                        side: str, quantity: float) -> dict[str, Any] | None:
+        row = db.execute("SELECT id, symbol, quantity FROM trades WHERE idempotency_key=?", (key,)).fetchone()
         if row:
+            if side != 'buy' or row['symbol'] != symbol or row['quantity'] != quantity:
+                raise IdempotencyConflictError('Idempotency key belongs to a different trade payload.')
             return {"id": row["id"], "duplicate": True, "kind": "buy"}
-        row = db.execute(
-            "SELECT id FROM closes WHERE idempotency_key=? OR idempotency_key=? || ':' || id LIMIT 1",
+        rows = db.execute(
+            "SELECT c.id, t.symbol, c.quantity FROM closes c JOIN trades t ON t.id=c.trade_id "
+            "WHERE c.idempotency_key=? OR c.idempotency_key=? || ':' || c.id",
             (key, key),
-        ).fetchone()
-        if row:
-            return {"id": row["id"], "duplicate": True, "kind": "sell"}
+        ).fetchall()
+        if rows:
+            if side != 'sell' or any(row['symbol'] != symbol for row in rows) or not math.isclose(
+                sum(row['quantity'] for row in rows), quantity, rel_tol=1e-12, abs_tol=1e-12
+            ):
+                raise IdempotencyConflictError('Idempotency key belongs to a different trade payload.')
+            return {"id": rows[0]["id"], "duplicate": True, "kind": "sell"}
         return None
 
     def buy(
@@ -310,7 +322,7 @@ class SimulationLedger:
 
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            duplicate = self._find_duplicate(db, key)
+            duplicate = self._find_duplicate(db, key, symbol, 'buy', quantity)
             if duplicate:
                 return duplicate
             account = db.execute("SELECT * FROM account WHERE id=1").fetchone()
@@ -423,7 +435,7 @@ class SimulationLedger:
 
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            duplicate = self._find_duplicate(db, key)
+            duplicate = self._find_duplicate(db, key, symbol, 'sell', quantity)
             if duplicate:
                 return duplicate
             account = db.execute("SELECT * FROM account WHERE id=1").fetchone()
@@ -556,6 +568,10 @@ class SimulationLedger:
                 open_exit_costs += fee + spread + slippage
                 unrealized += qty * (mark - position["entry_price"]) - position["remaining_entry_fee"] - fee - spread - slippage
             closes = db.execute("SELECT net_pnl, gross_pnl FROM closes").fetchall()
+            pnl_day = datetime.now(timezone.utc).date().isoformat()
+            daily_realized = db.execute(
+                "SELECT COALESCE(SUM(net_pnl),0) FROM closes WHERE date(closed_at)=?", (pnl_day,)
+            ).fetchone()[0]
             realized = sum(row["net_pnl"] for row in closes)
             closed_wins = sum(1 for row in closes if row["net_pnl"] > 0)
             closed_losses = sum(1 for row in closes if row["net_pnl"] < 0)
@@ -599,6 +615,9 @@ class SimulationLedger:
                 "market_value": market_value,
                 "current_capital": equity,
                 "realized_pnl": realized,
+                "daily_realized_pnl": daily_realized,
+                "pnl_day": pnl_day,
+                "pnl_timezone": "UTC",
                 "unrealized_pnl": unrealized,
                 "total_pnl": pnl,
                 "return_pct": pnl / account["initial_cash"] * 100 if account["initial_cash"] else 0.0,

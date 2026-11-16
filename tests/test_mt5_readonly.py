@@ -29,8 +29,8 @@ def terminal(monkeypatch):
         copy_rates_from_pos=lambda *args: state.rows,
         TIMEFRAME_D1=1440, ACCOUNT_TRADE_MODE_DEMO=0,
     )
-    monkeypatch.setattr(mt5_readonly.sys, 'platform', 'win32')
-    monkeypatch.setattr(mt5_readonly.importlib, 'import_module', lambda name: module)
+    monkeypatch.setattr(mt5_readonly, 'sys', SimpleNamespace(platform='win32'))
+    monkeypatch.setattr(mt5_readonly, 'importlib', SimpleNamespace(import_module=lambda name: module))
     reader = mt5_readonly.MT5ReadOnly()
     reader.connect()
     return reader, state
@@ -116,10 +116,12 @@ def test_invalid_bar_never_reaches_chart_or_strategy(terminal, field, value):
         reader.market_data('AAPL', '1Day')
 
 
-def test_api_stale_tick_clears_values_and_does_not_reuse_earlier_quote(terminal, tmp_path):
+def test_api_stale_tick_clears_values_and_does_not_reuse_earlier_quote(terminal, tmp_path, monkeypatch):
     from src.api.local_app import create_local_app
     from fastapi.testclient import TestClient
     reader, state = terminal
+    import sys
+    monkeypatch.setattr(sys.modules['src.api.local_app'], 'MT5Process', lambda: reader)
     client = TestClient(create_local_app(data_dir=tmp_path, port=8123), base_url='http://127.0.0.1:8123')
     headers = {'Origin': 'http://127.0.0.1:8123', 'X-Local-Request': '1'}
     client.get('/api/v1/session', headers=headers)
