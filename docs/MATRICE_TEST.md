@@ -344,3 +344,9 @@ idle0% su2s, RSS121168KiB,shutdown0.2602s. Misure locali non attestano altriOS.
 RunCI43970361875 su03200f7: suiteWindowsPASS, wrapperPSFAIL; candidato aggiornato
 con testresetTCP e diagnostico. Risultato finale del nuovoSHA nella PR8/Actions.
 La vecchia riga FAILPillow è storica, superata da upgradecompatibile+auditzero.
+
+
+Ultimo controllo dopo protocolloWindows/buildhook:936PASS/1skip/1warning38.53s,
+guard0/0. La confermaWindows del redirector e del pacchetto rimane demandata alla
+CI del prossimoSHA. Cargo-audit0vulnerabilità/2warning non soppressi. GUIcorrente
+Maclocked NON VERIFICATO; backend nativo privato healthy e stop con porta chiusa.

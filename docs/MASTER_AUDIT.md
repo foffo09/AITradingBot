@@ -486,3 +486,41 @@ quello5.6624s; non è garanzia di15s su tutti glihost. Nessun listener residuo.
 | File aggiuntivo | Modifica | Motivo | Prova |
 |---|---|---|---|
 | `packaging/backend/requirements.txt` | Pin setuptools84.2.1 | Elimina crash di frozen da venvpulita | RED startup→GREENsmoke |
+
+
+### Seconda CI e correzioni guidate dai log
+
+Run43972072704 su61c68d3: suiteMac eWindowsPASS, packagingMac ewrapperWindowsFAIL.
+Macfrozen termina prima della readiness; presenti hookpkg_resources da ambiente
+runner globale non usati dall’applicazione. Esclusi dal runtime setuptools e
+pkg_resources, mantenendo i tool nel builder; aggiunto diagnostico smoke che
+pubblica solo il nome del modulo mancante, mai traceback/input privati.
+Windowswrapper: startupValueError. La venvWindows usa un redirector interprete:
+PID del worker diverso dal PopenChild. Il protocollo riporta anche supervisor_pid
+suWindows; la pipe del figlio posseduto deve attestare esattamente il supervisor
+atteso, altrimenti rifiuto. Il record conserva il PID reale per identityHTTP; non
+si uccide alcun PID ricevuto da rete. TestRED→GREEN per supervisorecorretto,
+supervisorediverso/boolrifiutati e combinazioniWin/Mac/source/frozen.
+Conferma definitiva dei nuovi percorsi demanda al prossimo run nativo.
+
+Carg-audit eseguito sul lock:0 vulnerabilità,2warning non soppressi:
+RUSTSEC-2024-0370 proc-macro-error1.0.4 non mantenuto e RUSTSEC-2024-0429 glib0.18.5
+unsounditerator (stackGTK opzionaleLinux). Non si deduce assenza di rischio dal
+solo contatore0; nessun aggiornamento forzato del grafoTauri. Licenze restano gate.
+
+Nuova prova desktop con HOMEtemporanea: processo/argomenti/data-dir attestati,
+servizio privato healthy su52140, ma Macbloccato impedisce verifica grafica finale.
+Arrestato solo il backend posseduto tramite identity/session/shutdown; listener
+chiuso, monitor della shell richiedeuscita. Non vengono riaperti app o database
+standard. StatoGUI finaleNON VERIFICATO fino a sblocco manuale.
+
+
+Nuovo controllo completoMacPython3.11.18:936PASS/1skip/1warning in38.53s,
+guard0/0, compileall/pipcheck/diffcheck0; HTTPsourcePASS. Il controllo frozen
+ora richiede sempre identitàChild/supervisor dalla pipe posseduta, eliminando
+il precedente bypass expected_pid=None per il binario.
+
+| File aggiuntivo | Modifica | Motivo | Prova |
+|---|---|---|---|
+| `src/runtime/local_service.py` | SupervisorWindows in readiness | Redirectorvenv con PIDworker differente | test_local_runtime/CIwrapper |
+| `tests/test_local_runtime.py` | Source/frozen eWin/Mac | Mantiene identità e restrizioni | 4combinazioni readiness |

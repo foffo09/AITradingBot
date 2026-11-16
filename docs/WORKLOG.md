@@ -692,3 +692,11 @@ PRdraft8 pubblicata su branchcompletion, baseintegration; nessun mainmerge.
 NotionBrave debuggerunattached e fallbackIAB richiedeaccesso: report non salvato.
 GUI iniziale: riapertura involontaria in appdatastandard, dry-run fermato/appchiusa;
 nuovo diario di controllo conservato, nessun conto o ordine creato. Dettagli audit.
+
+
+Nuovi logCI hanno distinto startupWindowsValueError dal precedente rifiuto atteso;
+protocollo supervisor per redirectorvenv, test ownership invariati/estesi. Bundle
+esclude anche buildtoolruntime; diagnosticofrozen pubblica solo modulo mancante.
+SuiteMac936PASS/1skip/1warning38.53s guard0/0; compileall/pipcheck/diffcheck0.
+Cargo-audit0vulnerabilità,2warning non soppressi (proc-macro-error/glibLinux).
+SecondaGUIprivata impedita da schermo bloccato; backendhealthy privato fermato.

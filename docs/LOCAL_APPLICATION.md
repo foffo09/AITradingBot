@@ -211,5 +211,6 @@ Questa singola misura non garantisce cold start sotto15s su ogni macchina.
 
 Release ancora BLOCCATA: licenza progetto/notice complete assenti, Windows11GUI,
 retentionappdata/upgrade reali, firma e cleanup frozenWindows durante nativehang
-non verificati. npm audit e pip-audit0; audit Rust advisories non eseguito.
+non verificati. npm audit e pip-audit0; cargo-audit:0 vulnerabilità e2warning (proc-macro-error non mantenuto,
+glib iterator unsound nello stack opzionaleLinux), da valutare prima della release.
 Non distribuire prima di risolvere i gate. Nessun artifact o release pubblicato.

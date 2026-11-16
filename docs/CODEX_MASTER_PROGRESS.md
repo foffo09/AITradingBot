@@ -67,3 +67,7 @@ Windows 11 GUI, broker autentici, firma/notarizzazione, permesso di distribuzion
 - WrapperCI: secondo launcher atteso fallito in job separato; ownership/healthprimo restano verificati. Aggiunto diagnostico fase/tipo, nessun esito atteso indebolito.
 
 - Builderpinned GREEN: frozenHTTPPASS, start6.8239s/health0.0039s/RSS119984KiB/idle0.496%su2s/shutdown0.4038s/exit0. File aggiuntivo packaging/backend/requirements.txt documentato.
+
+- SecondaCI61c68d3: suiteMac/WindowsPASS, packagingMac ewrapperWindowsFAIL. Aggiunte esclusioni runtimebuildtool, diagnostico nomimodulisolo e protocollo supervisor per redirectorWindows con regressioniRED→GREEN. NuovaCIdaavviare.
+- Cargo-audit lock:0vulnerabilità; warningproc-macro-errorunmaintained eglibunsoundLinuxopzionale non soppressi.
+- Desktoptemporaneo healthyattestato, GUIbloccata da Maclocked. Richiesto sblocco manuale con domandaasincrona; lavoro indipendente continua. Solo backendtest fermato con identitàverificata, nessuna riapertura standard.
