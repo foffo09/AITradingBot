@@ -197,3 +197,13 @@ def test_shutdown_keeps_polling_after_connection_reset_until_refused():
         if isinstance(value, Exception): raise value
         return value
     stop_instance(info, request=request, timeout=2)
+
+
+def test_owned_interpreter_redirector_handshake_keeps_actual_worker_identity():
+    from scripts.start_local import parse_identity
+    value = {'pid': 43, 'supervisor_pid': 42, 'port': 8765, 'instance_id': 'a' * 32}
+    assert parse_identity(value, expected_pid=42)['pid'] == 43
+    with pytest.raises(ValueError):
+        parse_identity({**value, 'supervisor_pid': 41}, expected_pid=42)
+    with pytest.raises(ValueError):
+        parse_identity({**value, 'supervisor_pid': True}, expected_pid=42)

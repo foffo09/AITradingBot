@@ -27,7 +27,8 @@ def parse_identity(value, *, expected_pid=None):
     pid, port, instance = value.get('pid'), value.get('port'), value.get('instance_id')
     if (type(pid) is not int or pid <= 0 or type(port) is not int or not 1 <= port <= 65535
             or not isinstance(instance, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,128}', instance)
-            or (expected_pid is not None and pid != expected_pid)):
+            or (expected_pid is not None and pid != expected_pid
+                and (type(value.get('supervisor_pid')) is not int or value['supervisor_pid'] != expected_pid))):
         raise ValueError('Identità del servizio non valida.')
     return {'pid': pid, 'port': port, 'instance_id': instance}
 
