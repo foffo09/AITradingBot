@@ -43,7 +43,7 @@ def plot_market_chart(
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=signals["timestamp"], y=signals["short_ma"], mode="lines", name=f"MA breve ({short_window})",
-        line={"color": "#d5b777", "width": 1.5},
+        line={"color": "#a78bfa", "width": 1.5},
     ), row=1, col=1)
     if latest_quote and finite_number(latest_quote.get("price")) is not None and float(latest_quote["price"]) > 0:
         fig.add_hline(
@@ -59,7 +59,7 @@ def plot_market_chart(
         )
     fig.add_trace(go.Scatter(
         x=signals["timestamp"], y=signals["long_ma"], mode="lines", name=f"MA lunga ({long_window})",
-        line={"color": "#7fa7d8", "width": 1.5},
+        line={"color": "#60a5fa", "width": 1.5},
     ), row=1, col=1)
 
     buys = signals[signals["signal"] == 1]
@@ -165,24 +165,24 @@ def plot_market_chart(
          "label": "1m" if intraday else "1a"},
         {"step": "all", "label": "Tutto"},
     ])
-    fig.update_xaxes(showgrid=True, gridcolor="#203149", zeroline=False)
-    fig.update_yaxes(showgrid=True, gridcolor="#203149", zeroline=False, automargin=True)
+    fig.update_xaxes(showgrid=True, gridcolor="#293548", zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor="#293548", zeroline=False, automargin=True)
     fig.update_layout(
         title=f"{symbol} · {'SYNTHETIC / DEMO' if data.attrs.get('quality') == 'synthetic' else 'Storico OHLC'}",
-        height=760 if show_rsi else 650,
+        height=500 if show_rsi else 420,
         template="plotly_dark",
-        paper_bgcolor="#101c2e",
-        plot_bgcolor="#101c2e",
-        font={"color": "#dce6ef"},
+        paper_bgcolor="#1e293b",
+        plot_bgcolor="#1e293b",
+        font={"color": "#e2e8f0"},
         xaxis_rangeslider_visible=False,
         hovermode="x unified",
-        hoverlabel={"bgcolor": "#17283f", "bordercolor": "#7293b5", "font": {"color": "#edf3fa"}},
+        hoverlabel={"bgcolor": "#172235", "bordercolor": "#8b5cf6", "font": {"color": "#f1f5f9"}},
         dragmode="pan",
         uirevision=f"market:{symbol.upper()}:{interval}",
-        xaxis_rangeselector={"buttons": range_buttons, "bgcolor": "#203149",
-                             "activecolor": "#42618a", "font": {"color": "#edf3fa"}, "y": 1.06},
+        xaxis_rangeselector={"buttons": range_buttons, "bgcolor": "#293548",
+                             "activecolor": "#7c3aed", "font": {"color": "#f1f5f9"}, "y": 1.06},
         legend={"orientation": "h", "yanchor": "top", "y": -0.12, "x": 0},
-        margin={"l": 20, "r": 20, "t": 110, "b": 90},
+        margin={"l": 16, "r": 16, "t": 75, "b": 65},
     )
     st.plotly_chart(fig, width="stretch", theme=None, config={
         "scrollZoom": True,

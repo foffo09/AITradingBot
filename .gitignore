@@ -34,3 +34,8 @@ config/paper_live_state.json.tmp
 config/native_orders.sqlite3*
 config/feed_cache/
 data/*.sqlite3.lock
+
+# React / Tauri build artifacts
+node_modules/
+frontend/dist/
+src-tauri/target/

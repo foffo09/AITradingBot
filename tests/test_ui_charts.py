@@ -47,6 +47,21 @@ def test_chart_exposes_zoom_pan_and_time_navigation(market_data, rendered, inter
     assert fig.layout.hovermode == "x unified"
     assert fig.layout.hoverlabel.font.color
     assert fig.layout.legend.orientation == "h"
+    assert fig.layout.height == 420
+
+
+def test_chart_uses_compact_dark_theme_and_indigo_timeframe(market_data, rendered):
+    render(market_data)
+    fig, _ = rendered[0]
+    assert fig.layout.height == 420
+    assert fig.layout.paper_bgcolor == "#1e293b"
+    assert fig.layout.plot_bgcolor == "#1e293b"
+    assert fig.layout.xaxis.rangeselector.activecolor == "#7c3aed"
+
+
+def test_chart_keeps_compact_height_with_optional_rsi(market_data, rendered):
+    render(market_data, show_rsi=True)
+    assert rendered[0][0].layout.height == 500
 
 
 def test_zoom_survives_refresh_but_resets_for_symbol_or_interval(market_data, rendered):

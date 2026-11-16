@@ -144,3 +144,17 @@ OHLC ambiguo. Replay con livelli non validi fallisce, senza disattivare protezio
 Tranche fisse training/validation/OOS non sovrapposte e chiusura per-row esplicita.
 Nessuna validazione statistica, cambio UI o attivazione di trading impliciti.
 Dettagli: [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md).
+
+## D15 — Rerun solo quando cambia il contenuto del riepilogo
+
+Stato: verificato con AppTest e fragment invocati direttamente. La revisione
+dello snapshot Paper confronta account, posizioni e ordini; un nuovo
+`updated_at` da solo viene mostrato dal monitor ma non forza un rerun completo.
+Stato di verifica, errori e contenuti diversi continuano a riallineare le
+superfici esterne ai fragment. I flag monouso evitano la seconda lettura.
+
+Motivo: il timestamp descrive l'acquisizione, non una variazione dei valori
+esposti fuori dal fragment. Includerlo nella revisione provocava rerun anche
+quando il contenuto era identico e poteva interrompere un'azione UI in corso.
+Quote e OHLC mantengono invece timestamp e metadati propri; nessuna fonte viene
+fusa in uno snapshot atomico.

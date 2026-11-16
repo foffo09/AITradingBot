@@ -1,0 +1,13 @@
+[package]
+name = "aitradingbot-desktop"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.5", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.6", features = [] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
