@@ -1,5 +1,43 @@
 # Audit e integrazione applicazione locale — 16 novembre 2026
 
+## Consegna locale — 17 novembre 2026
+
+Branch `agents/codex-completion-20261116`, base `37a3840`, PR draft #8:
+https://github.com/foffo09/AITradingBot/pull/8 (base integration, nessun merge).
+Ultima CI nativa completa `daa5b86`, run43973548981: **4/4 SUCCESS**. WindowsServer2025
+Python3.11.9 **937PASS/0skip/1warning165.19s**; macOS26.7.2arm64 Python3.11.9
+**936PASS/1skip/1warning109.86s**, guard0/0 per entrambe; miratiCI152PASS.
+Frontend34PASS eRust3PASS su entrambi. Source/frozenHTTP, wrapperPowerShell
+reali con doppiaistanza/stop/restart e NSISunsigned install/smoke UI installata/
+uninstall **PASS**. Nessun artifact caricato o release. La sentinella esterna
+non prova retentionappdataTauri, aggiornamentoinstallazioni o GUIWindows11.
+
+Ultima validazione locale dopo hardening IDfill: **941PASS/1skip/1warning38.89s**,
+guard0/0; compileall/pipcheck/diffcheck0. Cinque regressioniRED→GREEN impediscono
+verified_offline con IDesecuzioneNone/vuoto/spazi/bool/numero. Il nuovoSHA viene
+validato dalla CI automatica; i check della PR8 sono la fonte per il suo esito
+esatto, senza trasferire i937/936 della CI precedente al nuovoSHA.
+
+GUI finale Mac, dopo sblocco manuale: bundle ricostruito **51.43MiB**, HOME
+privata e data-dir/processo/porta52558 attestati prima del controllo grafico.
+Servizio nativo healthy al primo probe13.4164s dall’avvio del launcher (non tempo
+paintUI). Verificati creazioneDemo10000USD fittizi, fillvirtuale1AAPL nel ledger
+privato, SimulazioneN/D separata, backtest sintetico con costi e singolocampione
+esplicito, dry-run start/cycle/stop con1proposta0intent. Chiusura finestra→exit0,
+nessun processo del bundle e listener residui. Screenshotprivato finale salvato
+localmente; provaGUIWindows11 e brokerautentici NON VERIFICATI. La prima riapertura
+in appdatastandard resta incidente documentato sotto, non cancellato dalla prova
+successiva corretta. Il solo diario dry-run creato allora è stato lasciato intatto.
+
+Readiness **PARZIALMENTE COMPLETATA / RELEASE BLOCKED**: core locale/offline
+implementato e provato; licenza progetto/notice incompleti, Windows11GUI/retention/
+upgrade/firma e nativehangfrozenWindows non attestati. Brokerautentici ed esecuzione
+finanziaria fuori autorizzazione, sempre disabilitati. npm/pip-audit0; cargo-audit0
+vulnerabilità e2warning non soppressi. NotionBrave debuggerunattached anche dopo
+sblocco; IAB richiedeaccesso: nessun aggiornamento salvato, nessun permesso cambiato.
+Tutti i dettagli successivi sono cronologia, contratti e prove riproducibili.
+
+
 ## Stato corrente dopo aggiornamento compatibile
 
 Le sezioni seguenti conservano la cronologia delle prove. Il conflittoPillow è

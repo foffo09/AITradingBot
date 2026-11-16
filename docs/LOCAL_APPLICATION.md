@@ -214,3 +214,10 @@ retentionappdata/upgrade reali, firma e cleanup frozenWindows durante nativehang
 non verificati. npm audit e pip-audit0; cargo-audit:0 vulnerabilità e2warning (proc-macro-error non mantenuto,
 glib iterator unsound nello stack opzionaleLinux), da valutare prima della release.
 Non distribuire prima di risolvere i gate. Nessun artifact o release pubblicato.
+
+
+Verifica17novembre: NSISunsigned install/smoke/uninstall e wrapperPowerShellPASS
+suWindowsServer2025CI (run43973548981/daa5b86); GUIlocaleMac privataPASS, bundle51.43MiB.
+Non sostituisce Windows11GUI. Per includere MT5, installare l’SDKopzionale **prima**
+della build Windows; installarlo in un Python esterno non modifica un bundle già
+confezionato. Consenso/proveautentiche e verifica dei terminiSDK restano separati.

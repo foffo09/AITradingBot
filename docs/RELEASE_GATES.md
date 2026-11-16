@@ -383,3 +383,11 @@ lifecycle e testinstallerCI. La release resta **BLOCKED**, anche con CI verde:
 InstallerCI non firmato e testato su WindowsServer non è un rilascioWindows11.
 La sentinella esterna non prova retentionappdataTauri. Startup15s invariato.
 Nessun merge, deploy o release; decisione successiva del responsabile necessaria.
+
+
+Aggiornamento17novembre: Il run esatto è **43973548981 / daa5b86**,
+4/4PASS con installerNSIS realmente installato/provato/disinstallato sul runner
+WindowsServer2025. La GUI Mac privata è stata verificata; restano Windows11GUI,
+retentionappdatareale/upgrade, licenza/notice, firma e nativehangfrozenautentico.
+La guardiaIDfill successiva ha941PASSlocali e una nuovaCI sul nuovoHEAD nellaPR8.
+Nessuna release autorizzata dal successoCI.

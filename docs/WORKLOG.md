@@ -700,3 +700,18 @@ esclude anche buildtoolruntime; diagnosticofrozen pubblica solo modulo mancante.
 SuiteMac936PASS/1skip/1warning38.53s guard0/0; compileall/pipcheck/diffcheck0.
 Cargo-audit0vulnerabilità,2warning non soppressi (proc-macro-error/glibLinux).
 SecondaGUIprivata impedita da schermo bloccato; backendhealthy privato fermato.
+
+
+## 17 novembre — chiusura completion
+
+Run43973548981/daa5b86 tuttoverde4/4: WindowsServer2025 937PASS,MacCI936PASS/1skip,
+frontend34/Rust3 entrambe, guard0/0. ProvewrapperPowerShell eNSISinstall/smoke
+UIinstallata/uninstall riuscite; nessuna pubblicazioneartifact. GUIprivataMac
+finale riuscita dopo sblocco: Demo/fillfittizio, Simulazioneseparata, backtest,
+dry-runstop, exit0/portachiusa. Bundle51.43MiB. Notionancoraindisponibile.
+Ultima guardia esecuzioni senzaIDstabile:5RED→GREEN, suite941PASS/1skip/1warning
+38.89s. Commitfinale invia questa guardia e la documentazione alla nuovaCI;
+checkdellaPR8 attestano il nuovoHEAD. Workingtree da lasciare pulito.
+ReleaseBLOCKED: licenza/notice, Windows11GUI/retention/firma/nativehang nonprovati.
+Nessun ordine, brokerautentico, merge main, deploy o release. Primo diario dry-run
+standardcreato duranteQA resta conservato, come segnalato all’utente.

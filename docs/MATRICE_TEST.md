@@ -350,3 +350,17 @@ Ultimo controllo dopo protocolloWindows/buildhook:936PASS/1skip/1warning38.53s,
 guard0/0. La confermaWindows del redirector e del pacchetto rimane demandata alla
 CI del prossimoSHA. Cargo-audit0vulnerabilità/2warning non soppressi. GUIcorrente
 Maclocked NON VERIFICATO; backend nativo privato healthy e stop con porta chiusa.
+
+
+### CI nativa completa e GUI finale (16–17 novembre)
+
+Codice `daa5b86`, run43973548981: quattrojobSUCCESS. WindowsServer2025/Python3.11.9:
+937PASS/0skip/1warning165.19s; Mac26.7.2arm64/Python3.11.9:936PASS/1skip/1warning109.86s,
+guard0/0. TargetCI152PASS, frontend34 eRust3 su entrambi. Source/frozenHTTP,
+wrapperPS/doppioavvio/stop/restart e NSISunsigned install/installedUI/uninstallPASS.
+GUI suMaclocale27.2.1: Demo/fillvirtuale privato, Simulazione separata, backtest,
+dry-run echiusura/portachiusaPASS. Bundle51.43MiB, primo probehealthy13.4164s;
+non una garanzia coldstart universale o misura paintUI.
+IDfill rafforzato dopo questaCI: locale941PASS/1skip/1warning38.89s guard0/0.
+Il nuovoHEAD ha checkCI propri nella PR8. Windows11GUI/brokerautentici restano
+NON VERIFICATI, licenza/notice BLOCKED. Niente release o ordini.

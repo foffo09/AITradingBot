@@ -33,7 +33,7 @@ Ruling: P/L totale giornaliero non ricostruibile con basi omogenee viene mostrat
 | C04 | P1 | crash launcher lascia record; morte sidecar non monitorata | recovery conservativo, lock launcher, shutdown verificato e monitor | COMPLETATO OFFLINE |
 | C05 | P2 | automazione nuova UI è etichetta fissa | diario offline e state machine, intent/reconciliation senza broker writes | COMPLETATO OFFLINE |
 | C06 | P2 | metriche esistenti/indicatori non esposti e backtest ambiguo | contratti additivi e formule Python esistenti | COMPLETATO OFFLINE |
-| C07 | P1 release | installer Windows non collaudato | CI NSIS install/smoke/uninstall; Windows 11 GUI resta NON VERIFICATO | IN CORSO CI |
+| C07 | P1 release | installer Windows non collaudato | CI NSIS install/smoke/uninstall; Windows 11 GUI resta NON VERIFICATO | COMPLETATO CI su daa5b86 |
 | C08 | P1 release | licenza progetto non esplicita | inventario licenze; nessuna licenza inventata, decisione titolare necessaria | BLOCCATO |
 
 ## Diario prove
@@ -71,3 +71,14 @@ Windows 11 GUI, broker autentici, firma/notarizzazione, permesso di distribuzion
 - SecondaCI61c68d3: suiteMac/WindowsPASS, packagingMac ewrapperWindowsFAIL. Aggiunte esclusioni runtimebuildtool, diagnostico nomimodulisolo e protocollo supervisor per redirectorWindows con regressioniRED→GREEN. NuovaCIdaavviare.
 - Cargo-audit lock:0vulnerabilità; warningproc-macro-errorunmaintained eglibunsoundLinuxopzionale non soppressi.
 - Desktoptemporaneo healthyattestato, GUIbloccata da Maclocked. Richiesto sblocco manuale con domandaasincrona; lavoro indipendente continua. Solo backendtest fermato con identitàverificata, nessuna riapertura standard.
+
+
+## Chiusura locale — 17 novembre 2026
+
+- Fasi0–4: COMPLETATE nel perimetro locale/offline. Nessun esecutore finanziario abilitato; riconciliazione soltanto sintetica/test-only.
+- Fasi5–6: GUI Mac privataPASS, bundle51.43MiB, exit0 e cleanupPASS; CIWindowsServer/macOS4/4PASS su daa5b86, incluso NSISunsigned install/smoke/uninstall. Windows11GUI/retentionupgrade/firma restano NON VERIFICATI.
+- Fase7: CI su daa5b86: Windows937PASS,Mac936PASS/1skip,frontend34,Rust3,guard0/0. Auditpip/npm0;Rust0vulnerabilità/2warning. Ultima guardiaIDfill con5casiRED→GREEN:941PASS/1skip/1warning38.89s locale.
+- Fase8: commit/push solo branchCodex, PRdraft8 su integration, niente mainmerge. CI del nuovoHEAD verifica anche guardiaIDfill; consultare checkPR8 per l’esito corrente. Nessun risultato precedente viene attribuito al nuovoSHA.
+- Notion: BLOCCATO (Brave debuggerunattached, IAB senza sessione), report canonico pronto nel repo. Nessuna modifica permessi o login.
+- Gate release: BLOCCATO per licenza progetto/notice e proveWindows11/retention/firma/nativehangmancanti. Nessun ordine autenticato, capitale reale o deploy/release.
+- GUI: creato/fillDemo soltanto in nuova directorytemporanea attestata; Simulazione separata e NO_TRADE preservato. Primo diario standardaccidentale conservato come già segnalato, nessuna cancellazione di dati personali.
