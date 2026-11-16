@@ -406,3 +406,30 @@ osservata al primo giro: 770 passati, 1 saltato Windows Proactor, warning legacy
 websockets; successivamente aggiunte regressioni storage/statistiche/USD.
 Compileall e pip check riusciti. Nessuna credenziale o DB personale aperti,
 nessun ordine o server avviato. Paginazione ordini affrontata nel commit seguente.
+
+### Paginazione ordini Paper — successiva consegna
+
+`AlpacaClient.get_orders()` conserva firma e oggetti restituiti. Prima pagina
+ALL/500/direction=desc; se satura, verifica ID univoci, submitted_at con timezone,
+ordine discendente e cursore. `until` è esclusivo: la richiesta successiva usa
+il penultimo timestamp distinto, sovrapponendo l'intero gruppo più vecchio.
+Gli ID sovrapposti devono ricomparire con lo stesso submitted_at e vengono
+deduplicati; una pagina corta dimostra la fine entro il contratto endpoint.
+Nessun incremento temporale artificiale e nessun ordine saltato al confine.
+
+Fonte primaria verificata: [Alpaca Get All Orders](https://docs.alpaca.markets/us/reference/getallorders-1),
+parametri after/until esclusivi e direction; SDK installato 0.44.0 espone
+quei parametri ma non i nuovi cursori before_order_id/after_order_id.
+
+Blocchi prudenziali preservati: metadati assenti/incoerenti, pagine fuori ordine,
+ID duplicati/cambiati, overlap mancante, cursore ignorato/ripetuto, errore fra
+pagine, 500 ordini allo stesso timestamp e budget massimo 100 richieste.
+In quei casi errore senza storico parziale, verifica conto invalidata; non
+si dichiara completo il risultato ambiguo. Il vecchio test 500 record senza
+metadati continua a bloccare. Nessun cambiamento ai retry o alle scritture.
+Snapshot REST resta non atomico: modifiche contemporanee allo stato di ordini
+possono avvenire fra letture; non viene promesso uno snapshot transazionale.
+
+TDD: 3 regressioni fallite prima della modifica; gruppo backend/Paper/paginazione
+99 passati, 1 warning, guard 0/0. I 15 casi includono 1200 ordini su tre pagine,
+collisioni recuperabili, collisioni ambigue e budget finito.
