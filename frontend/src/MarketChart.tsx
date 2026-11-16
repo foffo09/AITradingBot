@@ -13,15 +13,21 @@ export default function MarketChart({
   bars,
   identity,
   theme,
+  priceUnit = "USD",
+  volumeUnit = "unità",
 }: {
   bars: Bar[];
   identity: string;
   theme: string;
+  priceUnit?: string;
+  volumeUnit?: string;
 }) {
   const host = useRef<HTMLDivElement>(null),
     chart = useRef<IChartApi | null>(null),
     ranges = useRef(new Map<string, { from: number; to: number }>());
-  const [hover, setHover] = useState<Bar | null>(null);
+  const [hover, setHover] = useState<{ identity: string; time: number } | null>(
+    null,
+  );
   useEffect(() => {
     if (!host.current || !bars.length) return;
     const light = theme === "light";
@@ -75,7 +81,7 @@ export default function MarketChart({
       const point = p.seriesData.get(candle);
       setHover(
         point && "close" in point
-          ? (bars.find((b) => b.time === point.time) ?? null)
+          ? { identity, time: Number(point.time) }
           : null,
       );
     });
@@ -86,7 +92,10 @@ export default function MarketChart({
       chart.current = null;
     };
   }, [bars, identity, theme]);
-  const current = hover ?? bars.at(-1);
+  const current =
+    (hover?.identity === identity
+      ? bars.find((bar) => bar.time === hover.time)
+      : undefined) ?? bars.at(-1);
   const zoom = (factor: number) => {
     const scale = chart.current?.timeScale(),
       range = scale?.getVisibleLogicalRange();
@@ -146,7 +155,7 @@ export default function MarketChart({
         ref={host}
         className="chart"
         role="img"
-        aria-label={`Candlestick e volume. Ultima barra ${instant(current?.time)}. Prezzi USD; volume unità dello strumento. Zoom con rotella e trascinamento.`}
+        aria-label={`Candlestick e volume. Ultima barra ${instant(current?.time)}. Prezzi ${priceUnit}; volume ${volumeUnit}. Zoom con rotella e trascinamento.`}
       />
       {!bars.length && (
         <p className="empty">
@@ -154,7 +163,9 @@ export default function MarketChart({
         </p>
       )}
       <div className="chart-foot">
-        <span>Prezzi USD · Volume in unità · Trascina per navigare</span>
+        <span>
+          Prezzi {priceUnit} · Volume in {volumeUnit} · Trascina per navigare
+        </span>
         <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">
           Grafici TradingView Lightweight Charts™
         </a>

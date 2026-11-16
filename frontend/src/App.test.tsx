@@ -269,3 +269,144 @@ it("rimuove snapshot quando il bootstrap di sessione fallisce nel polling", asyn
     vi.useRealTimers();
   }
 });
+
+it("mostra direzione e commissione ingresso del motore senza campi inventati", async () => {
+  fetcher.mockImplementation(
+    async (url: string, init: RequestInit) =>
+      new Response(
+        JSON.stringify(
+          init?.method === "POST"
+            ? {
+                api_version: "1",
+                context: "demo",
+                symbol: "AAPL",
+                source: "synthetic-demo",
+                metrics: {},
+                equity: [],
+                trades: [
+                  {
+                    symbol: "AAPL",
+                    direction: "long",
+                    quantity: 1,
+                    entry_fee: 1.25,
+                  },
+                ],
+              }
+            : url.includes("/instruments")
+              ? { api_version: "1", instruments: [] }
+              : url.includes("/state")
+                ? { ...state, context: "demo" }
+                : url.includes("/market")
+                  ? {
+                      api_version: "1",
+                      context: "demo",
+                      symbol: "AAPL",
+                      interval: "1Day",
+                      status: "ready",
+                      source: "synthetic-demo",
+                      bars: [],
+                      quote: null,
+                    }
+                  : url.includes("/proposal")
+                    ? {
+                        direction: "WAIT",
+                        validation_state: "NO_TRADE",
+                        reason: "Fixture",
+                      }
+                    : { api_version: "1", status: "ready" },
+        ),
+      ),
+  );
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Backtesting" }));
+  expect(screen.queryByLabelText("Intervallo")).not.toBeInTheDocument();
+  expect(
+    screen.getByText(/Intervallo del backtest: 1 giorno/),
+  ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Esegui backtest" }),
+  );
+  expect(await screen.findByText("long")).toBeInTheDocument();
+  expect(screen.getByText("1,25")).toBeInTheDocument();
+});
+
+it("conserva valuta e unità MT5 e mostra i campi terminale disponibili", async () => {
+  fetcher.mockImplementation(async (url: string) => {
+    const c =
+      new URL(url, "http://localhost").searchParams.get("context") ?? "demo";
+    if (url.includes("/backtest"))
+      return new Response(
+        JSON.stringify({
+          api_version: "1",
+          context: "mt5",
+          symbol: "AAPL",
+          source: "Terminal",
+          metrics: {},
+          equity: [
+            { time: 1700000000, value: 100 },
+            { time: 1700086400, value: 101 },
+          ],
+          trades: [],
+        }),
+      );
+    return new Response(
+      JSON.stringify(
+        url.includes("/state")
+          ? {
+              ...state,
+              context: c,
+              account: { cash: 100, equity: 101, currency: "EUR" },
+              positions: [
+                {
+                  symbol: "AAPL",
+                  volume: 2,
+                  price_open: 90,
+                  price_current: 95,
+                  profit: 10,
+                },
+              ],
+              orders: [],
+            }
+          : url.includes("/instruments")
+            ? { api_version: "1", instruments: [] }
+            : url.includes("/market")
+              ? {
+                  api_version: "1",
+                  context: c,
+                  symbol: "AAPL",
+                  interval: "1Day",
+                  status: "ready",
+                  source: "MetaTrader 5 terminal",
+                  bars: [],
+                  quote: null,
+                }
+              : url.includes("/proposal")
+                ? {
+                    direction: "WAIT",
+                    validation_state: "NO_TRADE",
+                    reason: "Fixture",
+                  }
+                : { api_version: "1", status: "ready" },
+      ),
+    );
+  });
+  render(<App />);
+  await userEvent.selectOptions(screen.getByLabelText("Contesto"), "mt5");
+  await userEvent.click(screen.getByRole("button", { name: "Portafoglio" }));
+  expect(await screen.findByText("101 EUR")).toBeInTheDocument();
+  expect(screen.getByText("100 EUR")).toBeInTheDocument();
+  expect(screen.getByText("Volume · lotti")).toBeInTheDocument();
+  expect(screen.getByText("2")).toBeInTheDocument();
+  expect(screen.getByText("90")).toBeInTheDocument();
+  expect(screen.getByText("95")).toBeInTheDocument();
+  expect(screen.getByText("10")).toBeInTheDocument();
+  expect(screen.getByText("P/L · EUR")).toBeInTheDocument();
+  expect(screen.getByText("Prezzo · valuta strumento N/D")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Backtesting" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Esegui backtest" }),
+  );
+  expect(
+    await screen.findByRole("img", { name: /Equity del backtest/ }),
+  ).toHaveAccessibleName(/valuta strumento N\/D/);
+});
