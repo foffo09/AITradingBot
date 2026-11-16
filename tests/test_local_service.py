@@ -153,10 +153,11 @@ def test_mt5_reads_whitelisted_methods_only(monkeypatch):
     from src.broker import mt5_readonly
     from types import SimpleNamespace
     class Terminal:
+        ACCOUNT_TRADE_MODE_DEMO = 0
         def initialize(self, **kwargs): return True
         def shutdown(self): pass
         def terminal_info(self): return SimpleNamespace(connected=True)
-        def account_info(self): return SimpleNamespace(login=123, server='Offline broker', balance=100, equity=101, currency='USD')
+        def account_info(self): return SimpleNamespace(trade_mode=0, login=123, server='Offline broker', balance=100, equity=101, currency='USD')
         def positions_get(self): return ()
         def orders_get(self): return ()
         def order_send(self, *args): pytest.fail('No MT5 orders permitted')
@@ -275,3 +276,14 @@ def test_failed_paper_connection_is_explicit_unavailable_without_old_values(tmp_
     assert 'private broker diagnostic' not in result.text
     assert result.json()['account'] is None
     assert result.json()['positions'] == []
+
+
+def test_market_keeps_original_frame_metadata_and_clears_it_on_failure(tmp_path):
+    c = client(tmp_path)
+    authorize(c)
+    market = c.get('/api/v1/market?context=demo&symbol=AAPL&interval=5Min').json()
+    assert market['metadata']['source'] == market['source']
+    assert market['metadata']['quality'] == 'synthetic'
+    assert market['metadata']['interval'] == '5Min'
+    unavailable = c.get('/api/v1/market?context=paper&symbol=AAPL').json()
+    assert unavailable['metadata'] == {}

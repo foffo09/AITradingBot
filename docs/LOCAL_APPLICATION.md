@@ -146,3 +146,8 @@ creazione conto Demo, fill locale, Simulazione inizialmente N/D, Paper scollegat
 N/D, backtest giornaliero, finestra ridimensionata, chiusura desktop e assenza
 sidecar orfano. Non premere connessioni autentiche durante questa prova.
 Windows Server CI non sostituisce questa prova GUI Windows11.
+
+MT5 richiede anche un conto terminale **Demo verificato**: real/contest/tipo
+mancante sono rifiutati a ogni lettura. Non cambiare o collegare un conto reale
+per aggirare questo blocco. L'API conserva gli attrs originali delle barre nel
+campo `metadata`; la UI mostra qualità, calendario e contratto senza inferirli.

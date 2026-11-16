@@ -208,22 +208,22 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     @app.get('/api/v1/market')
     def market(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
-        result = {'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'status': 'unavailable', 'reason': 'Market data unavailable; no fallback.', 'source': None, 'as_of': None, 'bars': [], 'quote': None}
+        result = {'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'status': 'unavailable', 'reason': 'Market data unavailable; no fallback.', 'source': None, 'as_of': None, 'bars': [], 'quote': None, 'metadata': {}}
         with lock:
             try:
                 data = frame(context, symbol, interval)
                 if context == 'mt5':
                     result['quote'] = mt5.latest_quote(symbol)
-                result.update(status='ready', reason='Synthetic data, not a broker price.' if context in paths else 'Historical bars; feed coverage and freshness require verification.', source=data.attrs['source'], as_of=data.attrs.get('fetched_at', pd.Timestamp.now(tz='UTC').isoformat()), bars=[{'time': int(pd.Timestamp(row.timestamp).timestamp()), **{key: float(getattr(row, key)) for key in ('open', 'high', 'low', 'close', 'volume')}} for row in data.itertuples()])
+                result.update(status='ready', reason='Synthetic data, not a broker price.' if context in paths else 'Historical bars; feed coverage and freshness require verification.', metadata=dict(data.attrs), source=data.attrs['source'], as_of=data.attrs.get('fetched_at', pd.Timestamp.now(tz='UTC').isoformat()), bars=[{'time': int(pd.Timestamp(row.timestamp).timestamp()), **{key: float(getattr(row, key)) for key in ('open', 'high', 'low', 'close', 'volume')}} for row in data.itertuples()])
                 if context == 'paper':
                     try:
                         result['quote'] = paper.get_latest_quote(symbol)
                     except Exception:
                         result['reason'] = 'Historical bars available; current quote unavailable.'
             except MT5ReadError as exc:
-                result.update(status=exc.status, reason=str(exc), quote=None, bars=[])
+                result.update(status=exc.status, reason=str(exc), quote=None, bars=[], metadata={})
             except Exception:
-                result.update(status='unavailable', reason='Market data request failed; no fallback or cached values.', source=None, as_of=None, quote=None, bars=[])
+                result.update(status='unavailable', reason='Market data request failed; no fallback or cached values.', source=None, as_of=None, quote=None, bars=[], metadata={})
         return result
 
     @app.post('/api/v1/local-account')
@@ -281,7 +281,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 from src.strategy.service import evaluate_proposal
                 data = frame(context, symbol, interval)
                 quote = paper.get_latest_quote(symbol) if context == 'paper' and paper else None
-                result = evaluate_proposal(settings=paper.settings if context == 'paper' and paper else settings, bars=data, quote=quote, source=data.attrs['source'], as_of=pd.Timestamp.now(tz='UTC'), symbol=symbol, interval=interval, risk_snapshot=None, context=context)
+                result = evaluate_proposal(settings=paper.settings if context == 'paper' and paper else settings, bars=data, quote=quote, metadata=dict(data.attrs), source=data.attrs['source'], as_of=pd.Timestamp.now(tz='UTC'), symbol=symbol, interval=interval, risk_snapshot=None, context=context)
                 return {**result, 'api_version': '1', 'context': context}
             except ImportError:
                 fallback['reason'] = 'Strategy service unavailable; no proposal can be verified.'

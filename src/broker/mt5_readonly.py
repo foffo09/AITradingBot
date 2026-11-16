@@ -39,6 +39,14 @@ def _records(items, required_numbers):
     return result
 
 
+def _demo_account(module, account):
+    mode = getattr(account, 'trade_mode', None)
+    expected = getattr(module, 'ACCOUNT_TRADE_MODE_DEMO', None)
+    if (isinstance(mode, bool) or not isinstance(mode, Integral)
+            or type(expected) is not int or mode != expected):
+        raise MT5ReadError('Only a verified Demo terminal account is allowed; real or unknown accounts are blocked.')
+
+
 class MT5ReadOnly:
     def __init__(self):
         self._module = None
@@ -53,12 +61,17 @@ class MT5ReadOnly:
             module = importlib.import_module('MetaTrader5')
             if module.initialize(timeout=5000):
                 self._module = module
+                self._terminal()
                 self._reason = 'Windows terminal read-only; account observation is not a broker timestamp.'
             else:
                 module.shutdown()
                 self._reason = 'Terminal initialization unavailable.'
         except Exception:
-            self._reason = 'Optional MetaTrader 5 module or terminal unavailable.'
+            self._reason = 'Verified Demo account or optional MetaTrader 5 terminal unavailable.'
+            try:
+                self.close()
+            except Exception:
+                self._reason = 'Demo verification failed and terminal cleanup was not confirmed.'
 
     # shortcut: native reads expose no timeout, isolate MT5 in a process before requiring a hard deadline.
     def _terminal(self):
@@ -67,6 +80,7 @@ class MT5ReadOnly:
         info = self._module.terminal_info()
         if info is None or getattr(info, 'connected', None) is not True:
             raise MT5ReadError('Terminal disconnected; cached values are not published.')
+        _demo_account(self._module, self._module.account_info())
         return self._module
 
     def snapshot(self):
@@ -75,6 +89,7 @@ class MT5ReadOnly:
         try:
             terminal = self._terminal()
             account = terminal.account_info()
+            _demo_account(terminal, account)
             login = getattr(account, 'login', None)
             if isinstance(login, bool) or not isinstance(login, Integral) or login <= 0:
                 raise MT5ReadError('Terminal account identity unavailable.')

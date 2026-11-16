@@ -13,7 +13,7 @@ def terminal(monkeypatch):
     now = pd.Timestamp.now(tz='UTC').floor('ms')
     rows = np.array([(int((now - pd.Timedelta(days=1)).timestamp()), 100., 102., 99., 101., 42)], dtype=[('time', 'i8'), ('open', 'f8'), ('high', 'f8'), ('low', 'f8'), ('close', 'f8'), ('tick_volume', 'i8')])
     state = SimpleNamespace(
-        account=SimpleNamespace(login=123, server='Offline broker', balance=1000., equity=1001., currency='USD'),
+        account=SimpleNamespace(trade_mode=0, login=123, server='Offline broker', balance=1000., equity=1001., currency='USD'),
         connected=True, positions=(), orders=(),
         tick=SimpleNamespace(bid=100., ask=101., time_msc=int(now.timestamp() * 1000)),
         rows=rows, initializations=[], shutdowns=[],
@@ -27,7 +27,7 @@ def terminal(monkeypatch):
         orders_get=lambda: state.orders,
         symbol_info_tick=lambda symbol: state.tick,
         copy_rates_from_pos=lambda *args: state.rows,
-        TIMEFRAME_D1=1440,
+        TIMEFRAME_D1=1440, ACCOUNT_TRADE_MODE_DEMO=0,
     )
     monkeypatch.setattr(mt5_readonly.sys, 'platform', 'win32')
     monkeypatch.setattr(mt5_readonly.importlib, 'import_module', lambda name: module)
@@ -146,3 +146,17 @@ def test_boolean_bar_prices_are_not_money(terminal):
     state.rows = np.array([(int(pd.Timestamp.now(tz='UTC').timestamp()), True, True, True, True, 1)], dtype=[('time', 'i8'), ('open', '?'), ('high', '?'), ('low', '?'), ('close', '?'), ('tick_volume', 'i8')])
     with pytest.raises(ValueError):
         reader.market_data('AAPL', '1Day')
+
+
+@pytest.mark.parametrize('mode', [None, True, 1, 2, '0'])
+def test_non_demo_or_unknown_terminal_account_is_blocked_on_every_read(terminal, mode):
+    reader, state = terminal
+    state.account.trade_mode = mode
+    assert reader.snapshot()['account'] is None
+    with pytest.raises(mt5_readonly.MT5ReadError):
+        reader.latest_quote('AAPL')
+    with pytest.raises(mt5_readonly.MT5ReadError):
+        reader.market_data('AAPL', '1Day')
+    reader.connect()
+    assert reader.snapshot()['connection']['status'] != 'connected'
+    assert reader._module is None

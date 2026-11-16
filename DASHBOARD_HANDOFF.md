@@ -345,3 +345,12 @@ Verifiche finali di questa correzione: lint, typecheck, build riusciti; Vitest
 **17 passati, 0 falliti**; cargo test **1 passato, 0 falliti**, cargo check riuscito.
 La prova nativa completa del nuovo handshake e il feed MT5 autentico rimangono
 separati: il primo è in corso al coordinatore, il secondo richiede Windows.
+
+### Metadati barre preservati nell'integrazione
+
+Market.metadata mantiene gli attrs originali restituiti dall'API; il parser
+accetta assenza come oggetto vuoto per compatibilità, rifiuta array/valori
+malformati e non ricostruisce calendari. Il grafico mostra quality, calendario
+e contratto barre disponibili; N/D se assenti. Test di regressione API Python
+e consumer TypeScript riprodotti rossi e poi verdi. MT5 è ora limitato a conti
+Demo verificati oltre che read-only; errore esplicito senza dati vecchi.

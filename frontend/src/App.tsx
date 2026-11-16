@@ -735,8 +735,10 @@ export default function App() {
         volumeUnit={volumeUnit}
       />
       <p className="metadata">
-        Acquisizione storico: {instant(market?.as_of)} · Le barre possono essere
-        in formazione. Lo storico non è una quota corrente.
+        Acquisizione storico: {instant(market?.as_of)} · Qualità: {text(market?.metadata?.quality)}
+        {" · "}Calendario: {text(market?.metadata?.bar_calendar)}
+        {" · "}Contratto barre: {text(market?.metadata?.bar_time_contract)}.
+        Le barre possono essere in formazione. Lo storico non è una quota corrente.
       </p>
     </section>
   );

@@ -498,3 +498,18 @@ arbitrari ricavati da una porta o da un file. Instance_id e cookie invariati.
 Due test startup con server/socket simulati sono rossi senza il campo e verdi
 con entrambi i casi script/frozen. Nessun server o broker è stato avviato qui;
 la verifica del pacchetto autentico è svolta dal coordinatore separatamente.
+
+### Consolidamento del coordinatore — metadati e Demo MT5
+
+`GET /api/v1/market` conserva gli attrs originali in `metadata`, oltre a source,
+interval/as_of e quote originali. Il consumatore React preserva l'oggetto e
+mostra quality/bar_calendar/bar_time_contract, senza inventare valori mancanti.
+Su errore l'oggetto viene svuotato insieme alle barre; i metadati non autorizzano
+operatività da soli e il motore continua a usare il gate esistente.
+
+MT5 accetta soltanto `account_info().trade_mode == ACCOUNT_TRADE_MODE_DEMO` con
+tipi verificati: real/contest/missing/bool/string vengono rifiutati. Il controllo
+è ripetuto per ogni lettura e dopo la connessione, per non riusare dati dopo un
+cambio conto. Nessun cambio/login dell'account o ordine viene effettuato dal
+programma. Enum e significato dalla [documentazione ufficiale MetaQuotes](https://www.mql5.com/en/docs/constants/environment_state/accountinformation).
+I mock dichiarano esplicitamente il conto Demo; nessun terminale vero testato.

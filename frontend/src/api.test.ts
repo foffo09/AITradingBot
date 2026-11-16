@@ -145,3 +145,14 @@ describe("isolamento delle risposte", () => {
     );
   });
 });
+
+it("conserva i metadati originali senza inventare calendario o provenienza", () => {
+  const payload = {
+    api_version: "1", context: "paper", symbol: "AAPL", interval: "1Day",
+    status: "ready", source: "Alpaca", as_of: null, bars: [], quote: null,
+    metadata: { quality: "real", bar_time_contract: "alpaca-start-v1", bar_calendar: "NYSE" },
+  };
+  expect(parseMarket(payload).metadata).toEqual(payload.metadata);
+  expect(parseMarket({ ...payload, metadata: undefined }).metadata).toEqual({});
+  expect(() => parseMarket({ ...payload, metadata: [] })).toThrow();
+});

@@ -142,3 +142,17 @@ La migrazione non equivale alla parità di tutte le funzioni Streamlit.
 Guida operativa: [LOCAL_APPLICATION.md](LOCAL_APPLICATION.md). Il file elenca
 comandi PowerShell, API, stati, storage, packaging e controlli riproducibili.
 Gli esiti CI e la PR sullo SHA pubblicato sono aggiunti dopo la lettura del run.
+
+### Ultimo consolidamento: metadati e conto Demo MT5
+
+La revisione d'integrazione ha riprodotto due lacune con test rossi: attrs delle
+barre persi dal DTO/consumer e mancato controllo del tipo conto MT5. Correzioni:
+metadata originale conservato e mostrato (quality/calendario/contratto), svuotato
+su errore; MT5 accetta solo trade_modeDemo verificato a connessione e ogni lettura,
+blocca real/contest/unknown/bool/stringa senza pubblicare saldi o quote.
+
+Dopo queste correzioni: **876passed,1skipped,1warning in34.78s**, guard0/0;
+API/MT5 mirati61PASS; frontend **18PASS**, lint/typecheck/build0. Compileall0
+senza output, pipcheck«No broken requirements found.», diffcheck0; smokeHTTP
+sorgentePASS. Nuovo sidecar nativo ricostruito; le prove di packaging finali
+sono associate a questo consolidamento, quelle870/17 sopra restano storiche.

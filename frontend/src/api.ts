@@ -28,6 +28,7 @@ export interface Market {
   as_of: string | null;
   bars: Bar[];
   quote: RecordData | null;
+  metadata?: RecordData;
 }
 export interface Proposal extends RecordData {
   direction: "BUY" | "SELL" | "WAIT" | "NO_TRADE";
@@ -193,6 +194,7 @@ export function parseMarket(value: unknown): Market {
     as_of: typeof d.as_of === "string" ? d.as_of : null,
     bars,
     quote: d.quote === null ? null : object(d.quote),
+    metadata: d.metadata === undefined ? {} : object(d.metadata),
   };
 }
 export function parseProposal(value: unknown): Proposal {
