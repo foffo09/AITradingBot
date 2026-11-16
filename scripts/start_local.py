@@ -141,7 +141,7 @@ def main(argv=None):
         root = Path(__file__).resolve().parents[1]
         ui_dir = (args.ui_dir or root / 'frontend' / 'dist').resolve()
         if not (ui_dir / 'index.html').is_file():
-            raise RuntimeError('Frontend non compilato. Esegui npm ci e npm run build nella cartella frontend.')
+            raise RuntimeError('Frontend non compilato. Esegui npm ci e npm run build nella radice del progetto.')
         if control.exists() or control.is_symlink():
             raise RuntimeError('File di controllo già presente: verifica/arresta la precedente istanza; non viene sovrascritto.')
         data_dir.mkdir(parents=True, exist_ok=True)

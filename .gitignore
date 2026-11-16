@@ -39,3 +39,5 @@ data/*.sqlite3.lock
 node_modules/
 frontend/dist/
 src-tauri/target/
+/dist/
+/build/

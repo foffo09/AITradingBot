@@ -169,3 +169,69 @@ jobs:
           else
             git show --format= --check HEAD
           fi
+
+  local-application:
+    name: local-app (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      TRADING_MODE: demo
+      AUTO_TRADE: "false"
+      PAPER_EXECUTION_SCOPE: disabled
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements-dev.txt -r packaging/backend/requirements.txt
+      - name: Install frontend
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend build
+        run: npm run build
+      - name: Source runtime HTTP smoke
+        run: python -m scripts.check_local_service
+      - name: Build native Python sidecar
+        run: python scripts/build_backend.py
+      - name: Frozen runtime HTTP smoke
+        run: |
+          $binary = Get-ChildItem dist/backend/aitradingbot-service-* -File
+          if ($binary.Count -ne 1) { throw 'Expected one native sidecar' }
+          python -m scripts.check_local_service --binary $binary.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item -LiteralPath $binary.FullName -Destination src-tauri/binaries/
+      - name: Native Rust prerequisites
+        run: |
+          rustup update stable --no-self-update
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default stable
+          rustc --version
+      - name: Rust tests
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Desktop compile (no installer or release)
+        run: npm run desktop:build -- --no-bundle
+      - name: Python dependency consistency
+        run: python -m pip check
