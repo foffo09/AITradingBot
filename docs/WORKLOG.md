@@ -682,3 +682,13 @@ source/frozenHTTP e build.app riusciti. EvidenzeGUI/CI finali da completare.
 VulnerabilitàPillow12.3 rilevate42;fix13incompatibileStreamlit<13. ReleaseBLOCCATA
 anche per licenza progetto/notice e proveWindows11/firma/nativehangmancanti.
 Dettagli e scelte in MASTER_AUDIT, LOCAL_APPLICATION e CODEX_MASTER_PROGRESS.
+
+
+Completion successivo: verificato Streamlit1.66.1 permettePillow13, quindi upgrade
+mirato e ambienteprivato. Suite931PASS/1skip/1warning48.69s guard0/0, pipcheck0 e
+pip-audit0. Il bundle non include piùPIL/Arrow inutilizzati: smokePASS e coldstart
+5.6624s contro15.229s, senza aumentare15s. Corretto stop con resetTCP transitorio.
+PRdraft8 pubblicata su branchcompletion, baseintegration; nessun mainmerge.
+NotionBrave debuggerunattached e fallbackIAB richiedeaccesso: report non salvato.
+GUI iniziale: riapertura involontaria in appdatastandard, dry-run fermato/appchiusa;
+nuovo diario di controllo conservato, nessun conto o ordine creato. Dettagli audit.

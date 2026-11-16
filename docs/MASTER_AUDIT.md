@@ -1,5 +1,28 @@
 # Audit e integrazione applicazione locale — 16 novembre 2026
 
+## Stato corrente dopo aggiornamento compatibile
+
+Le sezioni seguenti conservano la cronologia delle prove. Il conflittoPillow è
+stato successivamente risolto: Streamlit1.66.1 ammette pillow<14, Pillow13.0.0
+è ora fissato. Ambiente .venv isolato nel worktree, nessun cambiamento alla venv
+condivisa. Installazione/pipcheck riusciti e pip-audit sul nuovo requirements-dev:
+**No known vulnerabilities found**, senza ignore o resolverforzato. L’audit iniziale
+42advisory resta evidenzaRED, non lo stato attuale.
+
+Il bundle precedente includevaPIL eArrow senza uso nei percorsiJSON/OHLC. Esclusi
+soltanto dal sidecar, legacy invariato: archivioPyInstaller senza moduliPIL/pyarrow,
+smokeHTTPfrozenPASS. Misura prima/dopo5.6624s contro15.229s, health0.0079s,
+shutdown0.2602s,RSS121168KiB,CPUidle0% su2s. Startup15s invariato; nessuna garanzia
+universale da un campione. Gli artifact finali sono ricostruiti nella nuova venv.
+
+PRdraftseparata#8 basata sull’integrazione: https://github.com/foffo09/AITradingBot/pull/8.
+Primo run43970361875 su03200f7: suiteWindowsPASS, wrapperPSFAIL da indagare con
+nuovo diagnostico sanitizzato. RegressioneRED→GREEN: ConnectionReset durante
+shutdown non è prova di chiusura; ora si continua a leggere fino a refusal o
+scadenza, senza terminare altri processi. Nessun testWindows dichiarato dalMac.
+Release restaBLOCKED per licenza/notice, Windows11GUI e altre prove native mancanti.
+
+
 Mandato master dell'utente: implementare e verificare React/TypeScript/Vite,
 FastAPI/Pydantic, Tauri e integrazione dei servizi Python; Streamlit resta
 legacy. Nuova autorizzazione supera il precedente perimetro solo documentale
@@ -394,3 +417,72 @@ Servizio chiuso exit0 e porta51630 chiusa; startbackend0.5853s, health0.0074s,
 shutdown0.32s. RSS al readiness139008KiB; CPU54.7% misurata durante avvio, NON idle.
 Tempo desktop-to-visible/CPUidle/UIload non strumentati: NON VERIFICATI. Bundle90.77MiB.
 Startupcold15s resta gate fallito; nessuna sogliaalzata o successo inventato.
+
+
+## File del candidato completion
+
+| File | Modifica | Motivo | Prova collegata |
+|---|---|---|---|
+| `.github/workflows/windows-ci.yml` | CI nativa e installer temporaneo | Prove Windows separate dal Mac | run Actions della PR #8 |
+| `BACKEND_HANDOFF.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `DASHBOARD_HANDOFF.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `STRATEGY_HANDOFF.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `avvia_web.ps1` | Lock, recovery e stop verificato | Nessun kill per nome/porta o retry incerto | test_local_launcher + CI wrapper PS |
+| `docs/ARCHITETTURA_APP.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/CODEX_MASTER_PROGRESS.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/DECISIONI_TECNICHE.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/END_TO_END_QA_PLAN.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/LOCAL_APPLICATION.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/MASTER_AUDIT.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/MATRICE_TEST.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/RELEASE_GATES.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/REVIEW_QUALITA_E_ROADMAP.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `docs/WORKLOG.md` | Aggiorna evidenze/contratti e gate | Handoff verificabile senza attestazioni inventate | diff --check |
+| `frontend/src/App.test.tsx` | Stati UI, richieste e indicatori | Identità/scadenza e dry-run esplicito | App/api/MarketChart Vitest |
+| `frontend/src/App.tsx` | Stati UI, richieste e indicatori | Identità/scadenza e dry-run esplicito | App/api/MarketChart Vitest |
+| `frontend/src/MarketChart.test.tsx` | Stati UI, richieste e indicatori | Identità/scadenza e dry-run esplicito | App/api/MarketChart Vitest |
+| `frontend/src/MarketChart.tsx` | Stati UI, richieste e indicatori | Identità/scadenza e dry-run esplicito | App/api/MarketChart Vitest |
+| `frontend/src/api.test.ts` | Stati UI, richieste e indicatori | Identità/scadenza e dry-run esplicito | App/api/MarketChart Vitest |
+| `frontend/src/api.ts` | Stati UI, richieste e indicatori | Identità/scadenza e dry-run esplicito | App/api/MarketChart Vitest |
+| `packaging/backend/entrypoint.py` | Bootstrap frozen e bundle minimo | spawn sicuro; esclude codec/Arrow inutilizzati | test_backend_packaging + frozen smoke |
+| `requirements.txt` | Streamlit1.66.1/Pillow13 compatibili | Elimina42 advisory senza forzare resolver | pipcheck, pip-audit0, suite completa |
+| `scripts/build_backend.py` | Bootstrap frozen e bundle minimo | spawn sicuro; esclude codec/Arrow inutilizzati | test_backend_packaging + frozen smoke |
+| `scripts/check_local_service.py` | Collega contratti API e smoke | Riusa engine/ledger e difese HTTP | test_local_service + HTTP source/frozen |
+| `scripts/check_windows_installer.ps1` | CI nativa e installer temporaneo | Prove Windows separate dal Mac | run Actions della PR #8 |
+| `scripts/check_windows_launchers.ps1` | Lock, recovery e stop verificato | Nessun kill per nome/porta o retry incerto | test_local_launcher + CI wrapper PS |
+| `scripts/start_local.py` | Lock, recovery e stop verificato | Nessun kill per nome/porta o retry incerto | test_local_launcher + CI wrapper PS |
+| `src-tauri/src/main.rs` | Monitora figlio e cleanup limitato | Crash e shutdown senza processi arbitrari | cargo test (3 casi) |
+| `src-tauri/src/service.rs` | Monitora figlio e cleanup limitato | Crash e shutdown senza processi arbitrari | cargo test (3 casi) |
+| `src/api/local_app.py` | Collega contratti API e smoke | Riusa engine/ledger e difese HTTP | test_local_service + HTTP source/frozen |
+| `src/broker/mt5_process.py` | Isola letture native e valida timeout | Nessuna lettura nativa nel processo API | test_mt5_process/readonly |
+| `src/simulation/ledger.py` | Vincola UUID al payload; P/L realizzato UTC | Una registrazione per intenzione | test_simulation_ledger/local_service |
+| `src/trading/offline_executor.py` | Diario dry-run, intent e snapshot sintetici | Fail-closed dopo ambiguità/riavvio | test_offline_executor |
+| `tests/test_backend_packaging.py` | Bootstrap frozen e bundle minimo | spawn sicuro; esclude codec/Arrow inutilizzati | test_backend_packaging + frozen smoke |
+| `tests/test_local_launcher.py` | Lock, recovery e stop verificato | Nessun kill per nome/porta o retry incerto | test_local_launcher + CI wrapper PS |
+| `tests/test_local_service.py` | Collega contratti API e smoke | Riusa engine/ledger e difese HTTP | test_local_service + HTTP source/frozen |
+| `tests/test_mt5_process.py` | Isola letture native e valida timeout | Nessuna lettura nativa nel processo API | test_mt5_process/readonly |
+| `tests/test_mt5_readonly.py` | Isola letture native e valida timeout | Nessuna lettura nativa nel processo API | test_mt5_process/readonly |
+| `tests/test_offline_executor.py` | Diario dry-run, intent e snapshot sintetici | Fail-closed dopo ambiguità/riavvio | test_offline_executor |
+| `tests/test_simulation_ledger.py` | Vincola UUID al payload; P/L realizzato UTC | Una registrazione per intenzione | test_simulation_ledger/local_service |
+
+
+### Riproducibilità del builder
+
+La prima build nella venv pulita ha riprodotto un errore reale di startup frozen:
+setuptools79/pkg_resources importava backports mancante. La suite source era
+verde: solo lo smoke dell’eseguibile ha trovato il problema. Aggiunto pin del
+builder setuptools84.2.1 (versione già usata dalla baseline funzionante), senza
+modificare ambienti condivisi. La build/smoke viene ripetuta dalla venv privata.
+Lo scriptCIwrapperPS ora isola il rifiuto atteso del secondo launcher in un job
+separato, verificandone fallimento, ownership invariata e health del primo.
+Questo evita che stderr di un rifiuto atteso venga scambiato per errore del jobCI;
+nessuna asserzione viene rimossa. Aggiunto diagnostico fase/tipo sanitizzato.
+
+
+Nuovo builder pinned: smokeHTTPfrozenPASS, avvio6.8239s/health0.0039s,
+RSS119984KiB/CPUidle0.496% nel campione2s/shutdown0.4038s/exit0. Campione distinto
+quello5.6624s; non è garanzia di15s su tutti glihost. Nessun listener residuo.
+
+| File aggiuntivo | Modifica | Motivo | Prova |
+|---|---|---|---|
+| `packaging/backend/requirements.txt` | Pin setuptools84.2.1 | Elimina crash di frozen da venvpulita | RED startup→GREENsmoke |

@@ -198,3 +198,10 @@ mainmerge o release impliciti; Windows11/conti autentici richiedono prove distin
   da strategiePython; backtest singolo campione dichiarato, nessuna provaOOS inventata.
 - Nessun upgrade forzato Pillow13 contro il vincolo Streamlit<13. Vulnerabilità e
   licenza progetto mancante bloccano la release; nessuna licenza del titolare inventata.
+
+
+Aggiornamento successivo alla prima decisionePillow: verificati metadata ufficiali
+Streamlit1.66.1 (`pillow<14`), quindi aggiornati solo Streamlit ePillow13.0.0.
+Nuova venv nel worktree per non cambiare ambienti di altri; pip-audit ripetuto0.
+Esclusi dal solo sidecar PIL/pyarrow inutilizzati; misura avvio da15.229 a5.6624s,
+senza cambiare deadline15s. Nessuna rimozione di funzionalitàlegacy.

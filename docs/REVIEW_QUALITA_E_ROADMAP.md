@@ -242,3 +242,8 @@ Nessun nuovo mercato, ottimizzazione reddituale o ordine autentico aggiunto.
 - P2: riconciliazione autentica da adapter verificato e ledger/risk_snapshot completo
   restano separati dal protocollo dry-run. Nessuna abilitazione finanziaria implicita.
 - Nessun ulteriore indicatore/strategia o riscritturaUI richiesti per il presente scope.
+
+
+Aggiornamento: bloccoPillow risolto con pin compatibili Streamlit1.66.1/Pillow13
+ed audit0. Restano prioritarie licenza/notice e proveWindows11; avvio alleggerito
+misurato5.6624s, non garanzia su ogni host.

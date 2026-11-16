@@ -200,8 +200,16 @@ solo che una directory distinta non è stata rimossa: non certifica retention
 appdata reale Tauri o aggiornamento di un’installazione personale. Nessun artifact
 pubblicato. Windows Server CI e Windows11 GUI sono prove distinte.
 
-Release BLOCCATA: audit Python segnala42 advisory per Pillow12.3.0, fix13.0.0
-in conflitto con Streamlit1.65 (`pillow<13`). Non forzare il resolver o disabilitare
-controlli. npm audit:0; audit completo Rust advisories non eseguito. Manca licenza
-esplicita del progetto e revisione completa dei notice del bundle; charts LICENSE/
-NOTICE restano inclusi. Non distribuire prima di risolvere questi gate.
+L’audit iniziale aveva segnalato42 advisory in Pillow12.3.0, incompatibile con
+il fix13 usando Streamlit1.65. Risolto con aggiornamento mirato Streamlit1.66.1
+(`pillow<14`) e pin Pillow13.0.0: resolver/pipcheck coerenti, pip-audit ripetuto0.
+Non viene forzata alcuna incompatibilità. Il sidecar esclude PIL e pyarrow,
+non usati dai percorsi JSON/OHLC: archivio e smoke frozen verificati. Dopo questa
+riduzione l’avvio misurato è5.6624s rispetto a15.229s del bundle precedente;
+health0.0079s, shutdown0.2602s, RSS121168KiB, CPUidle0% nel campione2s.
+Questa singola misura non garantisce cold start sotto15s su ogni macchina.
+
+Release ancora BLOCCATA: licenza progetto/notice complete assenti, Windows11GUI,
+retentionappdata/upgrade reali, firma e cleanup frozenWindows durante nativehang
+non verificati. npm audit e pip-audit0; audit Rust advisories non eseguito.
+Non distribuire prima di risolvere i gate. Nessun artifact o release pubblicato.

@@ -57,3 +57,13 @@ Windows 11 GUI, broker autentici, firma/notarizzazione, permesso di distribuzion
 - GUI: primo avvio desktop privato fallisce15s; selezionegetApp riapre istanza standard creando solo un diario dry-run, segnalato all’utente e lasciato intatto. Prova desktop isolamento NON VERIFICATA; dry-run fermato e appchiusa/portachiusa.
 - BrowserIAB con servizio/private directory temporanea: start/cycle/stop realiPASS,1proposta0intent; servizioexit0. Startup0.5853s/health0.0074s/shutdown0.32s. RSSreadiness139008KiB, CPUavvio54.7% non misuraidle.
 - Corretto ulteriore difetto visivo: NO_TRADE senzaexpiry conserva motivo backend; BUY/SELL senzaexpiry restano bloccati (RED→GREEN).
+
+- Fase stabilizzazione aggiuntiva: Streamlit1.66.1 supportaPillow13; upgrade mirato inrequirements, nuova venv privata e audit0. La precedente scelta di bloccare senza forzare il resolver resta corretta, superata dalla disponibilità verificata di una versione compatibile.
+- SidecarPIL/Arrow inutilizzati esclusi con testRED→GREEN, archiviofrozen senza moduli e smokePASS. Avvio5.6624s vs15.229s, idle0% campione2s/RSS121168KiB/shutdown0.2602s. Nessun aumento15s.
+- Pubblicati commit su branchisolato e PRdraft8, baseintegration. Run43970361875/03200f7: suiteWindowsPASS; wrapperPSFAIL. Aggiunto diagnostico e regressione connectionreset durante stop, attesa provaWindows sul nuovoSHA.
+- IABNotion richiede accesso; nessuna sessione disponibile. Nessun login, cambio permessi o scrittura dichiarata riuscita.
+
+- Build in venvpulita ha trovato RED frozen(pkg_resources/backports consetuptools79). Pin builder84.2.1 per riproducibilità; smoke in ripetizione.
+- WrapperCI: secondo launcher atteso fallito in job separato; ownership/healthprimo restano verificati. Aggiunto diagnostico fase/tipo, nessun esito atteso indebolito.
+
+- Builderpinned GREEN: frozenHTTPPASS, start6.8239s/health0.0039s/RSS119984KiB/idle0.496%su2s/shutdown0.4038s/exit0. File aggiuntivo packaging/backend/requirements.txt documentato.

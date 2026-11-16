@@ -332,3 +332,15 @@ Regressioncases: idempotency/payload/restart/concurrency, ownershipprocesso,
 stati dry-run, partial/filled/canceled/rejected/expired/unknown, pagine incomplete/
 overlap, dati mancanti/futuri, timeout/crashMT5, staleproposal/pollsingleflight.
 Test nuovi non sostituiscono né rimuovono quelli esistenti.
+
+
+### Aggiornamento dopo dipendenze compatibili e bundle minimo
+
+Nuova venv privataPython3.11.18: **931PASS,1skip,1warning in48.69s**, guard0/0.
+compileall exit0; pipcheck `No broken requirements found.` Streamlit1.66.1,
+Pillow13.0.0: pip-audit `No known vulnerabilities found`; npm audit0.
+Frontend34PASS/Rust3PASS; coldstartfrozen prima15.229s/dopo5.6624s, health0.0079s,
+idle0% su2s, RSS121168KiB,shutdown0.2602s. Misure locali non attestano altriOS.
+RunCI43970361875 su03200f7: suiteWindowsPASS, wrapperPSFAIL; candidato aggiornato
+con testresetTCP e diagnostico. Risultato finale del nuovoSHA nella PR8/Actions.
+La vecchia riga FAILPillow è storica, superata da upgradecompatibile+auditzero.

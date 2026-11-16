@@ -371,8 +371,8 @@ non un'autorizzazione a bypassare coordinamento/gate o a riutilizzare dati vecch
 Il candidato isolato aggiunge dry-run, idempotenzaAPI, deadlineprocessoMT5,
 lifecycle e testinstallerCI. La release resta **BLOCKED**, anche con CI verde:
 
-1. Pillow12.3.0:42 advisory dal resolver pip-audit; fix13.0.0 incompatibile con
-   Streamlit1.65 (`pillow<13`). Risolvere compatibilità e ripetere audit/test.
+1. Dipendenza vulnerabile risolta: Streamlit1.66.1 + Pillow13.0.0; resolver,
+   pipcheck e pip-audit0 verificati. Il precedente blocco42advisory è storico.
 2. Licenza progetto assente; notice/SBOM completa del bundle e dipendenze UNKNOWN
    da verificare prima della distribuzione. Non si inventa una licenza.
 3. Windows11GUI, retentionappdata/upgrade/installazione personale, firma/notarizzazione
