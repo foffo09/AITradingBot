@@ -33,6 +33,7 @@ def build_command(output: Path) -> list[str]:
             '--exclude-module', 'streamlit', '--exclude-module', 'matplotlib',
             # Local JSON/OHLC routes do not use image codecs or Arrow serialization.
             '--exclude-module', 'PIL', '--exclude-module', 'pyarrow',
+            '--exclude-module', 'setuptools', '--exclude-module', 'pkg_resources',
             '--exclude-module', 'torch', '--exclude-module', 'tensorflow',
             str(ROOT / 'packaging/backend/entrypoint.py')]
 

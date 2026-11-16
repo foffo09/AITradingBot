@@ -5,6 +5,7 @@ import argparse
 import http.cookiejar
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,12 @@ import urllib.request
 import uuid
 
 from scripts.start_local import wait_ready, shutdown_child, _NoRedirect
+
+
+def startup_failure(output):
+    missing = re.search(r"^ModuleNotFoundError: No module named '([A-Za-z0-9_.]+)'$", output, re.MULTILINE)
+    return ('Frozen startup failed: missing module ' + missing[1] + '.' if missing
+            else 'Frozen startup failed; detailed diagnostics withheld.')
 
 
 def main():
@@ -27,16 +34,15 @@ def main():
     env = {key: value for key, value in os.environ.items()
            if not any(word in key.upper() for word in ('KEY', 'SECRET', 'TOKEN', 'PASSWORD', 'ALPACA', 'MT5'))}
     env.update(PYTHON_DOTENV_DISABLED='1', AUTO_TRADE='false', PAPER_EXECUTION_SCOPE='disabled')
-    with tempfile.TemporaryDirectory(prefix='aitrading-smoke-') as folder:
+    with tempfile.TemporaryDirectory(prefix='aitrading-smoke-') as folder, tempfile.TemporaryFile(mode='w+t', encoding='utf-8', errors='replace') as diagnostics:
         command = [str(args.binary.resolve())] if args.binary else [sys.executable, '-m', 'src.runtime.local_service']
         child = subprocess.Popen(command + ['--port', '0', '--ui-dir', str(ui), '--data-dir', folder],
             cwd=root, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True)
+            stderr=diagnostics, text=True)
         try:
             # The frozen onefile bootloader owns a Python subprocess; the pipe
             # remains the only control channel, never a PID supplied by HTTP.
-            info = wait_ready(child.stdout, expected_pid=None)
-            assert info['pid'] == child.pid or args.binary, 'Unexpected source runtime PID.'
+            info = wait_ready(child.stdout, expected_pid=child.pid)
             origin = f"http://127.0.0.1:{info['port']}"
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
                 urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), _NoRedirect())
@@ -88,6 +94,9 @@ def main():
             print('No broker connection, credentials or authenticated order; disposable databases only.')
         finally:
             shutdown_child(child)
+            if child.returncode != 0:
+                diagnostics.seek(0)
+                print(startup_failure(diagnostics.read(32768)), file=sys.stderr)
 
 
 if __name__ == '__main__':
