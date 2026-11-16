@@ -75,6 +75,14 @@ function Metric({
     </article>
   );
 }
+const columnAliases: Record<string, string[]> = {
+  qty: ["quantity", "volume", "volume_initial"],
+  avg_entry_price: ["average_entry", "price_open"],
+  current_price: ["market_price", "price_current"],
+  unrealized_pl: ["profit"],
+  side: ["direction"],
+  entry_fee_alloc: ["entry_fee"],
+};
 function DataTable({
   rows,
   columns,
@@ -105,15 +113,11 @@ function DataTable({
                     ? instant(row[key])
                     : text(
                         row[key] ??
-                          row[
-                            (
-                              {
-                                qty: "quantity",
-                                avg_entry_price: "average_entry",
-                                current_price: "market_price",
-                              } as Record<string, string>
-                            )[key]
-                          ],
+                          columnAliases[key]
+                            ?.map((alias) => row[alias])
+                            .find(
+                              (value) => value !== null && value !== undefined,
+                            ),
                       )}
                 </td>
               ))}
@@ -211,7 +215,13 @@ function sourceOf(value: unknown) {
   }
   return "N/D";
 }
-function Equity({ points }: { points: Backtest["equity"] }) {
+function Equity({
+  points,
+  unit,
+}: {
+  points: Backtest["equity"];
+  unit: string;
+}) {
   if (points.length < 2)
     return <p className="empty">Curva equity N/D · Campione insufficiente.</p>;
   const values = points.map((p) => p.value),
@@ -223,7 +233,7 @@ function Equity({ points }: { points: Backtest["equity"] }) {
       <svg
         viewBox="0 0 800 160"
         role="img"
-        aria-label={`Equity del backtest, da ${number(values[0], "USD")} a ${number(values.at(-1), "USD")}`}
+        aria-label={`Equity del backtest, da ${number(values[0], unit)} a ${number(values.at(-1), unit)}`}
       >
         <polyline
           fill="none"
@@ -239,7 +249,7 @@ function Equity({ points }: { points: Backtest["equity"] }) {
       </svg>
       <figcaption>
         {instant(points[0].time)} → {instant(points.at(-1)?.time)} · Equity
-        teorica USD · min {number(min)} / max {number(max)}
+        teorica {unit} · min {number(min)} / max {number(max)}
       </figcaption>
     </figure>
   );
@@ -256,6 +266,7 @@ function Backtesting({
     [result, setResult] = useState<Backtest | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const moneyUnit = context === "mt5" ? "valuta strumento N/D" : "USD";
   async function run(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -286,14 +297,15 @@ function Backtesting({
         <p>
           Calcolo nel motore esistente sui dati del contesto selezionato. Costi
           e metriche provengono dal backend; nessun ordine viene inviato.
+          Intervallo del backtest: 1 giorno.
         </p>
         <form onSubmit={run} className="inline-form">
           <label>
             Finestra breve
             <input
               type="number"
-              min="2"
-              max="200"
+              min="1"
+              max="198"
               required
               value={short}
               onChange={(e) => setShort(Number(e.target.value))}
@@ -303,8 +315,8 @@ function Backtesting({
             Finestra lunga
             <input
               type="number"
-              min="3"
-              max="500"
+              min="2"
+              max="199"
               required
               value={long}
               onChange={(e) => setLong(Number(e.target.value))}
@@ -343,14 +355,14 @@ function Backtesting({
             <Metric
               label="Costi totali"
               value={result.metrics.total_transaction_costs}
-              unit="USD"
+              unit={moneyUnit}
               caption="Backtest · dato del motore"
             />
           </div>
-          <Equity points={result.equity} />
+          <Equity points={result.equity} unit={moneyUnit} />
           <DataTable
             rows={result.trades}
-            columns={tradeColumns}
+            columns={tradeColumns(moneyUnit)}
             empty="Il motore non ha prodotto operazioni chiuse."
           />
           <p className="notice">
@@ -362,15 +374,15 @@ function Backtesting({
     </>
   );
 }
-const tradeColumns: [string, string][] = [
+const tradeColumns = (currency: string): [string, string][] => [
   ["symbol", "Strumento"],
   ["side", "Lato"],
   ["quantity", "Quantità"],
-  ["entry_price", "Ingresso · USD"],
-  ["exit_price", "Uscita · USD"],
-  ["net_pnl", "P/L netto · USD"],
-  ["entry_fee_alloc", "Fee ingresso · USD"],
-  ["exit_fee", "Fee uscita · USD"],
+  ["entry_price", `Ingresso · ${currency}`],
+  ["exit_price", `Uscita · ${currency}`],
+  ["net_pnl", `P/L netto · ${currency}`],
+  ["entry_fee_alloc", `Fee ingresso · ${currency}`],
+  ["exit_fee", `Fee uscita · ${currency}`],
   ["closed_at", "Chiusura · UTC"],
 ];
 function message(error: unknown) {
@@ -635,6 +647,14 @@ export default function App() {
   }, [context, symbol, interval, revision]);
   const offline = context === "demo" || context === "simulation";
   const account = state?.account;
+  const accountCurrency =
+    typeof account?.currency === "string" && account.currency.trim()
+      ? account.currency
+      : offline
+        ? "USD"
+        : "valuta N/D";
+  const priceCurrency = context === "mt5" ? "valuta strumento N/D" : "USD";
+  const volumeUnit = context === "mt5" ? "tick" : "unità";
   const selectMarket = (
     <div className="market-selectors">
       <label>
@@ -656,29 +676,31 @@ export default function App() {
           ))}
         </select>
       </label>
-      <label>
-        Intervallo
-        <select
-          value={interval}
-          onChange={(e) => {
-            clear();
-            setIntervalValue(e.target.value);
-          }}
-        >
-          {[
-            ["1Min", "1 min"],
-            ["5Min", "5 min"],
-            ["15Min", "15 min"],
-            ["1Hour", "1 ora"],
-            ["1Day", "1 giorno"],
-            ["1Week", "1 settimana"],
-          ].map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {page !== "Backtesting" && (
+        <label>
+          Intervallo
+          <select
+            value={interval}
+            onChange={(e) => {
+              clear();
+              setIntervalValue(e.target.value);
+            }}
+          >
+            {[
+              ["1Min", "1 min"],
+              ["5Min", "5 min"],
+              ["15Min", "15 min"],
+              ["1Hour", "1 ora"],
+              ["1Day", "1 giorno"],
+              ["1Week", "1 settimana"],
+            ].map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>
   );
   const chart = (
@@ -687,19 +709,19 @@ export default function App() {
         <div>
           <span className="eyebrow">Analisi di mercato</span>
           <h2>
-            {symbol} <small>/ USD</small>
+            {symbol} <small>/ {priceCurrency}</small>
           </h2>
         </div>
         {selectMarket}
       </div>
       <div className="quote-row">
-        <strong>{number(market?.bars.at(-1)?.close, "USD")}</strong>
+        <strong>{number(market?.bars.at(-1)?.close, priceCurrency)}</strong>
         <span>Ultimo close storico</span>
         <span className="badge muted">{market?.source ?? "Fonte N/D"}</span>
       </div>
       <div className="quote-detail">
-        <span>Bid {number(market?.quote?.bid, "USD")}</span>
-        <span>Ask {number(market?.quote?.ask, "USD")}</span>
+        <span>Bid {number(market?.quote?.bid, priceCurrency)}</span>
+        <span>Ask {number(market?.quote?.ask, priceCurrency)}</span>
         <span>Quota: {instant(market?.quote?.timestamp)}</span>
         <span>Fonte quota: {text(market?.quote?.source)}</span>
       </div>
@@ -709,6 +731,8 @@ export default function App() {
         bars={market?.bars ?? []}
         identity={`${context}/${symbol}/${interval}`}
         theme={theme}
+        priceUnit={priceCurrency}
+        volumeUnit={volumeUnit}
       />
       <p className="metadata">
         Acquisizione storico: {instant(market?.as_of)} · Le barre possono essere
@@ -823,12 +847,20 @@ export default function App() {
           {page === "Panoramica" && (
             <>
               <div className="metrics">
-                <Metric label="Equity" value={account?.equity} unit="USD" />
-                <Metric label="Liquidità" value={account?.cash} unit="USD" />
+                <Metric
+                  label="Equity"
+                  value={account?.equity}
+                  unit={accountCurrency}
+                />
+                <Metric
+                  label="Liquidità"
+                  value={account?.cash}
+                  unit={accountCurrency}
+                />
                 <Metric
                   label="Capitale iniziale"
                   value={account?.initial_cash}
-                  unit="USD"
+                  unit={accountCurrency}
                   caption={
                     offline
                       ? "Fonte: ledger virtuale del contesto"
@@ -838,7 +870,7 @@ export default function App() {
                 <Metric
                   label="P/L realizzato"
                   value={account?.realized_pnl}
-                  unit="USD"
+                  unit={accountCurrency}
                 />
               </div>
               <div className="analysis-grid">
@@ -857,7 +889,11 @@ export default function App() {
                 </div>
                 <DataTable
                   rows={state?.positions}
-                  columns={positionColumns}
+                  columns={positionColumns(
+                    priceCurrency,
+                    accountCurrency,
+                    context === "mt5",
+                  )}
                   empty="Nessuna posizione restituita dal contesto."
                 />
               </section>
@@ -873,17 +909,25 @@ export default function App() {
           {page === "Portafoglio" && (
             <>
               <div className="metrics">
-                <Metric label="Equity" value={account?.equity} unit="USD" />
-                <Metric label="Liquidità" value={account?.cash} unit="USD" />
+                <Metric
+                  label="Equity"
+                  value={account?.equity}
+                  unit={accountCurrency}
+                />
+                <Metric
+                  label="Liquidità"
+                  value={account?.cash}
+                  unit={accountCurrency}
+                />
                 <Metric
                   label="Buying power"
                   value={account?.buying_power}
-                  unit="USD"
+                  unit={accountCurrency}
                 />
                 <Metric
                   label="P/L non realizzato"
                   value={account?.unrealized_pnl}
-                  unit="USD"
+                  unit={accountCurrency}
                 />
               </div>
               <LocalLedger
@@ -897,7 +941,11 @@ export default function App() {
                 <h2>Posizioni</h2>
                 <DataTable
                   rows={state?.positions}
-                  columns={positionColumns}
+                  columns={positionColumns(
+                    priceCurrency,
+                    accountCurrency,
+                    context === "mt5",
+                  )}
                   empty="Nessuna posizione nel contesto."
                 />
               </section>
@@ -909,7 +957,7 @@ export default function App() {
                 </p>
                 <DataTable
                   rows={state?.orders}
-                  columns={orderColumns}
+                  columns={orderColumns(priceCurrency, context === "mt5")}
                   empty="Nessun ordine restituito dal contesto."
                 />
               </section>
@@ -924,7 +972,7 @@ export default function App() {
               </p>
               <DataTable
                 rows={state?.trades}
-                columns={tradeColumns}
+                columns={tradeColumns(priceCurrency)}
                 empty="Nessuna operazione restituita. Lo storico broker può non essere disponibile."
               />
             </section>
@@ -1008,20 +1056,37 @@ export default function App() {
     </div>
   );
 }
-const positionColumns: [string, string][] = [
+const positionColumns = (
+  priceCurrency: string,
+  accountCurrency: string,
+  mt5: boolean,
+): [string, string][] => [
   ["symbol", "Strumento"],
-  ["qty", "Quantità"],
-  ["avg_entry_price", "Prezzo medio · USD"],
-  ["current_price", "Prezzo · USD"],
-  ["market_value", "Valore · USD"],
-  ["unrealized_pl", "P/L · USD"],
+  ["qty", mt5 ? "Volume · lotti" : "Quantità"],
+  ["avg_entry_price", `Prezzo medio · ${priceCurrency}`],
+  ["current_price", `Prezzo · ${priceCurrency}`],
+  ["market_value", `Valore · ${accountCurrency}`],
+  ["unrealized_pl", `P/L · ${accountCurrency}`],
 ];
-const orderColumns: [string, string][] = [
-  ["symbol", "Strumento"],
-  ["side", "Lato"],
-  ["qty", "Quantità"],
-  ["filled_qty", "Eseguita"],
-  ["status", "Stato"],
-  ["filled_avg_price", "Prezzo fill · USD"],
-  ["submitted_at", "Invio · UTC"],
-];
+const orderColumns = (
+  priceCurrency: string,
+  mt5: boolean,
+): [string, string][] =>
+  mt5
+    ? [
+        ["symbol", "Strumento"],
+        ["type", "Tipo terminale (codice)"],
+        ["volume_initial", "Volume iniziale · lotti"],
+        ["volume_current", "Volume residuo · lotti"],
+        ["state", "Stato terminale (codice)"],
+        ["price_open", `Prezzo richiesto · ${priceCurrency}`],
+      ]
+    : [
+        ["symbol", "Strumento"],
+        ["side", "Lato"],
+        ["qty", "Quantità"],
+        ["filled_qty", "Eseguita"],
+        ["status", "Stato"],
+        ["filled_avg_price", `Prezzo fill · ${priceCurrency}`],
+        ["submitted_at", "Invio · UTC"],
+      ];

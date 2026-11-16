@@ -12,13 +12,19 @@ use std::{
 struct Readiness {
     port: u16,
     pid: u32,
+    supervisor_pid: Option<u32>,
     instance_id: String,
 }
 
 fn ready_url(line: &str, owned_pid: u32) -> Result<String, String> {
     let ready: Readiness =
         serde_json::from_str(line).map_err(|_| "Handshake del servizio non valido.")?;
-    if ready.port == 0 || ready.pid != owned_pid || ready.instance_id.is_empty() {
+    // PyInstaller onefile reports the Python worker PID and its owned bootloader supervisor.
+    if ready.port == 0
+        || ready.pid == 0
+        || (ready.pid != owned_pid && ready.supervisor_pid != Some(owned_pid))
+        || ready.instance_id.is_empty()
+    {
         return Err("Il servizio non corrisponde al processo avviato.".into());
     }
     Ok(format!("http://127.0.0.1:{}", ready.port))
@@ -121,7 +127,17 @@ mod tests {
             ready_url(r#"{"port":12345,"pid":42,"instance_id":"fixture"}"#, 42).unwrap(),
             "http://127.0.0.1:12345"
         );
+        assert_eq!(
+            ready_url(
+                r#"{"port":12345,"pid":43,"supervisor_pid":42,"instance_id":"frozen-fixture"}"#,
+                42
+            )
+            .unwrap(),
+            "http://127.0.0.1:12345"
+        );
         for line in [
+            r#"{"port":1234,"pid":0,"supervisor_pid":42,"instance_id":"fixture"}"#,
+            r#"{"port":1234,"pid":43,"supervisor_pid":41,"instance_id":"fixture"}"#,
             r#"{"port":0,"pid":42,"instance_id":"fixture"}"#,
             r#"{"port":1234,"pid":43,"instance_id":"fixture"}"#,
             r#"{"port":1234,"pid":42}"#,

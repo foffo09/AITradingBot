@@ -309,3 +309,39 @@ cargo check, rustfmt check e diff-check riusciti. Rustfmt è stato aggiunto solo
 alla toolchain temporanea isolata dopo il primo tentativo che lo segnalava assente.
 Nessun test Python rieseguito in questa worktree: il perimetro non tocca Python;
 la suite integrale resta al coordinatore nell'integrazione finale.
+
+## Correzioni di integrazione osservate — 16 novembre 2026
+
+La revisione del contratto reale ha rilevato e corretto mapping incompleti:
+lo storico usa `direction` come alternativa a `side`; il backtest fornisce
+`entry_fee`, mentre il ledger fornisce `entry_fee_alloc`. Entrambi ora sono
+mostrati senza ricostruire costi o fill. Il backtest resta giornaliero come il
+backend: il selettore intervallo è rimosso da quella pagina e la frequenza è
+esplicita. Finestre ammesse allineate all'API: breve 1–198, lunga 2–199.
+
+I valori conto usano `account.currency`; un conto MT5 EUR non è etichettato
+USD. Le posizioni MT5 mostrano volume in lotti, prezzo di apertura/corrente e
+profit forniti dal terminale. Gli ordini mostrano campi terminale disponibili,
+volume iniziale/residuo e codici tipo/stato espliciti, senza dedurre quantità
+eseguite. Per prezzi/backtest MT5 la valuta strumento non attestata resta
+`valuta strumento N/D`; il volume del feed MT5 implementato è dichiarato in tick.
+Le posizioni Demo non espongono valore/P&L per singola posizione: rimangono N/D,
+senza attribuire il totale del conto a una riga.
+
+Il crosshair conserva solo identità del contesto e timestamp; i valori OHLC
+vengono riletti dalle barre correnti. Barre vuote, errori e cambio contesto non
+lasciano più un valore del vecchio hover visibile; il refresh di una barra ne
+aggiorna anche i valori nel riepilogo OHLC.
+
+La prova nativa del coordinatore ha riprodotto la differenza PID del bootloader
+PyInstaller onefile e del worker Python. L'handshake ora ammette il PID diretto
+oppure `supervisor_pid` uguale al Child posseduto, sempre con worker PID positivo.
+Il backend dichiara supervisor_pid soltanto nel pacchetto frozen; resta opzionale
+per l'avvio script. Nessun PID ricevuto viene usato per terminare processi:
+shutdown e kill restano esclusivamente sul Child handle originariamente avviato.
+
+Regressioni RED/GREEN osservate per mapping/valuta, intervallo, hover e supervisor.
+Verifiche finali di questa correzione: lint, typecheck, build riusciti; Vitest
+**17 passati, 0 falliti**; cargo test **1 passato, 0 falliti**, cargo check riuscito.
+La prova nativa completa del nuovo handshake e il feed MT5 autentico rimangono
+separati: il primo è in corso al coordinatore, il secondo richiede Windows.
