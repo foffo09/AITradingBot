@@ -156,3 +156,121 @@ API/MT5 mirati61PASS; frontend **18PASS**, lint/typecheck/build0. Compileall0
 senza output, pipcheck«No broken requirements found.», diffcheck0; smokeHTTP
 sorgentePASS. Nuovo sidecar nativo ricostruito; le prove di packaging finali
 sono associate a questo consolidamento, quelle870/17 sopra restano storiche.
+
+## Inventario file del candidato
+
+Percorsi relativi al repository; la PR conserva il diff completo.
+
+```text
+.github/workflows/windows-ci.yml
+.gitignore
+BACKEND_HANDOFF.md
+DASHBOARD_HANDOFF.md
+README.md
+STRATEGY_HANDOFF.md
+app.py
+arresta_web.ps1
+avvia_web.ps1
+docs/ARCHITETTURA_APP.md
+docs/DECISIONI_TECNICHE.md
+docs/END_TO_END_QA_PLAN.md
+docs/GUIDA_COMPLETA_PROGETTO.md
+docs/LOCAL_APPLICATION.md
+docs/MASTER_AUDIT.md
+docs/MATRICE_TEST.md
+docs/RELEASE_GATES.md
+docs/REVIEW_QUALITA_E_ROADMAP.md
+docs/WORKLOG.md
+eslint.config.js
+frontend/.gitignore
+frontend/index.html
+frontend/public/lightweight-charts-LICENSE.txt
+frontend/public/lightweight-charts-NOTICE.txt
+frontend/src/App.test.tsx
+frontend/src/App.tsx
+frontend/src/MarketChart.test.tsx
+frontend/src/MarketChart.tsx
+frontend/src/api.test.ts
+frontend/src/api.ts
+frontend/src/format.ts
+frontend/src/main.tsx
+frontend/src/styles.css
+frontend/src/test-setup.ts
+frontend/src/vite-env.d.ts
+package-lock.json
+package.json
+packaging/backend/README.md
+packaging/backend/entrypoint.py
+packaging/backend/requirements-mt5.txt
+packaging/backend/requirements.txt
+scripts/__init__.py
+scripts/build_backend.py
+scripts/check_local_service.py
+scripts/start_local.py
+src-tauri/.gitignore
+src-tauri/Cargo.lock
+src-tauri/Cargo.toml
+src-tauri/binaries/.gitkeep
+src-tauri/build.rs
+src-tauri/icons/icon.icns
+src-tauri/icons/icon.ico
+src-tauri/icons/icon.png
+src-tauri/icons/mark.svg
+src-tauri/src/main.rs
+src-tauri/src/service.rs
+src-tauri/tauri.conf.json
+src/api/__init__.py
+src/api/local_app.py
+src/broker/alpaca_client.py
+src/broker/mt5_readonly.py
+src/risk/trade_plan.py
+src/runtime/__init__.py
+src/runtime/local_service.py
+src/strategy/service.py
+src/ui/charts.py
+src/ui/dashboard_style.py
+src/utils/logging_config.py
+tests/test_backend_packaging.py
+tests/test_dashboard_contexts.py
+tests/test_local_launcher.py
+tests/test_local_runtime.py
+tests/test_local_service.py
+tests/test_mt5_readonly.py
+tests/test_order_pagination.py
+tests/test_service_logging.py
+tests/test_signal_refresh.py
+tests/test_strategy_risk.py
+tests/test_strategy_service.py
+tests/test_ui_charts.py
+tsconfig.json
+vite.config.ts
+```
+
+## Pubblicazione e chiusura operativa
+
+Push riuscito dei quattro branchagents dedicati e del ramo integrazione.
+PR aperta in bozza: https://github.com/foffo09/AITradingBot/pull/7, basemain,
+nessun merge/approvazione/release. Candidato codice f737455dce4b3d9661962e12a4cc80288960acbf.
+Il commit documentale successivo non cambia codice, dipendenze o soglie.
+Check remoti, run e output duraturi sono nella [PR7/checks](https://github.com/foffo09/AITradingBot/pull/7/checks);
+il rapporto finale distingue il loro SHA dai test Mac locali. Mai usare il PASS
+sullo SHA precedente come se certificasse modifiche successive.
+
+Ultimo sidecar ricostruito: smokeHTTPfrozenPASS; bundle.app ricostruito90.72MiB.
+Processo desktop finale avviato in ambiente privato, poi terminato dal
+coordinatore con SIGTERM al solo PID posseduto/verificato: bootloader e worker
+scomparsi, nessun orfano. GUI finale non riletta perché il Mac era bloccato;
+sblocco manuale richiesto, senza aggirarlo. La GUI precedente resa e il backtest
+nativo restano prove effettive sul lifecycle precedente, non Windows11.
+
+NotionP4: aggiornamento master intermedio salvato e riletto dopo reload;
+nuovo mandato, architettura, deleghe senza sovrapposizioni, risultati870/13
+iniziali e blocchi espliciti. Report finale dipende dallo sblocco del Mac;
+se ancora indisponibile resta un blocco esterno dichiarato, non un salvataggio
+inventato. Nessuna impostazione/piano a pagamento o condivisione cambiata.
+Il launcher browser temporaneo è stato arrestato con identità verificata;
+nessun server o automazione di prova viene lasciato in esecuzione.
+
+Checkout principale2b2d35a con modifiche preesistenti (incluso paper_executor)
+lasciato intatto. Main remoto restafe98839. Gli altri worktree non vengono
+cancellati o riallineati. Guida completa e D16 ora distinguono nuovaUI e legacy.

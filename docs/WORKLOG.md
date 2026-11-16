@@ -650,3 +650,10 @@ risultato remoto ancora da osservare. MASTER_AUDIT.md contiene evidenza e limiti
 LOCAL_APPLICATION.md installazione/avvio. NotionP4 aggiornato e riletto dopo reload,
 nessun duplicato task o cancellazione storico. Windows11GUI/brokerautentici,
 esecuzioneautomatica e release restano non verificati/non completati.
+
+Consolidamento f737455 pubblicato sulla PRdraft#7: metadata originale conservato
+API→React e gateMT5 soloDemo verificato ripetuto a ogni lettura. Test nuovi
+riprodotti fallenti prima del fix; poi876PASS/1skip/1warning34.78s guard0/0,
+18frontendPASS e61API/MT5PASS. SmokeHTTPfrozen e build.app nuovamente riusciti.
+Ultima GUItemporaneamente indisponibile per schermoMac bloccato; chiesto sblocco,
+non aggirato. Guida completa/decisioni aggiornate, main e lavoro preesistente intatti.

@@ -291,3 +291,11 @@ precedente per i soli casi sotto, preservandone lo storico.
 
 Output, limiti e SHA dei componenti in MASTER_AUDIT.md. Smoke reale separato
 negli script, non mescolato alla guard offline. Nessun invio broker nei test.
+
+Consolidamento successivo f737455: **876PASS/1skip/1warning** nella suiteMac,
+**18PASSfrontend**, **61PASS API/MT5**; guard0/0. Nuovi casi rossi→verdi:
+metadati persistiti API/consumer e cinque tipi contoMT5 nonDemo/nonverificabili.
+Smoke sorgente/frozen e build.app ripetuti con successo. La seconda rilettura
+GUI dell'ultimo bundle è temporaneamente bloccata dallo schermoMac bloccato;
+la provaGUI precedente sullo stesso lifecycle è documentata, non sostituisce
+una provaWindows11. CI corrente e SHA sono registrati nell'audit al completamento.
