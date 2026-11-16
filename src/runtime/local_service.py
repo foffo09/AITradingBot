@@ -44,7 +44,7 @@ class LocalServer(uvicorn.Server):
         await super().startup(sockets=sockets)
         if self.started and not self.should_exit:
             app = self.config.app
-            print(json.dumps({'port': sockets[0].getsockname()[1], 'pid': os.getpid(), 'instance_id': app.state.instance_id}), flush=True)
+            print(json.dumps({'port': sockets[0].getsockname()[1], 'pid': os.getpid(), 'supervisor_pid': os.getppid() if getattr(sys, 'frozen', False) else None, 'instance_id': app.state.instance_id}), flush=True)
 
 
 def main(argv=None):

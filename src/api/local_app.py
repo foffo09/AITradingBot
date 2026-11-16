@@ -23,6 +23,7 @@ from src.broker.mt5_readonly import MT5ReadOnly, MT5ReadError
 from src.data.instruments import INSTRUMENTS
 from src.data.market_data import generate_demo_prices
 from src.simulation.ledger import SimulationLedger
+from src.strategy.engine import SignalProposal
 
 Context = Literal['demo', 'simulation', 'paper', 'mt5']
 LocalContext = Literal['demo', 'simulation']
@@ -222,7 +223,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             except MT5ReadError as exc:
                 result.update(status=exc.status, reason=str(exc), quote=None, bars=[])
             except Exception:
-                pass
+                result.update(status='unavailable', reason='Market data request failed; no fallback or cached values.', source=None, as_of=None, quote=None, bars=[])
         return result
 
     @app.post('/api/v1/local-account')
@@ -274,7 +275,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     @app.get('/api/v1/proposal')
     def proposal(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
-        fallback = {'api_version': '1', 'contract_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'action': 'NO_TRADE', 'reason': 'Risk snapshot and current market data are not verified for execution.', 'entry': None, 'quantity': None, 'stop_loss': None, 'take_profit': None}
+        fallback = {**SignalProposal(symbol=symbol, reason='Risk snapshot and current market data are not verified for execution.').to_dict(), 'api_version': '1', 'contract_version': '1', 'context': context, 'interval': interval}
         with lock:
             try:
                 from src.strategy.service import evaluate_proposal
@@ -301,10 +302,11 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 # Harden the existing transport too; the desktop service cannot write to Paper.
                 if getattr(candidate, 'client', None) is not None:
                     candidate.client._session.read_only = True
-                if candidate.verify_connection().get('connected'):
-                    paper = candidate
+                if not candidate.verify_connection().get('connected'):
+                    return {**state('paper'), 'connection': {'status': 'unavailable', 'reason': 'Paper account verification failed; no account values are published.'}}
+                paper = candidate
             except Exception:
-                pass
+                return {**state('paper'), 'connection': {'status': 'unavailable', 'reason': 'Paper connection failed; no account values are published.'}}
             return state('paper')
 
     @app.post('/api/v1/connections/mt5')

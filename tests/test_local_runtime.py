@@ -27,3 +27,31 @@ def test_stdin_eof_requests_exit():
     server = Mock(should_exit=False)
     watch_stdin(server, io.StringIO(''))
     assert server.should_exit is True
+
+
+import pytest
+
+
+@pytest.mark.parametrize('frozen', [False, True])
+def test_readiness_reports_actual_pid_and_native_supervisor_only(monkeypatch, capsys, frozen):
+    import asyncio
+    import json
+    from types import SimpleNamespace
+    from src.runtime import local_service
+    async def started(server, sockets=None):
+        server.started = True
+    monkeypatch.setattr(local_service.uvicorn.Server, 'startup', started)
+    monkeypatch.setattr(local_service.sys, 'frozen', frozen, raising=False)
+    monkeypatch.setattr(local_service.os, 'getpid', lambda: 101)
+    monkeypatch.setattr(local_service.os, 'getppid', lambda: 99)
+    server = object.__new__(local_service.LocalServer)
+    server.config = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(instance_id='public-instance')))
+    server.should_exit = False
+    server.started = False
+    sock = Mock()
+    sock.getsockname.return_value = ('127.0.0.1', 8123)
+    asyncio.run(server.startup(sockets=[sock]))
+    readiness = json.loads(capsys.readouterr().out)
+    assert readiness['pid'] == 101
+    assert readiness['supervisor_pid'] == (99 if frozen else None)
+    assert readiness['instance_id'] == 'public-instance'

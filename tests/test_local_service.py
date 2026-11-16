@@ -78,7 +78,7 @@ def test_market_provenance_backtest_and_proposal(tmp_path):
     assert result.status_code == 200, result.text
     assert len(result.json()['equity']) == 200
     assert result.json()['source'] == 'synthetic-demo'
-    assert c.get('/api/v1/proposal?context=paper&symbol=AAPL').json()['action'] == 'NO_TRADE'
+    assert c.get('/api/v1/proposal?context=paper&symbol=AAPL').json()['validation_state'] == 'NO_TRADE'
 
 
 def test_paper_is_opt_in_read_only_and_errors_do_not_leak(tmp_path, monkeypatch):
@@ -240,3 +240,38 @@ def test_usd_account_does_not_expose_legacy_eur_identity_fields(tmp_path):
     assert account['currency'] == 'USD'
     assert 'initial_eur' not in account
     assert 'eur_usd_rate' not in account
+
+
+def test_proposal_fallback_keeps_original_p3_dto_and_visible_reason(tmp_path, monkeypatch):
+    import sys
+    from src.strategy.engine import SignalProposal
+    monkeypatch.setitem(sys.modules, 'src.strategy.service', None)
+    c = client(tmp_path)
+    authorize(c)
+    result = c.get('/api/v1/proposal?context=demo&symbol=AAPL').json()
+    assert set(SignalProposal(symbol='AAPL').to_dict()).issubset(result)
+    assert result['direction'] == 'WAIT'
+    assert result['validation_state'] == 'NO_TRADE'
+    assert result['reason'] == 'Strategy service unavailable; no proposal can be verified.'
+    assert result['entry'] is None and result['quantity'] is None
+    assert result['contract_version'] == '1'
+
+
+@pytest.mark.parametrize('failure', ['exception', 'verification'])
+def test_failed_paper_connection_is_explicit_unavailable_without_old_values(tmp_path, monkeypatch, failure):
+    from src.api import local_app
+    class Broker:
+        def __init__(self, settings):
+            if failure == 'exception':
+                raise RuntimeError('private broker diagnostic')
+        def verify_connection(self): return {'connected': False}
+    monkeypatch.setattr(local_app, 'AlpacaClient', Broker)
+    monkeypatch.setenv('ALPACA_API_KEY', 'fake-key')
+    monkeypatch.setenv('ALPACA_SECRET_KEY', 'fake-secret')
+    c = client(tmp_path)
+    h = authorize(c)
+    result = c.post('/api/v1/connections/paper', headers=h)
+    assert result.json()['connection']['status'] == 'unavailable'
+    assert 'private broker diagnostic' not in result.text
+    assert result.json()['account'] is None
+    assert result.json()['positions'] == []

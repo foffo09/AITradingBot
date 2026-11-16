@@ -474,3 +474,27 @@ quando il modulo è disponibile. Windows/SDK/DLL/terminale reali non verificati.
 TDD: 29 casi rossi prima della validazione e un ulteriore rosso booleani OHLC;
 32 nuovi casi totali e gruppo desktop di 58 verdi, guard 0/0. Casi API provano
 che dopo un tick buono un tick scaduto non conserva bid/ask/barre precedenti.
+
+### Revisione integrazione — fallback proposta e errori visibili
+
+Il fallback `/proposal` riusa direttamente `SignalProposal.to_dict()` originale,
+con direction WAIT, validation_state NO_TRADE e reason leggibile, tutti i campi
+DTO presenti e operativi null. Rimossa l'alternativa action=NO_TRADE che non
+rispettava il parser frontend. Market e connessione Paper non hanno più
+`except Exception: pass`: restituiscono esplicitamente unavailable, senza
+valori precedenti o diagnostica SDK. Connessione rifiutata è unavailable anche
+quando verify_connection restituisce connected=False senza sollevare eccezioni.
+Tre regressioni rosse osservate e poi verdi; gruppo desktop 61 passati, guard0/0.
+
+### Native onefile ownership handshake
+
+La readiness aggiunge `supervisor_pid`: getppid() dal sistema operativo soltanto
+se sys.frozen è True, altrimenti null. Il campo pid resta il processo servizio
+che risponde anche a `/identity`; non viene sostituito con il bootloader.
+PyInstaller onefile può mantenere un supervisore separato dal processo Python.
+Il consumer verifica che pid oppure supervisor_pid nativo corrisponda al Child
+che possiede; quel Child resta l'unico handle da terminare, nessun kill di PID
+arbitrari ricavati da una porta o da un file. Instance_id e cookie invariati.
+Due test startup con server/socket simulati sono rossi senza il campo e verdi
+con entrambi i casi script/frozen. Nessun server o broker è stato avviato qui;
+la verifica del pacchetto autentico è svolta dal coordinatore separatamente.
