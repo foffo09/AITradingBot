@@ -12,8 +12,12 @@ The application must supply a new `AITradingBot/local-service` appdata directory
 never a legacy project data directory. Both local ledgers are service-owned files
 `local-v1-demo.sqlite3` and `local-v1-simulation.sqlite3`; no default/personal DB.
 
-One JSON readiness line on stdout: `{ "port": 1234, "pid": 123, "instance_id": "..." }`.
-The line appears after server startup. All diagnostics use stderr or appdata logs.
+One JSON readiness line on stdout: `{ "port": 1234, "pid": 123, "supervisor_pid": null, "instance_id": "..." }`.
+The line appears after server startup. In a frozen executable, supervisor_pid
+is the OS parent process ID (the PyInstaller onefile bootloader); in script mode
+it is null. The actual service pid is also the identity endpoint pid. A launcher
+may match actual pid or native supervisor_pid to its owned Child handle; it must
+keep that owned handle as its only termination target, never kill arbitrary PIDs. All diagnostics use stderr or appdata logs.
 The socket remains bound from allocation through server lifetime. Bind is only
 IPv4 127.0.0.1; proxy headers and websockets are disabled.
 The parent keeps stdin open, writes `shutdown\n` to quit, or closes the pipe.

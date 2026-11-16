@@ -485,3 +485,16 @@ rispettava il parser frontend. Market e connessione Paper non hanno più
 valori precedenti o diagnostica SDK. Connessione rifiutata è unavailable anche
 quando verify_connection restituisce connected=False senza sollevare eccezioni.
 Tre regressioni rosse osservate e poi verdi; gruppo desktop 61 passati, guard0/0.
+
+### Native onefile ownership handshake
+
+La readiness aggiunge `supervisor_pid`: getppid() dal sistema operativo soltanto
+se sys.frozen è True, altrimenti null. Il campo pid resta il processo servizio
+che risponde anche a `/identity`; non viene sostituito con il bootloader.
+PyInstaller onefile può mantenere un supervisore separato dal processo Python.
+Il consumer verifica che pid oppure supervisor_pid nativo corrisponda al Child
+che possiede; quel Child resta l'unico handle da terminare, nessun kill di PID
+arbitrari ricavati da una porta o da un file. Instance_id e cookie invariati.
+Due test startup con server/socket simulati sono rossi senza il campo e verdi
+con entrambi i casi script/frozen. Nessun server o broker è stato avviato qui;
+la verifica del pacchetto autentico è svolta dal coordinatore separatamente.
