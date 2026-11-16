@@ -4,19 +4,23 @@ import {
   ColorType,
   createChart,
   HistogramSeries,
+  LineSeries,
   type IChartApi,
   type UTCTimestamp,
 } from "lightweight-charts";
-import type { Bar } from "./api";
+import type { Bar, Indicator } from "./api";
 import { instant, number } from "./format";
+const EMPTY_INDICATORS: Indicator[] = [];
 export default function MarketChart({
   bars,
   identity,
   theme,
   priceUnit = "USD",
   volumeUnit = "unità",
+  indicators = EMPTY_INDICATORS,
 }: {
   bars: Bar[];
+  indicators?: Indicator[];
   identity: string;
   theme: string;
   priceUnit?: string;
@@ -28,6 +32,7 @@ export default function MarketChart({
   const [hover, setHover] = useState<{ identity: string; time: number } | null>(
     null,
   );
+  const [enabled, setEnabled] = useState<string[]>([]);
   useEffect(() => {
     if (!host.current || !bars.length) return;
     const light = theme === "light";
@@ -71,6 +76,12 @@ export default function MarketChart({
         color: b.close >= b.open ? "#35c6a46b" : "#f3778d6b",
       })),
     );
+    for (const [index, indicator] of indicators.entries()) {
+      if (!enabled.includes(indicator.id)) continue;
+      const line = c.addSeries(LineSeries, { color: ["#a78bfa", "#60a5fa", "#f6c85f", "#fa9fb5", "#8dd3c7", "#b3a2cf"][index % 6], lineWidth: 2, title: indicator.label }, indicator.pane === "rsi" ? 2 : 0);
+      line.setData(indicator.points.map(p => p.value === null ? {time:p.time as UTCTimestamp} : {time:p.time as UTCTimestamp,value:p.value}));
+    }
+    c.panes()[2]?.setHeight(100);
     c.panes()[0]?.setHeight(290);
     c.panes()[1]?.setHeight(100);
     const rangeCache = ranges.current;
@@ -91,7 +102,7 @@ export default function MarketChart({
       c.remove();
       chart.current = null;
     };
-  }, [bars, identity, theme]);
+  }, [bars, identity, theme, indicators, enabled]);
   const current =
     (hover?.identity === identity
       ? bars.find((bar) => bar.time === hover.time)
@@ -110,6 +121,10 @@ export default function MarketChart({
   };
   return (
     <div className="chart-section">
+      <fieldset className="chart-toolbar"><legend>Indicatori Python · solo analisi</legend>
+        {indicators.map(i => <label key={i.id}><input type="checkbox" checked={enabled.includes(i.id)} onChange={e=>setEnabled(current=>e.target.checked ? [...current,i.id] : current.filter(id=>id!==i.id))}/>{i.label} · {i.method} · {i.unit}</label>)}
+        {!indicators.length && <span>Indicatori N/D</span>}
+      </fieldset>
       <div className="chart-toolbar">
         <div className="ohlc" aria-live="off">
           <span>

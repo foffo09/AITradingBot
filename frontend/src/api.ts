@@ -8,7 +8,7 @@ export interface State {
   positions: RecordData[];
   orders: RecordData[];
   trades: RecordData[];
-  automation: { state: string; reason?: string };
+  automation: RecordData & { state: string; reason?: string };
 }
 export interface Bar {
   time: number;
@@ -17,6 +17,10 @@ export interface Bar {
   low: number;
   close: number;
   volume: number;
+}
+export interface Indicator {
+  id: string; label: string; pane: "price" | "rsi"; unit: string; method: string;
+  parameters: RecordData; points: {time:number;value:number|null}[];
 }
 export interface Market {
   context: Context;
@@ -29,6 +33,7 @@ export interface Market {
   bars: Bar[];
   quote: RecordData | null;
   metadata?: RecordData;
+  indicators?: Indicator[];
 }
 export interface Proposal extends RecordData {
   direction: "BUY" | "SELL" | "WAIT" | "NO_TRADE";
@@ -49,6 +54,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status = 0,
+    readonly outcome: string | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -129,6 +135,7 @@ export async function request(
         ? detail
         : `Richiesta non riuscita (HTTP ${response.status}).`,
       response.status,
+      response.headers.get("X-Request-Outcome"),
     );
   }
   return data;
@@ -150,6 +157,7 @@ export function parseState(value: unknown): State {
     orders: records(d.orders),
     trades: records(d.trades),
     automation: {
+      ...automation,
       state: string(automation.state),
       reason:
         typeof automation.reason === "string" ? automation.reason : undefined,
@@ -184,7 +192,23 @@ export function parseMarket(value: unknown): Market {
     previous = bar.time;
     return bar;
   });
+  const times = new Set(bars.map(b=>b.time));
+  const ids = new Set<string>();
+  const indicators = records(d.indicators ?? []).map(i => {
+    const id = string(i.id);
+    if (ids.has(id) || (i.pane !== "price" && i.pane !== "rsi")) invalid();
+    ids.add(id);
+    let last = -Infinity;
+    const points = records(i.points).map(p => {
+      const time = numeric(p.time), value = p.value === null ? null : numeric(p.value);
+      if (!times.has(time) || time <= last) invalid();
+      last = time;
+      return {time,value};
+    });
+    return {id,label:string(i.label),pane:i.pane as "price"|"rsi",unit:string(i.unit),method:string(i.method),parameters:object(i.parameters),points};
+  });
   return {
+    indicators,
     context: context(d.context),
     symbol: string(d.symbol),
     interval: string(d.interval),
@@ -234,6 +258,16 @@ const query = (c: Context, symbol?: string, interval?: string) =>
     ...(symbol ? { symbol } : {}),
     ...(interval ? { interval } : {}),
   }).toString();
+export function pendingTrade(c: Context): {symbol: string; side: string; quantity: number} | null {
+  try {
+    const raw = localStorage.getItem(`aitb-pending-trade-${c}`);
+    if (!raw) return null;
+    const record = object(JSON.parse(raw));
+    const payload = object(JSON.parse(string(record.payload)));
+    if (payload.context !== c || typeof payload.symbol !== "string" || !["buy","sell"].includes(String(payload.side)) || typeof payload.quantity !== "number" || !Number.isFinite(payload.quantity) || payload.quantity <= 0) return null;
+    return {symbol:payload.symbol, side:String(payload.side),quantity:payload.quantity};
+  } catch { return null; }
+}
 export const api = {
   session: async (signal?: AbortSignal) => {
     version(await request("/session", { signal }));
@@ -270,10 +304,12 @@ export const api = {
     symbol: string,
     interval: string,
     signal?: AbortSignal,
-  ) =>
-    parseProposal(
-      await request(`/proposal?${query(c, symbol, interval)}`, { signal }),
-    ),
+  ) => {
+    const proposal = parseProposal(await request(`/proposal?${query(c, symbol, interval)}`, { signal }));
+    if (proposal.context !== c || proposal.symbol !== symbol || proposal.interval !== interval)
+      throw new ApiError("Risposta del contesto, strumento o intervallo non coerente.");
+    return proposal;
+  },
   account: async (c: Context, initial_cash: number) =>
     parseState(
       await request("/local-account", {
@@ -281,13 +317,31 @@ export const api = {
         body: JSON.stringify({ context: c, initial_cash }),
       }),
     ),
-  trade: async (c: Context, symbol: string, side: string, quantity: number) =>
-    parseState(
-      await request("/local-trades", {
-        method: "POST",
-        body: JSON.stringify({ context: c, symbol, side, quantity }),
-      }),
-    ),
+  trade: async (c: Context, symbol: string, side: string, quantity: number) => {
+    const storageKey = `aitb-pending-trade-${c}`;
+    const payload = JSON.stringify({ context: c, symbol, side, quantity });
+    const saved = localStorage.getItem(storageKey);
+    const pending = saved ? object(JSON.parse(saved)) : { payload, idempotency_key: crypto.randomUUID() };
+    if (pending.payload !== payload || typeof pending.idempotency_key !== "string")
+      throw new ApiError("Esito incerto: ripeti la stessa operazione prima di modificarla; verifica lo storico.");
+    localStorage.setItem(storageKey, JSON.stringify(pending));
+    try {
+      const result = parseState(await request("/local-trades", {
+        method: "POST", body: JSON.stringify({context: c, symbol, side, quantity, idempotency_key: pending.idempotency_key}),
+      }));
+      if (result.context !== c) throw new ApiError("Risposta del contesto non coerente.");
+      localStorage.removeItem(storageKey);
+      return result;
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 422 || error.outcome === "rejected")) localStorage.removeItem(storageKey);
+      throw error;
+    }
+  },
+  automation: async (c: Context, command: "start" | "pause" | "stop" | "cycle", request_id: string) => {
+    const state = parseState(await request("/automation", {method:"POST", body:JSON.stringify({context:c, command, request_id})}));
+    if (state.context !== c) throw new ApiError("Risposta del contesto non coerente.");
+    return state;
+  },
   connect: async (c: "paper" | "mt5") =>
     parseState(await request(`/connections/${c}`, { method: "POST" })),
   backtest: async (

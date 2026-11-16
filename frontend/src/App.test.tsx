@@ -49,6 +49,7 @@ beforeEach(() => {
                 : url.includes("/proposal")
                   ? {
                       api_version: "1",
+                      context: "demo", symbol: "AAPL", interval: "1Day",
                       direction: "WAIT",
                       validation_state: "NO_TRADE",
                       reason: "Rischio non verificato",
@@ -124,7 +125,8 @@ describe("terminale senza dati inventati", () => {
                       }
                     : url.includes("/proposal")
                       ? {
-                          direction: "WAIT",
+                          context: "demo", symbol: "AAPL", interval: "1Day",
+                      direction: "WAIT",
                           validation_state: "NO_TRADE",
                           reason: "Dati mancanti",
                         }
@@ -194,6 +196,7 @@ it("invalida equity e proposta dopo un errore di refresh, senza valori precedent
           })
         : new Response(
             JSON.stringify({
+              context: "demo", symbol: "AAPL", interval: "1Day", expires_at: "2099-01-01T00:00:00Z",
               direction: "BUY",
               validation_state: "PAPER_PROPOSAL",
               reason: "Fixture valida",
@@ -247,7 +250,8 @@ it("rimuove snapshot quando il bootstrap di sessione fallisce nel polling", asyn
     if (url.includes("/proposal"))
       return new Response(
         JSON.stringify({
-          direction: "WAIT",
+          context: "demo", symbol: "AAPL", interval: "1Day",
+                      direction: "WAIT",
           validation_state: "NO_TRADE",
           reason: "Fixture",
         }),
@@ -309,7 +313,8 @@ it("mostra direzione e commissione ingresso del motore senza campi inventati", a
                     }
                   : url.includes("/proposal")
                     ? {
-                        direction: "WAIT",
+                        context: "demo", symbol: "AAPL", interval: "1Day",
+                      direction: "WAIT",
                         validation_state: "NO_TRADE",
                         reason: "Fixture",
                       }
@@ -382,7 +387,8 @@ it("conserva valuta e unità MT5 e mostra i campi terminale disponibili", async 
                 }
               : url.includes("/proposal")
                 ? {
-                    direction: "WAIT",
+                    context: "demo", symbol: "AAPL", interval: "1Day",
+                      direction: "WAIT",
                     validation_state: "NO_TRADE",
                     reason: "Fixture",
                   }
@@ -409,4 +415,96 @@ it("conserva valuta e unità MT5 e mostra i campi terminale disponibili", async 
   expect(
     await screen.findByRole("img", { name: /Equity del backtest/ }),
   ).toHaveAccessibleName(/valuta strumento N\/D/);
+});
+
+it.each([undefined, 'invalid', '2020-01-01T00:00:00Z'])('blocca BUY senza scadenza valida futura %s', async (expires_at) => {
+  const original = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => url.includes('/proposal')
+    ? new Response(JSON.stringify({ api_version: '1', context: 'demo', symbol: 'AAPL', interval: '1Day', direction: 'BUY', validation_state: 'PAPER_PROPOSAL', reason: 'fixture', expires_at, entry: 120 }))
+    : original(url, init));
+  render(<App />);
+  expect(await screen.findByText('NO_TRADE')).toBeInTheDocument();
+  expect(screen.queryByText('BUY')).not.toBeInTheDocument();
+  expect(screen.queryByText('120')).not.toBeInTheDocument();
+});
+
+it('non sovrappone cicli quando il bootstrap è ancora in corso', async () => {
+  const original = fetcher.getMockImplementation()!;
+  let sessions = 0;
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+    if (url.includes('/session')) { sessions++; return new Promise<Response>(() => {}); }
+    return original(url, init);
+  });
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  try {
+    render(<App />);
+    const { act } = await import('@testing-library/react');
+    await act(async () => { await vi.advanceTimersByTimeAsync(45000); });
+    expect(sessions).toBe(1);
+  } finally { vi.useRealTimers(); }
+});
+
+it('mostra metriche contabili già disponibili e dichiara il backtest senza OOS', async () => {
+  const original = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => url.includes('/state')
+    ? new Response(JSON.stringify({ ...state, context: 'demo', account: {currency:'USD', total_pnl: 321, market_value: 456, fees: 1.2, slippage: 2.3, spread: 3.4, daily_realized_pnl: 12, pnl_day:'2026-11-16', pnl_timezone:'UTC'} }))
+    : original(url, init));
+  render(<App />);
+  expect(await screen.findByText('321 USD')).toBeInTheDocument();
+  expect(screen.getByText('456 USD')).toBeInTheDocument();
+  expect(screen.getByText('12 USD')).toBeInTheDocument();
+  expect(screen.getByText('1,2 USD')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', {name:'Backtesting'}));
+  expect(screen.getByText(/OOS non eseguito/)).toBeInTheDocument();
+});
+
+it('mostra lo stato dry-run del backend e invia un ciclo esplicito con richiesta identificata', async () => {
+  const original = fetcher.getMockImplementation()!;
+  let cycle = false;
+  fetcher.mockImplementation(async (url: string, init: RequestInit) => {
+    if (url.includes('/automation')) {
+      const body = JSON.parse(init.body as string);
+      expect(body.command).toBe('cycle'); expect(body.context).toBe('demo');
+      expect(body.request_id).toMatch(/^[0-9a-f-]{36}$/);
+      cycle = true;
+    }
+    if (url.includes('/state') || url.includes('/automation')) return new Response(JSON.stringify({...state, context:'demo', automation:{state:'RUNNING', mode:'dry-run', execution_enabled:false, reason:'Solo analisi offline', proposals:cycle ? 2 : 1, intents:0, reconciliation:'none'}}));
+    return original(url, init);
+  });
+  render(<App />);
+  await userEvent.click(screen.getByRole('button', {name:'Automazione'}));
+  expect(await screen.findByText('RUNNING')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', {name:'Esegui ciclo dry-run'}));
+  expect(await screen.findByText('2')).toBeInTheDocument();
+  expect(cycle).toBe(true);
+  expect(screen.queryByText('Automazione ferma')).not.toBeInTheDocument();
+});
+
+it('riprende una registrazione incerta dopo rimontaggio conservando quantità e chiave', async () => {
+  localStorage.clear();
+  localStorage.setItem('aitb-pending-trade-demo', JSON.stringify({payload:JSON.stringify({context:'demo',symbol:'MSFT',side:'sell',quantity:3}),idempotency_key:'9d18dcad-e25a-42d7-964a-e8755a3b2a42'}));
+  const original=fetcher.getMockImplementation()!;
+  let posted: Record<string,unknown> | null=null;
+  fetcher.mockImplementation(async (url:string,init:RequestInit)=>{
+    if(url.includes('/local-trades')) {posted=JSON.parse(init.body as string); return new Response(JSON.stringify({...state,context:'demo',account:{cash:100}}));}
+    if(url.includes('/state')) return new Response(JSON.stringify({...state,context:'demo',account:{cash:100}}));
+    return original(url,init);
+  });
+  render(<App/>);
+  await userEvent.click(screen.getByRole('button',{name:'Portafoglio'}));
+  await userEvent.click(await screen.findByRole('button',{name:'Riprova registrazione incerta'}));
+  await waitFor(()=>expect(posted).toEqual({context:'demo',symbol:'MSFT',side:'sell',quantity:3,idempotency_key:'9d18dcad-e25a-42d7-964a-e8755a3b2a42'}));
+  expect(localStorage.getItem('aitb-pending-trade-demo')).toBeNull();
+});
+
+it('disabilita transizioni dry-run non ammesse dallo stato corrente', async () => {
+  const original=fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url:string,init:RequestInit)=>url.includes('/state')
+    ? new Response(JSON.stringify({...state,context:'demo',automation:{state:'STOPPED',mode:'dry-run',execution_enabled:false}}))
+    : original(url,init));
+  render(<App/>);
+  await userEvent.click(screen.getByRole('button',{name:'Automazione'}));
+  expect(await screen.findByRole('button',{name:'Avvia dry-run'})).toBeEnabled();
+  expect(screen.getByRole('button',{name:'Pausa dry-run'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Esegui ciclo dry-run'})).toBeDisabled();
 });
