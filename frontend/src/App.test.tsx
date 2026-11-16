@@ -508,3 +508,13 @@ it('disabilita transizioni dry-run non ammesse dallo stato corrente', async () =
   expect(screen.getByRole('button',{name:'Pausa dry-run'})).toBeDisabled();
   expect(screen.getByRole('button',{name:'Esegui ciclo dry-run'})).toBeDisabled();
 });
+
+it('mantiene il motivo NO_TRADE del gate senza inventare una scadenza', async () => {
+  const original=fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url:string,init:RequestInit)=>url.includes('/proposal')
+    ? new Response(JSON.stringify({api_version:'1',context:'demo',symbol:'AAPL',interval:'1Day',direction:'WAIT',validation_state:'NO_TRADE',reason:'Synthetic data blocked by operational gate.',expires_at:null}))
+    : original(url,init));
+  render(<App/>);
+  expect(await screen.findByText('Synthetic data blocked by operational gate.')).toBeInTheDocument();
+  expect(screen.queryByText('Proposta scaduta: richiedi un aggiornamento.')).not.toBeInTheDocument();
+});

@@ -148,7 +148,8 @@ function ProposalPanel({
     return () => window.clearInterval(timer);
   }, []);
   const expiry = typeof proposal?.expires_at === "string" ? Date.parse(proposal.expires_at) : NaN;
-  const expired = !Number.isFinite(expiry) || expiry <= now;
+  const actionable = proposal?.direction === "BUY" || proposal?.direction === "SELL";
+  const expired = actionable && (!Number.isFinite(expiry) || expiry <= now);
   const blocked =
     !proposal || proposal.validation_state === "NO_TRADE" || expired;
   return (
