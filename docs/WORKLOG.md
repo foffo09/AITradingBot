@@ -657,3 +657,13 @@ riprodotti fallenti prima del fix; poi876PASS/1skip/1warning34.78s guard0/0,
 18frontendPASS e61API/MT5PASS. SmokeHTTPfrozen e build.app nuovamente riusciti.
 Ultima GUItemporaneamente indisponibile per schermoMac bloccato; chiesto sblocco,
 non aggirato. Guida completa/decisioni aggiornate, main e lavoro preesistente intatti.
+
+Dopo sblocco: individuata e corretta regressione nostra (keywordarg metadata
+non previsto dal wrapperP3). NO_TRADE fallivachiusa ma mascherava il consumer
+rotto: testrosso dedicato e smokeHTTP ora assertano motivo/provenienza.
+877pytestPASS/1skip/1warning36.10s guard0/0; API25PASS;18frontendPASS;Rust1PASS;
+compileall/pipcheck/diffcheck0. Native setup failure riprodotto panic, corretto
+nel setuphook, faulttest sidecarassente→exit1senza panicPASS. Bundle90.62MiB,
+smokefrozen rafforzatoPASS e GUI nativa finaleLaunchServicesconcorrettomotivoP3,
+chiusuranormale/nessunorfano/porta65260chiusaPASS. Timeoutavvio15snon disabilitato.
+Nessuna modifica a soglie, credenziali, main o automazioni.

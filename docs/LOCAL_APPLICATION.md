@@ -151,3 +151,11 @@ MT5 richiede anche un conto terminale **Demo verificato**: real/contest/tipo
 mancante sono rifiutati a ogni lettura. Non cambiare o collegare un conto reale
 per aggirare questo blocco. L'API conserva gli attrs originali delle barre nel
 campo `metadata`; la UI mostra qualità, calendario e contratto senza inferirli.
+
+Verifica nativa Mac aggiuntiva, solo sul bundle generato:
+`python -m scripts.check_desktop_startup`. Simula sidecar assente, verifica
+uscita controllata1 senzapanic e ripristina il file. Lo smokeHTTP controlla anche
+motivo/provenienza della proposta, per distinguere NO_TRADE previsto da errore.
+Avvio desktop limitato a15s: dialoghiOS/avvio lento possono impedirlo; chiudere
+un eventuale ripristino finestre di macOS prima di riprovare. Il fallimento non
+abilita esecuzione né dati di ripiego. Nessuna provaWindowsGUI è implicita.

@@ -205,6 +205,7 @@ packaging/backend/requirements-mt5.txt
 packaging/backend/requirements.txt
 scripts/__init__.py
 scripts/build_backend.py
+scripts/check_desktop_startup.py
 scripts/check_local_service.py
 scripts/start_local.py
 src-tauri/.gitignore
@@ -274,3 +275,39 @@ nessun server o automazione di prova viene lasciato in esecuzione.
 Checkout principale2b2d35a con modifiche preesistenti (incluso paper_executor)
 lasciato intatto. Main remoto restafe98839. Gli altri worktree non vengono
 cancellati o riallineati. Guida completa e D16 ora distinguono nuovaUI e legacy.
+
+## Verifica conclusiva dopo sblocco e prova nativa
+
+La verifica grafica ha rilevato una regressione introdotta nel consolidamento
+metadata: un keywordarg non previsto arrivava al wrapperP3. Il fallback era
+failclosedNO_TRADE, ma non dimostrava il passaggio nel motore. Riprodotto con
+un test rosso sul motivo/provenienza; eliminato il keywordarg, senza cambiare
+il contratto pubblicoP3. SmokeHTTP ora verifica anche motivo e provenienza,
+così un errore interno generico non passa come rifiuto previsto.
+
+Finale Python: **877passed,1skipped,1warning in36.10s**, guard0/0;
+API25PASS, frontend18PASS, Rust1PASS. Compilazione e diffcheck0; pipcheck senza
+requisiti rotti. Sidecar ricostruito e smokeHTTPfrozen rafforzatoPASS;
+Tauri release/bundle.app90.62MiB riusciti.
+
+Un avvio nativo ha raggiunto il timeout15s; misura diretta successiva del
+sidecar confezionato:8.11s. Nessuna soglia finanziaria o timeout broker cambiato.
+È stato osservato anche il ripristino finestre macOS dopo gli arresti forzati
+precedenti. Un errore setup propagato a Tauri causava panic nel framework:
+il solo handling di build non bastava (faulttest rimasto rosso), quindi il setup
+ora richiede un'uscita controllata1 senza propagare l'errore al panic interno.
+`scripts/check_desktop_startup.py`: backend confezionato temporaneamente
+indisponibile nel solo bundle generato → exit1, nessunpanic, ripristino filePASS.
+Non modifica applicazioni installate, dati personali o credenziali.
+
+Avvio finale tramite LaunchServices, HOMEtemporanea/credenziali assenti:
+finestra nativa letta realmente, qualitàsynthetic/calendarioN/D/contrattoN/D,
+propostaNO_TRADE con il motivo P3 corretto e fonte synthetic-demo.
+Screenshot finale salvato localmente; chiusura dalla finestra, waitexit0,
+nessun processo confezionato residuo e porta65260 chiusaPASS. Il limite di
+avvio15s rimane: su avvio lento/OSdialog viene rifiutato senza trading;
+non si promette assenza di ritardi o robustezza assoluta su ogni macchina.
+
+Il blocco schermo è stato risolto dall'utente. La consegna finale Notion viene
+aggiornata con SHA/PR/statiCI reali; i paragrafi precedenti sono cronologia,
+non il riepilogo conclusivo. Nessun server di prova lasciato attivo.

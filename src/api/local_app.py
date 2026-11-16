@@ -281,7 +281,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 from src.strategy.service import evaluate_proposal
                 data = frame(context, symbol, interval)
                 quote = paper.get_latest_quote(symbol) if context == 'paper' and paper else None
-                result = evaluate_proposal(settings=paper.settings if context == 'paper' and paper else settings, bars=data, quote=quote, metadata=dict(data.attrs), source=data.attrs['source'], as_of=pd.Timestamp.now(tz='UTC'), symbol=symbol, interval=interval, risk_snapshot=None, context=context)
+                result = evaluate_proposal(settings=paper.settings if context == 'paper' and paper else settings, bars=data, quote=quote, source=data.attrs['source'], as_of=pd.Timestamp.now(tz='UTC'), symbol=symbol, interval=interval, risk_snapshot=None, context=context)
                 return {**result, 'api_version': '1', 'context': context}
             except ImportError:
                 fallback['reason'] = 'Strategy service unavailable; no proposal can be verified.'

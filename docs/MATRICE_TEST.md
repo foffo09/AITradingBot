@@ -299,3 +299,11 @@ Smoke sorgente/frozen e build.app ripetuti con successo. La seconda rilettura
 GUI dell'ultimo bundle è temporaneamente bloccata dallo schermoMac bloccato;
 la provaGUI precedente sullo stesso lifecycle è documentata, non sostituisce
 una provaWindows11. CI corrente e SHA sono registrati nell'audit al completamento.
+
+Chiusura successiva: **877PASS/1skip/1warning36.10s**, API25PASS e18frontendPASS;
+Rust1PASS. Nuovo test verifica che NO_TRADE venga realmente dal motore con
+provenienza, non da fallback d'errore. SmokeHTTP sorgente/frozen rafforzatoPASS.
+Fault nativo: sidecar mancante→exit1 senzapanic; bundlegenerato ripristinato.
+SbloccoMacrisolto; finale LaunchServices + GUI con metadata/proposta corretti,
+chiusura normale/porta chiusa/processi assentiPASS. Dettagli e timeout15s
+residuo nell'audit; nessun PASSWindows11 o brokerautentico dedotto.

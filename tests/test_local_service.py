@@ -287,3 +287,13 @@ def test_market_keeps_original_frame_metadata_and_clears_it_on_failure(tmp_path)
     assert market['metadata']['interval'] == '5Min'
     unavailable = c.get('/api/v1/market?context=paper&symbol=AAPL').json()
     assert unavailable['metadata'] == {}
+
+
+def test_demo_proposal_reaches_pure_service_and_keeps_its_rejection_provenance(tmp_path):
+    c = client(tmp_path)
+    authorize(c)
+    proposal = c.get('/api/v1/proposal?context=demo&symbol=AAPL&interval=5Min').json()
+    assert proposal['reason'] == 'Only the Paper context can produce an analytical proposal.'
+    assert proposal['provenance']['bars']['source'] == 'synthetic-demo'
+    assert proposal['provenance']['bars']['interval'] == '5Min'
+    assert proposal['validation_state'] == 'NO_TRADE'

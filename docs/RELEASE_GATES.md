@@ -350,3 +350,17 @@ Milestone prioritarie: 18/24/30 novembre, 7/14/18 dicembre; 19–31 dicembre
 solo blocker e nuova verifica degli SHA. Il calendario precedente della missione
 è storico. Alla BASE 3df4f82 non c'è un candidato migrato: readiness BLOCKED.
 Nessun nuovo merge/retarget/approvazione/dispatch/release/deploy è autorizzato.
+
+## 16 novembre — candidato locale React/FastAPI/Tauri
+
+La precedente ricognizione «artifact assenti» resta storica. Ora esistono UI/API,
+wrapperpuro, packaging e bundleMac realmente provato. Evidenza in MASTER_AUDIT.md:
+877testofflineMac/18frontend/1Rust, smokeHTTP sorgente/frozen rafforzato,
+GUI nativa e faultstartup senza panic. CIcross-platform collegata alla PRdraft#7;
+i check devono riferirsi al suo HEAD esatto, non a run di commit precedenti.
+
+Release ancora NON AUTORIZZATA/NON PRONTA: Windows11GUI, Alpaca/MT5autentici,
+esecutore/riconciliazione nuovaUI, installerWindows/firma/notarizzazione e review
+indipendente non completati. Nessun merge main, deploy o attivazione ordini.
+Guida e limiti: LOCAL_APPLICATION.md. Un timeoutavvio resta un rifiuto sicuro,
+non un'autorizzazione a bypassare coordinamento/gate o a riutilizzare dati vecchi.

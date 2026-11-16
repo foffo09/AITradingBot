@@ -66,7 +66,10 @@ def main():
             assert request('state?context=paper')['automation']['state'] == 'stopped'
             market = request('market?context=demo&symbol=AAPL&interval=1Day')
             assert len(market['bars']) == 200 and market['source'] == 'synthetic-demo'
-            assert request('proposal?context=demo')['validation_state'] == 'NO_TRADE'
+            proposal = request('proposal?context=demo')
+            assert proposal['validation_state'] == 'NO_TRADE'
+            assert proposal['reason'] == 'Only the Paper context can produce an analytical proposal.'
+            assert proposal['provenance']['bars']['source'] == 'synthetic-demo'
             result = request('backtest', {'context': 'demo', 'symbol': 'AAPL'})
             assert result['source'] == 'synthetic-demo' and len(result['equity']) == 200
             assert result['metrics']['total_transaction_costs'] >= 0
