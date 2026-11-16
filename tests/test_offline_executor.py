@@ -242,3 +242,16 @@ else:
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == 'OWNERSHIP BLOCKED'
     executor.close()
+
+
+@pytest.mark.parametrize('identity', [None, '', ' ', True, 3])
+def test_missing_stable_execution_identity_cannot_reconcile(tmp_path, identity):
+    executor = OfflineExecutor(tmp_path, 'demo')
+    command(executor, 'start')
+    command(executor, 'cycle', lambda: proposal())
+    intent = executor.intents()[0]['id']
+    execution = fill(intent)
+    execution['id'] = identity
+    assert executor.reconcile(snapshot([order(intent)], [execution]), expected_balance='1000', expected_positions={}) is False
+    assert executor.status()['state'] == 'RECOVERY_REQUIRED'
+    executor.close()

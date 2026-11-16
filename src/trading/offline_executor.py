@@ -262,6 +262,8 @@ class OfflineExecutor:
                         raise ValueError('Conflicting orders')
                     orders[identity] = order
                 for fill in page['fills']:
+                    if not isinstance(fill.get('id'), str) or not fill['id'].strip() or len(fill['id']) > 256:
+                        raise ValueError('Stable execution identity required')
                     core = {key: fill[key] for key in ('intent_id', 'broker_id', 'quantity', 'price')}
                     if _timestamp(fill['timestamp']) > _timestamp(snapshot['as_of']):
                         raise ValueError('Execution newer than snapshot')
