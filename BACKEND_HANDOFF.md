@@ -328,3 +328,81 @@ Per ripetere i nuovi casi su PowerShell, dopo l'installazione già descritta:
 .\.venv\Scripts\python.exe -m pytest -q tests/test_backend_integration.py tests/test_backend_contract.py tests/test_bar_timing.py tests/test_fx_rates.py tests/test_paper_automation.py tests/test_paper_safety.py
 .\.venv\Scripts\python.exe -m pytest -q -rs
 ```
+
+## Desktop API v1 — 2026-11-16
+
+Nuovo servizio indipendente in `src/api/local_app.py`, senza importare il factory
+Omega o avviare worker. Runtime `python -m src.runtime.local_service --port 0
+--ui-dir ABSOLUTE_UI --data-dir ABSOLUTE_APPDATA`. Il processo tiene lo stesso
+socket 127.0.0.1 dalla bind alla chiusura. Readiness stdout dopo startup:
+`{port,pid,instance_id}`; stdin `shutdown`, EOF, segnali e POST shutdown fermano
+solo questo processo. UI statica stesso origin; proxy headers/websocket spenti.
+`data-dir` obbligatoria: usare appdata `AITradingBot/local-service` distinto dai
+vecchi DB. File locali `local-v1-demo.sqlite3` e `local-v1-simulation.sqlite3`;
+symlink/hardlink rifiutati all'avvio e all'accesso. Nessuna inizializzazione conto
+su GET, nessun reset. Il ledger originale e i suoi limiti di rischio/costi sono
+riusati. Input capitale USD: conversione identità interna esplicita; campi legacy
+EUR/FX non esposti come saldi o fixing. Equity da `summary.current_capital`.
+Statistiche senza campione e valori non finiti diventano null, non saldi zero.
+
+Contratto:
+
+- GET `/api/v1/health`: `{api_version:'1',status:'ready'}`.
+- GET `/api/v1/identity`: `{pid,instance_id}`, identità processo non segreta.
+- GET `/api/v1/session`: stesso envelope health e cookie HttpOnly SameSite=strict,
+  token effimero di processo solo nel cookie. Richiede Origin esatto oppure
+  `Sec-Fetch-Site:same-origin` più `X-Local-Request:1` per fetch browser stesso origin.
+- Tutte le altre route API richiedono cookie; Host esatto `127.0.0.1:porta`.
+  Origin presente deve coincidere; mutazioni richiedono sempre Origin esatto più
+  `X-Local-Request:1`. Nessun CORS aperto, frontend dev tramite proxy stesso origin.
+- GET state `?context=demo|simulation|paper|mt5`: `{api_version,context,
+  connection:{status,reason},account|null,positions,orders,trades,
+  automation:{state:'stopped',reason}}`. Demo/Sim `account` comprende cash,
+  initial_cash, equity, currency USD e statistiche ledger; posizioni native
+  `{symbol,quantity,average_entry,market_price,mark_timestamp,mark_source}`.
+  Trade history conserva campi originali `entry_fee_alloc`, `exit_fee`,
+  `entry_data_source`/`exit_data_source`; nessun P/L per posizione inventato.
+- GET instruments: `{api_version,instruments:[{symbol,name}]}` dal catalogo.
+- GET market `?context&symbol&interval`: `{api_version,context,symbol,interval,
+  status,reason,source,as_of,bars:[{time:epoch_seconds,open,high,low,close,volume}],
+  quote|null}`. Intervalli 1Min/5Min/15Min/1Hour/1Day/1Week. Demo/Sim esplicitamente
+  `source:'synthetic-demo'`, quote null; Paper mai fallback sintetico.
+- POST local-account `{context:demo|simulation,initial_cash:number}`: state;
+  seconda inizializzazione 409, capitale finito positivo e non booleano.
+- POST local-trades `{context:demo|simulation,symbol,side:buy|sell,quantity}`:
+  state più fill ledger locale, prezzo sintetico corrente dichiarato. Nessun
+  broker coinvolto, niente short. Limiti/costi originali AppSettings espliciti.
+- POST backtest `{context,symbol,short_window,long_window}`: `{api_version,
+  context,symbol,source,metrics,trades,equity:[{time,value}]}`. Motore originale,
+  dati Demo espliciti o storico reale solo dopo connessione; capitale del motore
+  separato dal conto locale, dichiarato `metrics.initial_capital`.
+- GET proposal `?context&symbol&interval`: delega pura P3 `evaluate_proposal`,
+  metadata preservati, risk_snapshot=None finché non attestabile; NO_TRADE
+  motivato se wrapper/dati/rischio indisponibile. Nessuna formula finanziaria
+  duplicata, nessun submit. Integrare commit P3 prima di build finale.
+- POST connections/paper, senza body: credenziali solo variabili di processo
+  ALPACA_API_KEY/ALPACA_SECRET_KEY, mai from_env/.env; paper=True nello SDK,
+  paper_trading_enabled=False e trasporto trading ulteriormente read_only=True.
+  GET successivi fanno soltanto letture conto/dati. Nessuna route ordini broker.
+- POST connections/mt5: optional import solo Windows; initialize/account_info/
+  positions_get/orders_get/copy_rates_from_pos/shutdown. Nessun order_send.
+  Mac unsupported esplicito. La presenza di modulo/terminale non è promessa.
+- POST shutdown: stesso cookie/Origin/header delle mutazioni, callback processo.
+- Errori `{detail:string}`; 401 sessione, 403 confine locale/CSRF, 422 input,
+  409 conto/rischio/operazione indisponibile, 503 storage. Errori SDK mai restituiti.
+
+Packaging: `scripts/build_backend.py`, requirements/entrypoint/README in
+`packaging/backend`; PyInstaller nativo onefile, nome target triple per Tauri
+`aitradingbot-service`. Build aarch64-apple-darwin osservata riuscita (27,8s),
+`--help` del binario exit 0; nessun server avviato. Binario e cache dist non
+committati; ricostruire dopo integrazione P3 e ultime modifiche API. Optional MT5
+hidden import deve essere disponibile nel build Windows. Firma/notarizzazione e
+Windows runtime non verificati. Logging legacy mantiene formato ma crea directory
+solo quando richiesto, runtime usa appdata/logs invece di scrivere nel bundle.
+
+Prove: 26 nuovi casi API/runtime/packaging/logging offline, rossi osservati prima
+delle implementazioni, poi verdi; guard rete/credenziali 0/0. Suite completa
+osservata al primo giro: 770 passati, 1 saltato Windows Proactor, warning legacy
+websockets; successivamente aggiunte regressioni storage/statistiche/USD.
+Compileall e pip check riusciti. Nessuna credenziale o DB personale aperti,
+nessun ordine o server avviato. Paginazione ordini affrontata nel commit seguente.
