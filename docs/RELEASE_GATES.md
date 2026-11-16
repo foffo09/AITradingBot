@@ -364,3 +364,22 @@ esecutore/riconciliazione nuovaUI, installerWindows/firma/notarizzazione e revie
 indipendente non completati. Nessun merge main, deploy o attivazione ordini.
 Guida e limiti: LOCAL_APPLICATION.md. Un timeoutavvio resta un rifiuto sicuro,
 non un'autorizzazione a bypassare coordinamento/gate o a riutilizzare dati vecchi.
+
+
+## Gate completion — decisione corrente
+
+Il candidato isolato aggiunge dry-run, idempotenzaAPI, deadlineprocessoMT5,
+lifecycle e testinstallerCI. La release resta **BLOCKED**, anche con CI verde:
+
+1. Pillow12.3.0:42 advisory dal resolver pip-audit; fix13.0.0 incompatibile con
+   Streamlit1.65 (`pillow<13`). Risolvere compatibilità e ripetere audit/test.
+2. Licenza progetto assente; notice/SBOM completa del bundle e dipendenze UNKNOWN
+   da verificare prima della distribuzione. Non si inventa una licenza.
+3. Windows11GUI, retentionappdata/upgrade/installazione personale, firma/notarizzazione
+   e cleanup frozenWindows durante nativehang autentico NON VERIFICATI.
+4. Broker autentici ed esecuzione finanziaria fuori autorizzazione. Nessuna scrittura
+   broker. La riconciliazione offline non sblocca un’esecuzione autentica.
+
+InstallerCI non firmato e testato su WindowsServer non è un rilascioWindows11.
+La sentinella esterna non prova retentionappdataTauri. Startup15s invariato.
+Nessun merge, deploy o release; decisione successiva del responsabile necessaria.

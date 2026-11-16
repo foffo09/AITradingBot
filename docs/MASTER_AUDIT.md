@@ -311,3 +311,86 @@ non si promette assenza di ritardi o robustezza assoluta su ogni macchina.
 Il blocco schermo è stato risolto dall'utente. La consegna finale Notion viene
 aggiornata con SHA/PR/statiCI reali; i paragrafi precedenti sono cronologia,
 non il riepilogo conclusivo. Nessun server di prova lasciato attivo.
+
+
+## Nuovo mandato completion — baseline e revisione
+
+Nuova base verificata37a3840775f8be65f5683789b8e728bf563a5c0f, branch isolato
+agents/codex-completion-20261116. Fetch senza prune; PR7 OPEN/DRAFT e quattro
+branch consegnati invariati. Checkout personale con modifiche pregresse intatto.
+Notion Hub e areePersona1–4 letti; OperatingGuide accesso negato, nessun permesso
+modificato. Progresso persistente: CODEX_MASTER_PROGRESS.md.
+
+Difetti C01–C07 corretti o implementati offline, con regressioni in ledger/API,
+MT5Process, launcher, frontend e Rust. Le revisioni iniziali indipendenti hanno
+identificato timeoutIPC, racepolling, payloadidempotente e lifecycle. Revisione
+finale indipendente: rifiuto definitivo bloccavaUI, timestamp malformato/fill futuro
+non bloccavano reconcile; tutti riprodotti RED e corretti GREEN. Retentionappdata
+reale e SIGKILL/nativehang frozenWindows restano limiti, non dichiarazioni PASS.
+
+Verifica Mac localePython3.11.18/macOS27.2.1arm64 prima del commit:
+`python -m compileall -q app.py config src tests`: exit0, nessun output.
+`python -m pytest -q`: **929passed,1skipped,1warning in40.09s**;
+guard **network0,credentials0**. SkipProactor specificoWindows, warningwebsockets
+preesistente. Mirati ledger/offlineexecutor49PASS, contrattoAPI/reader/ledger113PASS
+prima degli ultimi casi aggiuntivi. npm lint/typecheck/build exit0; frontend34PASS.
+Rust3PASS, incluso cleanupfiglio che richiede3s (RED sul vecchio limite2s).
+pipcheck: `No broken requirements found.` Diffcheck exit0.
+PyInstaller e bundleMac90.77MiB generati, smokeHTTPsource/frozenPASS prima del
+collaudoGUI conclusivo. Il successo dei test non autorizza trading automatico.
+
+### Dipendenze, licenze e vulnerabilità
+
+Nessuna dipendenza di runtime aggiunta o aggiornata. npmci usa lock270pacchetti;
+npm audit JSON:0 advisory in tutte le severità. pip-audit in un ambiente temporaneo
+separato, risoluzione requirements-dev115dipendenze: **42 advisory in Pillow12.3.0**,
+fix13.0.0. Streamlit1.65.0 richiede pillow<13: l’upgrade forzato sarebbe un ambiente
+incoerente. Esempi advisory PYSEC-2026-4327/4328/4326/4339/4343; questa è evidenza
+scanner di dipendenza, non prova di sfruttabilità dell’app. Non ignorati o soppressi.
+La UI locale non richiede upload immagini e sidecar escludeStreamlit, ma ciò non
+rende sicura l’installazionelegacy né certifica un artifact privo diPillow.
+
+Inventario metadata letto: Python115 (8UNKNOWN), npm270 (0UNKNOWN), Cargo429
+(inclusi target opzionali,1UNKNOWN=progetto). Nessun LICENSE del progetto trovato;
+charts5.3.0 Apache2/LICENSE+NOTICE inclusi, React19.3.1 MIT, Tauri2.12.6 MIT/Apache,
+FastAPI0.162 MIT, HTTPX0.28.1 BSD3, Portalocker3.2 BSD3, pandasBSD3, numpy licenze
+multiple BSD/0BSD/MIT/Zlib/CC0. PyInstaller6.16 GPL con eccezione bootloader: non
+si deduce una licenza per il progetto. Crate opzionali con MPL/Unicode/LGPLalternativa
+richiedono scelta/notice per gli artifact effettivamente distribuiti. Audit Rust
+advisories non eseguito; inventario metadata non è SBOM/clearance legale completa.
+
+Riprodurre audit con `npm audit --json`, `pip-audit -r requirements-dev.txt --format
+json` in venv separata e `cargo metadata --locked --format-version 1`. Nessun output con dati personali committato.
+Release **BLOCKED** per dipendenza vulnerabile/conflitto, licenza/notice incompleti,
+Windows11GUI/firma/nativehang autentico non verificati. Nessuna release/deploy.
+
+Notion alla ripresa: due tentativi sulla pagina Persona4 restituiscono `Debugger
+unattached` pur essendo il browser presente. Nessuna scrittura dichiarata riuscita;
+report completo resta nel repository per successivo salvataggio.
+
+
+### Collaudo grafico e incidente di isolamento
+
+Il bundle corrente è stato realmente aperto. Il primo avvio con HOME temporanea
+ha fallito al limite15s (stderr sanitizzato di avvio). La successiva selezione
+tramite controllo grafico ha riaperto una seconda istanza nella directory dati
+standard: verificati statiSTOPPED→RUNNING→cicloesplicito con1proposta/0intent→
+PAUSED→STOPPED e indicatoriSMA/RSI. L’app è stata chiusa e la porta51555 risulta
+chiusa; nessun conto/operazione finanziaria creato. Questa prova NON certifica
+isolamento desktop. È stato creato un nuovo diario demo-control nella directory
+dati standard; lasciato intatto, senza leggere/cancellare database personali.
+Comportamento segnalato all’utente. Non ripetere getApp dopo un timeout:
+può riavviare implicitamente l’app senza l’ambiente privato del launcher.
+
+Prova browser successiva correttamente isolata: servizio sorgente con directory
+applicativa temporanea e ambiente senza credenziali, UI aperta nell’IAB. Verificati
+STOPPED→startdry-run→cicloesplicito(1proposta/0intent)→STOPPED, pulsanti coerenti.
+SnapshotAPI reali e grafico sintetico visibili, nessun broker collegato.
+La verifica visiva ha anche individuato un messaggio ingannevole: un NO_TRADE
+senza scadenza mostrava “proposta scaduta” nascondendo il motivo del gate. Riprodotto
+RED nel testUI, corretto senza indebolire scadenzaBUY/SELL (frontend34PASS).
+Screenshotlocale `/tmp/aitradingbot-completion-browser.png`, nessun dato personale.
+Servizio chiuso exit0 e porta51630 chiusa; startbackend0.5853s, health0.0074s,
+shutdown0.32s. RSS al readiness139008KiB; CPU54.7% misurata durante avvio, NON idle.
+Tempo desktop-to-visible/CPUidle/UIload non strumentati: NON VERIFICATI. Bundle90.77MiB.
+Startupcold15s resta gate fallito; nessuna sogliaalzata o successo inventato.

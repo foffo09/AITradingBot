@@ -174,3 +174,27 @@ Shell possiede Child/pipe, mai PID arbitrari daHTTP; PyInstalleronefile comunica
 PIDworker e supervisorOS per handshake. Browser e desktop hanno directoryapp
 distinte e non sommano capitali. Chiusura/EOF termina il sidecar. Nessun deploy,
 mainmerge o release impliciti; Windows11/conti autentici richiedono prove distinte.
+
+
+## Completion — decisioni del 16 novembre 2026
+
+- Base37a3840, nuovo branch agents/codex-completion-20261116. Nessun merge o
+  modifica ai branch Persona1–4, PR7 o main.
+- Automazione limitata ad armamento/cicli espliciti dry-run. Nessun timer finanziario,
+  adapter scrittura o snapshot rischio inventato. Stati STOPPED/STARTING/RUNNING/
+  PAUSING/PAUSED/STOPPING/ERROR/RECOVERY_REQUIRED; riavvio attivo blocca, mai riparte.
+- Intent creati/validati/dry_run_completed; protocollo offline pending/acknowledged/
+  partial/filled/rejected/canceled/expired/unknown/reconciliation_required. Quantità
+  cumulative da executionID univoci, niente denaro contabilizzato nel diario.
+  Pagine mancanti/cicliche, riferimenti ambigui, fill futuri o saldo/posizioni
+  divergenti impediscono sblocco. Nessun endpoint pubblico importa prove sintetiche.
+- Operazioni virtuali richiedono UUID stabile: modifica intenzionale al contratto
+  input v1 e aggiornamento di tutti i chiamanti. Rifiuto definitivo distinguibile
+  dall’esito incerto; chiave non riutilizzabile per un payload differente.
+- MT5 in processo posseduto: deadline completa5s, allowlist di letture, invalidazione
+  su timeout/crash. ShutdownTauri20s giustificato dalle letture/close limitate; startup15s
+  invariato. SIGKILL padre/native hang frozenWindows restano gate non certificati.
+- Totale giornaliero N/D; soltanto realizzatoUTC verificabile. Indicatori riusati
+  da strategiePython; backtest singolo campione dichiarato, nessuna provaOOS inventata.
+- Nessun upgrade forzato Pillow13 contro il vincolo Streamlit<13. Vulnerabilità e
+  licenza progetto mancante bloccano la release; nessuna licenza del titolare inventata.

@@ -330,3 +330,14 @@ Verifica finale dello stesso worktree: suite completa **776 passati, 1 saltato,
 Proactor sul Mac; warning preesistente `websockets.legacy`. `compileall`,
 `pip check` e `git diff --check` riusciti. WORKLOG condiviso, API, frontend e
 altri worktree non modificati; nessun push o merge.
+
+
+## Integrazione completion
+
+Motore e RiskManager invariati. API espone SMA10/30, EMA9/21/50 e RSI14 ricavati
+esclusivamente dalle implementazioni esistenti; nessun indicatore autorizza ordini.
+I cicli dry-run richiamano evaluate_proposal senza inventare risk_snapshot:
+Demo/Simulazione restano NO_TRADE. Nessuno snapshot rischio Paper completo è
+attestato da questa UI, quindi nessuna proposta è dichiarata eseguibile.
+Il backtest API resta SMA giornaliera su singolo campione; metadata espliciti,
+nessun risultato training/validation/OOS o profitto di mercato inventato.

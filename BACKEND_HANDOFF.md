@@ -513,3 +513,23 @@ tipi verificati: real/contest/missing/bool/string vengono rifiutati. Il controll
 cambio conto. Nessun cambio/login dell'account o ordine viene effettuato dal
 programma. Enum e significato dalla [documentazione ufficiale MetaQuotes](https://www.mql5.com/en/docs/constants/environment_state/accountinformation).
 I mock dichiarano esplicitamente il conto Demo; nessun terminale vero testato.
+
+
+## Contratti completion — API locale v1
+
+Base37a3840, branch agents/codex-completion-20261116. `POST local-trades` richiede
+idempotency_key UUID e vincola contesto/simbolo/lato/quantità al fill esistente.
+409 con X-Request-Outcome=rejected è un rifiuto definitivo senza commit; 409 senza
+header, timeout e5xx richiedono mantenimento dell’identità e verifica dello storico.
+`POST automation` accetta context demo/simulation, command start/pause/stop/cycle,
+request_id UUID; restituisce State. `state.automation` contiene stato maiuscolo,
+mode=dry-run, execution_enabled=false, timestamp/null, contatori e riconciliazione.
+Nessun endpoint di scrittura broker o import di snapshot/recovery.
+`market.indicators[]`: id,label,pane(price/rsi),unit,method,parameters,points(timeUTC
+in secondi,value finito/null). Attrs originali conservati. Quote/barre non diventano
+operative per la presenza di indicatori. `proposal` riporta sempre context/symbol/
+interval coerenti. `backtest` aggiunge strategy/parameters/interval/sample/validation.
+Account locale aggiunge daily_realized_pnl/pnl_day/pnl_timezone=UTC, senza cambiare
+le formule finanziarie. MT5Process ha la stessa API pubblica del reader,5s per
+scambio completo; errore/crash richiede riconnessione. SDK opzionale non incluso
+nel pacchettoCI standard. Vedere LOCAL_APPLICATION e MASTER_AUDIT per limiti.

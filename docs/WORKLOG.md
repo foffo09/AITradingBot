@@ -667,3 +667,18 @@ nel setuphook, faulttest sidecarassente→exit1senza panicPASS. Bundle90.62MiB,
 smokefrozen rafforzatoPASS e GUI nativa finaleLaunchServicesconcorrettomotivoP3,
 chiusuranormale/nessunorfano/porta65260chiusaPASS. Timeoutavvio15snon disabilitato.
 Nessuna modifica a soglie, credenziali, main o automazioni.
+
+
+## 16 novembre — completion isolato da37a3840
+
+Nuovo mandato autonomo su agents/codex-completion-20261116, worktree separato.
+Preservati main,PR7,quattrobranch e checkoutpersonale. Audit con tre revisioni
+indipendenti iniziali e review finale. Implementati: idempotenzaAPI/ledger,
+deadlineMT5 inprocesso, dry-run/controljournal e riconciliazione sintetica,
+contrattiUI/indicatori/metriche/backtest, launcherrecovery e monitor sidecar,
+CIwrapperPS e NSIS install/uninstall. Nessun ordine o automazione finanziaria.
+Mac:929PASS/1skip/1warning guard0/0;frontend34;Rust3;compileall/pipcheck/diffcheck0;
+source/frozenHTTP e build.app riusciti. EvidenzeGUI/CI finali da completare.
+VulnerabilitàPillow12.3 rilevate42;fix13incompatibileStreamlit<13. ReleaseBLOCCATA
+anche per licenza progetto/notice e proveWindows11/firma/nativehangmancanti.
+Dettagli e scelte in MASTER_AUDIT, LOCAL_APPLICATION e CODEX_MASTER_PROGRESS.

@@ -231,3 +231,14 @@ lettureAlpaca/MT5 con accountPaper/terminaleautorizzati; (3)snapshot rischio com
 prima di proposte operative; (4)migrazione controllata esecutore/riconciliazione,
 mai abilitata come scorciatoia; (5)installer/firma e audit transitivo prima di release.
 Nessun nuovo mercato, ottimizzazione reddituale o ordine autentico aggiunto.
+
+
+## Completion — priorità successive
+
+- P1 release: eliminare il conflitto Streamlit/Pillow vulnerabile con aggiornamento
+  compatibile e regressioni; completare licenza progetto/notice native/SBOM.
+- P1 verifica: collaudoWindows11GUI e cleanup frozen durante hangMT5, retention
+  appdata, install/upgrade/uninstall su macchina dedicata. CI non sostituisceGUI.
+- P2: riconciliazione autentica da adapter verificato e ledger/risk_snapshot completo
+  restano separati dal protocollo dry-run. Nessuna abilitazione finanziaria implicita.
+- Nessun ulteriore indicatore/strategia o riscritturaUI richiesti per il presente scope.

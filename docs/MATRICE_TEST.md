@@ -307,3 +307,28 @@ Fault nativo: sidecar mancante→exit1 senzapanic; bundlegenerato ripristinato.
 SbloccoMacrisolto; finale LaunchServices + GUI con metadata/proposta corretti,
 chiusura normale/porta chiusa/processi assentiPASS. Dettagli e timeout15s
 residuo nell'audit; nessun PASSWindows11 o brokerautentico dedotto.
+
+
+## Completion — evidenze locali del 16 novembre
+
+Base37a3840 + diff isolato; gli SHA dei commit e runCI successivi vanno riferiti
+al candidato effettivo, senza attribuire la baseline storica al nuovoSHA.
+
+| Prova | macOS27.2.1arm64 | WindowsCI nuovoSHA | Windows11GUI |
+|---|---|---|---|
+| compileall/Python3.11.18 | PASS exit0 | NON VERIFICATO | NON VERIFICATO |
+| Suite Python | PASS929/skip1/warn1;40.09s;guard0/0 | NON VERIFICATO | NON VERIFICATO |
+| API/ledger/readonly mirati | PASS113 | NON VERIFICATO | NON VERIFICATO |
+| Frontend/Node22.23.3 | PASS34;lint/typecheck/build0 | NON VERIFICATO | NON VERIFICATO |
+| Rust/Tauri | PASS3 e bundle.app90.77MiB | NON VERIFICATO | NON VERIFICATO |
+| HTTPsource/frozen | PASS;loopback/temp/no broker | NON VERIFICATO | NON VERIFICATO |
+| pipcheck/diffcheck | PASS | NON VERIFICATO | NON VERIFICATO |
+| npm audit | PASS0 advisory | NON VERIFICATO | NON VERIFICATO |
+| pip-audit | FAIL42 advisoryPillow;releaseBLOCKED | NON VERIFICATO | NON VERIFICATO |
+| PSwrapper/NSIS | NON VERIFICATO | NON VERIFICATO | NON VERIFICATO |
+| MT5autentico/nativehang frozen | NON VERIFICATO | NON VERIFICATO | NON VERIFICATO |
+
+Regressioncases: idempotency/payload/restart/concurrency, ownershipprocesso,
+stati dry-run, partial/filled/canceled/rejected/expired/unknown, pagine incomplete/
+overlap, dati mancanti/futuri, timeout/crashMT5, staleproposal/pollsingleflight.
+Test nuovi non sostituiscono né rimuovono quelli esistenti.

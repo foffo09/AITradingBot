@@ -475,3 +475,19 @@ git diff --name-only
 Decisione: **piano documentale pronto; release migrata BLOCKED**. Nessun ordine,
 server, feed, broker, build del nuovo prodotto, merge, retarget, approvazione,
 release o deploy eseguiti. Nessuna attività parallela creata o duplicata.
+
+
+## Casi aggiunti per completion
+
+- Retry stessa UUID dopo commit/risposta persa e riavvio: un solo fill/costo/posizione;
+  payload differente rifiutato. Concorrenza SQLite e ownership tra processi.
+- Stati dry-run: start/cycle/pause/stop, replay, crash e bloccoRECOVERY_REQUIRED.
+  Snapshot offline con fill parziali/completi, duplicati/tardivi, rifiuto/cancel/expiry,
+  pagine overlap/mancanti/cicliche, quantità/balance/positions divergenti, date future.
+- ProcessiMT5 sintetici reali: nativehang,send/recv,crash,close,protocollo,riconnessione;
+  validatori reader conservati. Nessuna connessione autentica.
+- FormUI rifiuto definitivo distinto da timeout, scadenza/identità proposal, polling
+  senza sovrapposizione, indicatori e pulsanti dry-run senza ordini.
+- WindowsCI: scriptPS reali, secondo launcher rifiutato, stop/restart/portachiusa;
+  NSISunsigned install/uninstall e smoke sidecar/UI installati. Non provaGUIWindows11,
+  retentionappdata reale o nativehangSDK autentico. Non pubblicare release/artifact.

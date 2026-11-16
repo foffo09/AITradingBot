@@ -5,7 +5,7 @@ Non è una release e non introduce invii di ordini al broker.
 
 ## Primo avvio Windows 11 / PowerShell
 
-Dalla radice del checkout del branch `integration/local-web-desktop-20261116`:
+Dalla radice del checkout del branch `agents/codex-completion-20261116`:
 
 ```powershell
 py -3.11 -m venv .venv
@@ -28,7 +28,11 @@ Arrestare con Ctrl+C nella finestra di avvio, oppure in un'altra PowerShell:
 Il file di controllo contiene solo PID/porta/identità, nessuna credenziale.
 L'arresto verifica l'identità corrente e la sessione prima di richiederlo;
 non termina processi trovati soltanto in base alla porta. Un record rimasto
-dopo un crash non viene sovrascritto: verificare prima che l'istanza sia chiusa.
+dopo un crash non viene sovrascritto implicitamente. `./avvia_web.ps1 -RecoverStale`
+(o `python -m scripts.start_local --recover-stale`) recupera solo un record valido
+quando il PID non esiste e la porta rifiuta la connessione. Record corrotto, timeout,
+PID esistente o altra identità restano bloccati; nessun processo arbitrario viene ucciso.
+Un lock OS esclude due launcher simultanei. Arresto attende la chiusura del listener.
 I database non vengono eliminati o azzerati dagli script.
 
 Su macOS/Linux, dopo aver preparato Python e installato i requisiti:
@@ -57,8 +61,12 @@ Non avviare `main.py` per questa UI: è la console legacy con un diverso lifecyc
 - MT5: adattatore opzionale Windows, sola lettura; terminale/account devono
   essere disponibili sul PC. macOS dichiara unsupported. Installazione opzionale:
   `python -m pip install -r packaging/backend/requirements-mt5.txt` su Windows.
-  Le letture native successive a initialize non hanno una deadline garantita
-  dall'SDK; non equivale a un connettore certificato contro blocchi del terminale.
+  L’SDK resta in un processo spawn posseduto. Ogni scambio completo ha deadline
+  5s, anche se send/recv o lettura nativa si bloccano; errore/crash invalida i dati
+  e richiede riconnessione esplicita. Cleanup ordinario limitato al figlio posseduto.
+  SIGKILL del padre e assenza di orfani frozen Windows durante native hang restano
+  NON VERIFICATI; non si termina il terminale MT5 dell’utente. La CI standard
+  non include l’SDK opzionale MT5: provider assente viene dichiarato indisponibile.
 - Mercati: candlestick/volume, zoom e intervalli, fonte e timestamp. Le barre
   storiche non sono una quota corrente. Le quote mancanti/scadute non autorizzano
   segnali. Valuta MT5 sconosciuta resta N/D, volume MT5 espresso in tick/lotti
@@ -71,9 +79,14 @@ Non avviare `main.py` per questa UI: è la console legacy con un diverso lifecyc
 - Backtest: esegue il motore esistente, barre giornaliere, costi separati,
   curva equity e operazioni; non modifica conti. Il dataset Demo è sintetico;
   il suo rendimento non è una misura della redditività di mercato.
-- Automazione: sempre arrestata nella nuova applicazione. Nessun pulsante di
-  avvio decorativo, nessun endpoint per ordini Alpaca/MT5 o retry di scrittura.
-  Gestione bot/esecuzione Paper e riconciliazione completa non sono migrate.
+- Automazione: parte STOPPED. Start arma unicamente il dry-run locale; ogni
+  ciclo analitico è richiesto esplicitamente, senza scheduler e senza operazioni
+  sul capitale. Pause/Stop rispettano gli stati. Il diario di controllo separato
+  conserva comandi/intent/eventi, non replica il ledger. Un riavvio inatteso o
+  snapshot ambiguo impone RECOVERY_REQUIRED: Stop non cancella il blocco.
+  Il protocollo di riconciliazione Python è collaudato con adattatori sintetici,
+  senza endpoint HTTP di importazione snapshot o sblocco. Non è riconciliazione
+  autentica Alpaca. Demo/Simulazione restano NO_TRADE per il gate operativo.
 
 Contabilità locale browser: `%LOCALAPPDATA%/AITradingBot/local-service` su Windows,
 `~/Library/Application Support/AITradingBot/local-service` su Mac. Desktop usa
@@ -88,6 +101,21 @@ Gli input POST sono Pydantic con campi extra proibiti e numeri finiti positivi.
 Contesti ammessi: demo, simulation, paper, mt5. Errori input 422, assenza sessione
 401, origine vietata403, operazione locale/rischio/dati indisponibili409.
 I messaggi di errore non ripetono input, credenziali o traceback.
+`POST /local-trades` richiede `idempotency_key` UUID: tutti i chiamanti devono
+riutilizzarla con lo stesso contesto/simbolo/lato/quantità dopo un esito incerto.
+Il ledger verifica il payload nella stessa transazione delle scritture. Un 409
+con header `X-Request-Outcome: rejected` prova il rifiuto prima del commit e libera
+il form; timeout, 5xx o 409 senza tale header mantengono la richiesta incerta.
+La UI conserva chiave/payload in localStorage fino a conferma: una porta diversa
+cambia origine e storage. Dopo un riavvio controllare lo storico prima di creare
+una nuova richiesta; non esiste un retry automatico con nuova chiave.
+`POST /automation` accetta solo context demo/simulation, command start/pause/stop/cycle,
+request_id UUID e restituisce State completo. GET non avvia cicli.
+Indicatori SMA10/30, EMA9/21/50 e RSI14 derivano dalle strategie Python esistenti,
+con metodo/unità/parametri e null durante warm-up. Nessuna formula JS duplicata.
+Il P/L giornaliero esposto è soltanto il realizzato UTC dai closes; totale
+giornaliero non ricostruibile resta N/D. Backtest è SMA su singolo campione 1Day,
+con intervallo/date/parametri espliciti: out-of-sample non eseguito.
 
 La stessa origine serve asset e API su127.0.0.1. Bootstrap `/api/v1/session`,
 cookie HttpOnly/SameSiteStrict effimero; Origin/Host e X-Local-Request controllati.
@@ -116,7 +144,10 @@ Mac: copiare `dist/backend/aitradingbot-service-aarch64-apple-darwin` in
 La shell possiede il sidecar e il suo stdin. Handshake con port/PID/instance_id,
 più supervisor_pid OS nel binario onefile, perché il bootloader ha un processo
 Python figlio. Non si termina un PID arbitrario ricevuto dalla rete.
-Chiusura finestra → shutdown stdin → eventuale kill del solo Child posseduto.
+Chiusura finestra → shutdown stdin → attesa massima20s per due letture native5s
+più close5s/cleanup → eventuale kill del solo Child posseduto. Il monitor chiude
+la shell con exit1 se il backend muore; non riavvia automazioni. Il limite di
+avvio15s resta invariato.
 Bundle locale non firmato/notarizzato per distribuzione; nessuna release pubblicata.
 
 ## Verifica riproducibile senza broker
@@ -159,3 +190,18 @@ motivo/provenienza della proposta, per distinguere NO_TRADE previsto da errore.
 Avvio desktop limitato a15s: dialoghiOS/avvio lento possono impedirlo; chiudere
 un eventuale ripristino finestre di macOS prima di riprovare. Il fallimento non
 abilita esecuzione né dati di ripiego. Nessuna provaWindowsGUI è implicita.
+
+## Installer Windows e blocker di distribuzione
+
+CI costruisce NSIS non firmato, installa in percorso temporaneo con spazi,
+prova sidecar e UI installati, disinstalla. WebView2 già presente nel runner;
+nessun download/installazione WebView2 nella prova. La sentinella esterna prova
+solo che una directory distinta non è stata rimossa: non certifica retention
+appdata reale Tauri o aggiornamento di un’installazione personale. Nessun artifact
+pubblicato. Windows Server CI e Windows11 GUI sono prove distinte.
+
+Release BLOCCATA: audit Python segnala42 advisory per Pillow12.3.0, fix13.0.0
+in conflitto con Streamlit1.65 (`pillow<13`). Non forzare il resolver o disabilitare
+controlli. npm audit:0; audit completo Rust advisories non eseguito. Manca licenza
+esplicita del progetto e revisione completa dei notice del bundle; charts LICENSE/
+NOTICE restano inclusi. Non distribuire prima di risolvere questi gate.
