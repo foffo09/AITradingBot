@@ -474,3 +474,14 @@ quando il modulo è disponibile. Windows/SDK/DLL/terminale reali non verificati.
 TDD: 29 casi rossi prima della validazione e un ulteriore rosso booleani OHLC;
 32 nuovi casi totali e gruppo desktop di 58 verdi, guard 0/0. Casi API provano
 che dopo un tick buono un tick scaduto non conserva bid/ask/barre precedenti.
+
+### Revisione integrazione — fallback proposta e errori visibili
+
+Il fallback `/proposal` riusa direttamente `SignalProposal.to_dict()` originale,
+con direction WAIT, validation_state NO_TRADE e reason leggibile, tutti i campi
+DTO presenti e operativi null. Rimossa l'alternativa action=NO_TRADE che non
+rispettava il parser frontend. Market e connessione Paper non hanno più
+`except Exception: pass`: restituiscono esplicitamente unavailable, senza
+valori precedenti o diagnostica SDK. Connessione rifiutata è unavailable anche
+quando verify_connection restituisce connected=False senza sollevare eccezioni.
+Tre regressioni rosse osservate e poi verdi; gruppo desktop 61 passati, guard0/0.
