@@ -63,3 +63,82 @@ I risultati finali sono registrati a fine integrazione. La baseline non prova
 la nuova applicazione. Windows 11 e conti autentici richiedono prove separate;
 nessun esito Mac è attribuito a Windows. Non sono promessi profitti o sicurezza
 assoluta.
+
+## Esito integrazione verificato — candidato applicativo 85453ce
+
+Il mandato master ha prodotto implementazione reale, non solo il piano QA.
+Base main fe98839; base documentale 3df4f82; P4 conservato1542dce.
+Commit originali preservati: P1 8f642f1+0598b57; P2 89a6e5b/49f5a8e/
+116c92c/27a4979/1f1389b; P3 cf5910b+37afa86; launcher1cb938f e CIadfc6f7.
+L'unico conflitto d'integrazione era un'append di WORKLOG: confrontati gli
+stage base/ours/theirs e conservate entrambe le aggiunte in ordine cronologico.
+Nessun conflitto applicativo risolto scegliendo indiscriminatamente una versione.
+
+### COMPLETATO E VERIFICATO su macOS27.2.1 arm64 / Python3.11.18
+
+- API locale, UI React e motore puro integrati. Bootstrap cookie HttpOnly,
+  rifiuto richieste non autenticate/origini esterne, ledger Demo/Sim separati,
+  backtest esistente e runtime senza worker trading.
+- Riprodotto e corretto sizing BUY con equity sotto capitale configurato:
+  limite più restrittivo, soglie non aumentate. Paginazione ordini Alpaca con
+  overlap/deduplica e rifiuto di gruppi/cursori incompleti o ambigui.
+- MT5 mock: account/denaro/quote/OHLC validati, timestampUTC e freschezza,
+  dati stale/future/mancanti azzerati nel DTO. Nessun order_send.
+- Frontend: quote/fonte/valuta, quattro contesti, capitale/posizioni/storico,
+  grafici, proposta, backtest, connessioni/impostazioni. Corrette colonne
+  direction/entry_fee, valutaMT5 e hover che conservava dati del contesto vecchio.
+- Test completi: `python -m pytest -q`: **870passed,1skipped,1warning in37.58s**,
+  `TEST ISOLATION: {'network': 0, 'credentials': 0}`. Skip solo WindowsProactor;
+  warning websockets.legacy preesistente.
+- Mirati backend/API/runtime/launcher/MT5/paginazione/strategia/Paper/contratti:
+  **225passed,1warning in1.92s**, guard0/0. Un primo comando mirato aveva un
+  nome file inesistente: nessun test eseguito, corretto il comando senza
+  modificare o disabilitare test. Il risultato riportato è della riesecuzione.
+- `python -m compileall -q app.py config src tests`: exit0, output vuoto.
+  `python -m pip check`: exit0, «No broken requirements found.»
+- npm lint/typecheck/build exit0; vitest **17passed/3files**; npm audit0vulnerabilità.
+  Lock npm/Cargo presenti; PyInstaller6.16.0 nativo e Tauri2.12.6 pinned.
+- HTTP reale sorgente e binario frozen: smokePASS (sessione/Origin/account/fill
+  Demo/isolamento/200barre/NO_TRADE/backtest/shutdown). Ambiente senza chiavi,
+  soli database temporanei. Non sono test con connessione broker.
+- Brave reale: conto Demo10000 e fill locale, Simulation inizialmenteN/D,
+  Paper scollegatoN/D senza fallback, NO_TRADE e backtest reale su dati sintetici;
+  layout390px clientWidth=scrollWidth390, consoleerrori/warning[]; screenshot locale.
+- Rust:1testPASS; buildrelease e bundle .app90.72MiB riusciti. Individuato con
+  prova reale PID diverso del bootloaderonefile: aggiunto supervisor_pid OS
+  soltanto frozen e validazione sul Child posseduto. Mai kill su PID dalla rete.
+- .app Mac aperta realmente con ambiente ripulito/HOMEtemporanea: UI resa,
+  navigazione e backtest sintetico (14chiuse, costi0.6543USD) verificati nella
+  finestra nativa; closefinestra → exit0, processi confezionati assenti e porta
+  loopback chiusa. Numeri sintetici sono fixture, non risultati di mercato.
+- Scansione letterali credenziali sui file cambiati:0candidati; nessun .env,
+  database/cache/log/binario generato tracciato. Controllo euristico limitato,
+  non una certificazione o un CodexSecurityscan completo.
+
+### PARZIALMENTE COMPLETATO
+
+Applicazione browser e primo bundle Mac utilizzabili per analisi/simulazione.
+AlpacaPaper/MT5 sono connettori di lettura espliciti, coperti da mock: nessuna
+connessione autentica eseguita. Strategie BUY/SELL/WAIT riusano i test esistenti;
+API restituisce NO_TRADE finché manca snapshot rischio completo verificato.
+La migrazione non equivale alla parità di tutte le funzioni Streamlit.
+
+### NON COMPLETATO / limiti di rilascio
+
+- Nessun test manuale Windows11, terminaleMT5 o broker/feed autentico.
+- Nessun avvio automazione, invio/cancel/panic o riconciliazione ordini dalla
+  nuova UI. Il lavoro sull'esecutore nel checkout principale preesistente è
+  rimasto intatto e non viene dichiarato integrato/verificato qui.
+- Nessun installerWindows distribuito, firma/notarizzazione, release o deploy.
+  CI nativa in preparazione non sostituisce test GUIWindows11.
+- Deadline non garantita dalle letture nativeMT5 successive a initialize.
+  Paginazione failclosed quando un gruppo timestamp occupa500record o non
+  sono verificabili progressione/overlap; non si restituisce una lista parziale.
+- Nessuno studio di redditività/OOS nuovo. Backtest sintetico non valida una strategia.
+- Nessuna SBOM/licenza transitiva completa o audit di sicurezza indipendente.
+  LightweightCharts Apache2 con notice/attribution conservati; nessun canone
+  obbligatorio introdotto. Non cambiate protezioni GitHub o credenziali.
+
+Guida operativa: [LOCAL_APPLICATION.md](LOCAL_APPLICATION.md). Il file elenca
+comandi PowerShell, API, stati, storage, packaging e controlli riproducibili.
+Gli esiti CI e la PR sullo SHA pubblicato sono aggiunti dopo la lettura del run.

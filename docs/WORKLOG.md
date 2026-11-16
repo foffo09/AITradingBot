@@ -628,3 +628,25 @@ push. Solo questi cinque documenti; nessun dato personale letto. Il report
 Notion distingue consegna documentale pronta e candidato/prodotto BLOCKED.
 Prossimo passo: il responsabile conferma contratti/report e SHA candidato;
 solo allora esecuzioni native/browser/desktop e suite offline con evidenza esatta.
+
+## 2026-11-16 — Mandato master, implementazione e integrazione
+
+Nuovo mandato utente sostituisce il perimetro solo documentale precedente.
+Worktree isolati P1/P2/P3, coordinamento su integration/local-web-desktop-20261116.
+Integrati React/Vite/Tauri, APIv1FastAPI, quattro contesti, runtime/packaging,
+launcherPowerShell, wrapperstrategia e correzione sizingrestrittiva. Legacy
+Streamlit conservato con il refresh già committato P1. Nessun mainmerge.
+
+Candidato applicativo85453ce:870pytestPASS/1skip/1warning37.58s guard0/0;
+225miratiPASS;17frontendPASS;lint/typecheck/build/auditnpm0;Rust1PASS;
+compileall/pipcheck/diffcheck0. Browserreale e .appMacnativa provati con dati
+sintetici e storage temporaneo, backtest, separazione conti, shutdown/cleanup.
+Difetto reale bootloaderPID riprodotto e corretto mantenendo ownership Child.
+Comandi iniziali di controllo con nome test inesistente e filtro processi che
+includeva la propria shell sono stati corretti e rieseguiti, non test oscurati.
+
+Nuova CI aggiunge smokeHTTP sorgente/frozen e compilazioneTauri Windows/macOS;
+risultato remoto ancora da osservare. MASTER_AUDIT.md contiene evidenza e limiti,
+LOCAL_APPLICATION.md installazione/avvio. NotionP4 aggiornato e riletto dopo reload,
+nessun duplicato task o cancellazione storico. Windows11GUI/brokerautentici,
+esecuzioneautomatica e release restano non verificati/non completati.

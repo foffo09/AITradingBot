@@ -269,3 +269,25 @@ native/Windows11 manuale/MT5 autentico hanno SHA candidato NON ASSEGNATO e
 stato BLOCKED o NON VERIFICATO come nel piano. Le prove autentiche richiedono
 consenso separato e non possono inviare ordini. Il guard pytest esistente
 non viene indebolito per consentire E2E loopback: servirà harness distinto.
+
+## 16 novembre — nuovo candidato React/FastAPI/Tauri (85453ce)
+
+Questa esecuzione sostituisce lo stato «artifact assente» della ricognizione
+precedente per i soli casi sotto, preservandone lo storico.
+
+| Area | Ambiente / prova effettiva | Esito |
+|---|---|---|
+| Suite offline completa | Macarm64/Python3.11.18 |870PASS/1skipProactor/1warning; guard0/0|
+| API/runtime/launcher/provider/rischio/contratti | Mac, mock |225PASS/1warning; guard0/0|
+| Frontend | Node22.23.3, lint/TS/build/vitest |17PASS; audit0vulnerabilità|
+| HTTP sorgente + frozen | Macloopback, SQLite temporanea |PASS sessione/Origin/fill/contesti/backtest/shutdown|
+| Browser | Brave, Demo sintetica e Paper scollegato |PASS rendering/ledger/contesti/backtest;390px senza overflow|
+| Rust | nativo Macarm64 |1PASS;release/bundle.app riusciti|
+| Desktop | .app reale, ambiente temporaneo |PASS rendering/navigazione/backtest/close/porta chiusa|
+| Compile/pip/diff | Mac |PASS; nessun requisito rotto|
+| Windows11 GUI | PC non disponibile |NON VERIFICATO|
+| Alpaca/MT5 autentici | non collegati |NON VERIFICATO|
+| NuovaUI esecuzione/ripristino ordini | nessuna route ordine |NON COMPLETATO; automazione ferma|
+
+Output, limiti e SHA dei componenti in MASTER_AUDIT.md. Smoke reale separato
+negli script, non mescolato alla guard offline. Nessun invio broker nei test.
