@@ -3,7 +3,10 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     path::Path,
     process::{Child, Command, Stdio},
-    sync::mpsc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -31,11 +34,45 @@ fn ready_url(line: &str, owned_pid: u32) -> Result<String, String> {
 }
 
 pub struct Service {
-    child: Child,
+    child: Arc<Mutex<Child>>,
+    stopping: Arc<AtomicBool>,
     pub url: String,
 }
 
 impl Service {
+    fn from_child(child: Child, url: String) -> Self {
+        Self {
+            child: Arc::new(Mutex::new(child)),
+            stopping: Arc::new(AtomicBool::new(false)),
+            url,
+        }
+    }
+
+    pub fn monitor(&self, on_exit: impl FnOnce() + Send + 'static) {
+        let child = Arc::downgrade(&self.child);
+        let stopping = self.stopping.clone();
+        thread::spawn(move || loop {
+            if stopping.load(Ordering::SeqCst) {
+                return;
+            }
+            let Some(child) = child.upgrade() else {
+                return;
+            };
+            let running = child
+                .lock()
+                .map(|mut child| matches!(child.try_wait(), Ok(None)))
+                .unwrap_or(false);
+            if !running {
+                if !stopping.load(Ordering::SeqCst) {
+                    on_exit();
+                }
+                return;
+            }
+            drop(child);
+            thread::sleep(Duration::from_millis(100));
+        });
+    }
+
     pub fn start(binary: &Path, ui: &Path, data: &Path) -> Result<Self, String> {
         if !ui.join("index.html").is_file() {
             return Err("Asset React mancanti: eseguire la build del frontend.".into());
@@ -84,7 +121,7 @@ impl Service {
             let _ = std::io::copy(&mut reader, &mut std::io::sink());
         });
         match receive.recv_timeout(Duration::from_secs(15)) {
-            Ok(Ok(url)) => Ok(Self { child, url }),
+            Ok(Ok(url)) => Ok(Self::from_child(child, url)),
             result => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -97,19 +134,24 @@ impl Service {
     }
 
     pub fn shutdown(&mut self) {
-        if let Some(mut input) = self.child.stdin.take() {
+        self.stopping.store(true, Ordering::SeqCst);
+        let Ok(mut child) = self.child.lock() else {
+            return;
+        };
+        if let Some(mut input) = child.stdin.take() {
             let _ = input.write_all(b"shutdown\n");
             let _ = input.flush();
         }
-        let deadline = Instant::now() + Duration::from_secs(2);
+        // Two bounded 5s native reads plus a 5s close and cleanup need up to 18s.
+        let deadline = Instant::now() + Duration::from_secs(20);
         while Instant::now() < deadline {
-            if matches!(self.child.try_wait(), Ok(Some(_))) {
+            if matches!(child.try_wait(), Ok(Some(_))) {
                 return;
             }
             thread::sleep(Duration::from_millis(30));
         }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }
 impl Drop for Service {
@@ -146,5 +188,47 @@ mod tests {
         ] {
             assert!(ready_url(line, 42).is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+    #[test]
+    fn shutdown_allows_bounded_native_cleanup_before_killing_child() {
+        let mut command = if cfg!(windows) {
+            let mut cmd = Command::new("powershell.exe");
+            cmd.args(["-NoProfile", "-NonInteractive", "-Command", "$null=[Console]::ReadLine(); Start-Sleep -Seconds 3; exit 0"]);
+            cmd
+        } else {
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", "read message; sleep 3; exit 0"]);
+            cmd
+        };
+        command.stdin(Stdio::piped());
+        let mut service = Service::from_child(command.spawn().unwrap(), "fixture".into());
+        service.shutdown();
+        assert!(service.child.lock().unwrap().try_wait().unwrap().unwrap().success());
+    }
+
+    #[test]
+    fn reports_owned_child_exit_after_handshake() {
+        let mut command = if cfg!(windows) {
+            let mut cmd = Command::new("cmd");
+            cmd.args(["/C", "exit", "0"]);
+            cmd
+        } else {
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", "exit 0"]);
+            cmd
+        };
+        let service = Service::from_child(command.spawn().unwrap(), "fixture".into());
+        let (send, receive) = mpsc::channel();
+        service.monitor(move || {
+            let _ = send.send(());
+        });
+        receive
+            .recv_timeout(Duration::from_secs(3))
+            .expect("Child exit must be reported");
     }
 }

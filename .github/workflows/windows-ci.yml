@@ -2,8 +2,7 @@ name: Windows CI
 
 on:
   pull_request:
-    # The stacked Sprint 03 PR also needs both checks before PR #5 is merged.
-    branches: [main, agents/p4-windows-ci-20261110]
+    branches: [main, agents/p4-windows-ci-20261110, integration/local-web-desktop-20261116]
   workflow_dispatch:
 
 permissions:
@@ -214,6 +213,14 @@ jobs:
         run: npm run build
       - name: Source runtime HTTP smoke
         run: python -m scripts.check_local_service
+      - name: Real PowerShell launcher lifecycle (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -m venv .venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .venv/Scripts/python.exe -m pip install -r requirements-dev.txt -r packaging/backend/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./scripts/check_windows_launchers.ps1
       - name: Build native Python sidecar
         run: python scripts/build_backend.py
       - name: Frozen runtime HTTP smoke
@@ -233,5 +240,15 @@ jobs:
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Desktop compile (no installer or release)
         run: npm run desktop:build -- --no-bundle
+      - name: Build unsigned NSIS installer (Windows, no publication)
+        if: runner.os == 'Windows'
+        run: |
+          # This CI-only installer never downloads or changes WebView2.
+          $config = Join-Path $env:RUNNER_TEMP 'tauri-offline-installer.json'
+          '{"bundle":{"windows":{"webviewInstallMode":{"type":"skip"}}}}' | Set-Content -LiteralPath $config -Encoding utf8
+          npm run desktop:build -- --bundles nsis --no-sign --ci --config $config
+      - name: Install, smoke and uninstall generated NSIS package (Windows)
+        if: runner.os == 'Windows'
+        run: ./scripts/check_windows_installer.ps1
       - name: Python dependency consistency
         run: python -m pip check

@@ -46,6 +46,9 @@ def test_stop_uses_session_then_shutdown_only_after_identity_matches():
     calls = []
     info = {'pid': 123, 'port': 8765, 'instance_id': 'a' * 32}
     def request(url, method='GET'):
+        if len(calls) == 3:
+            from urllib.error import URLError
+            raise URLError(ConnectionRefusedError())
         calls.append((url, method))
         return info if url.endswith('/identity') else {}
     stop_instance(info, request=request)
@@ -98,3 +101,86 @@ def test_launcher_with_missing_frontend_does_not_start_process_or_create_data(tm
     assert start_local.main(['--no-browser', '--ui-dir', str(tmp_path / 'missing-ui'),
                              '--data-dir', str(directory)]) == 1
     assert not directory.exists()
+
+
+def test_launcher_lock_excludes_second_owner_and_releases_after_exit(tmp_path):
+    from scripts.start_local import launcher_lock
+    with launcher_lock(tmp_path):
+        with pytest.raises(RuntimeError, match='istanza'):
+            with launcher_lock(tmp_path):
+                pytest.fail('Second launcher acquired ownership')
+    with launcher_lock(tmp_path):
+        assert (tmp_path / 'web-launcher.lock').is_file()
+
+
+def test_stale_recovery_requires_explicit_request_and_dead_pid(tmp_path, monkeypatch):
+    from scripts import start_local
+    control = tmp_path / 'web-service.json'
+    data = {'pid': 123, 'port': 8765, 'instance_id': 'a' * 32}
+    control.write_text(json.dumps(data))
+    monkeypatch.setattr(start_local, 'process_exists', lambda pid: False)
+    def refused(*args, **kwargs):
+        import urllib.error
+        raise urllib.error.URLError(ConnectionRefusedError())
+    with pytest.raises(RuntimeError):
+        start_local.recover_control(control, requested=False, request=refused)
+    assert control.exists()
+    monkeypatch.setattr(start_local, 'process_exists', lambda pid: True)
+    with pytest.raises(RuntimeError):
+        start_local.recover_control(control, requested=True, request=refused)
+    assert control.exists()
+    monkeypatch.setattr(start_local, 'process_exists', lambda pid: False)
+    start_local.recover_control(control, requested=True, request=refused)
+    assert not control.exists()
+
+
+@pytest.mark.parametrize('response', ['different', 'timeout', 'corrupt'])
+def test_recovery_preserves_unverifiable_record(tmp_path, monkeypatch, response):
+    from scripts import start_local
+    control = tmp_path / 'web-service.json'
+    control.write_text('broken' if response == 'corrupt' else json.dumps(
+        {'pid': 123, 'port': 8765, 'instance_id': 'a' * 32}))
+    monkeypatch.setattr(start_local, 'process_exists', lambda pid: False)
+    def request(*args, **kwargs):
+        if response == 'timeout':
+            raise TimeoutError()
+        return {'pid': 999, 'instance_id': 'b' * 32}
+    with pytest.raises((RuntimeError, ValueError, TimeoutError)):
+        start_local.recover_control(control, requested=True, request=request)
+    assert control.exists()
+
+
+def test_shutdown_waits_for_closed_listener_and_rejects_still_running():
+    from scripts.start_local import stop_instance
+    from urllib.error import URLError
+    info = {'pid': 123, 'port': 8765, 'instance_id': 'a' * 32}
+    calls = []
+    def request(url, method='GET'):
+        calls.append((url, method))
+        if len(calls) > 4:
+            raise URLError(ConnectionRefusedError())
+        return info
+    stop_instance(info, request=request, timeout=1)
+    assert len(calls) == 5
+    with pytest.raises(RuntimeError, match='Timeout'):
+        stop_instance(info, request=lambda *a, **k: info, timeout=0)
+
+
+def test_process_exists_recognizes_our_current_process():
+    import os
+    from scripts.start_local import process_exists
+    assert process_exists(os.getpid())
+
+
+def test_recovery_preserves_control_when_launcher_lock_has_an_owner(tmp_path, monkeypatch):
+    from scripts import start_local
+    ui = tmp_path / 'ui'
+    ui.mkdir()
+    (ui / 'index.html').write_text('fixture')
+    control = tmp_path / 'web-service.json'
+    record = json.dumps({'pid': 123, 'port': 8765, 'instance_id': 'a' * 32})
+    control.write_text(record)
+    with start_local.launcher_lock(tmp_path):
+        assert start_local.main(['--recover-stale', '--no-browser', '--data-dir', str(tmp_path),
+                                 '--ui-dir', str(ui)]) == 1
+        assert control.read_text() == record
