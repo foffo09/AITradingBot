@@ -153,9 +153,10 @@ def test_mt5_reads_whitelisted_methods_only(monkeypatch):
     from src.broker import mt5_readonly
     from types import SimpleNamespace
     class Terminal:
-        def initialize(self): return True
+        def initialize(self, **kwargs): return True
         def shutdown(self): pass
-        def account_info(self): return SimpleNamespace(balance=100, equity=101, currency='USD')
+        def terminal_info(self): return SimpleNamespace(connected=True)
+        def account_info(self): return SimpleNamespace(login=123, server='Offline broker', balance=100, equity=101, currency='USD')
         def positions_get(self): return ()
         def orders_get(self): return ()
         def order_send(self, *args): pytest.fail('No MT5 orders permitted')

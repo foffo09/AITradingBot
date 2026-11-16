@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from config.settings import AppSettings
 from src.backtesting.engine import BacktestEngine
 from src.broker.alpaca_client import AlpacaClient
-from src.broker.mt5_readonly import MT5ReadOnly
+from src.broker.mt5_readonly import MT5ReadOnly, MT5ReadError
 from src.data.instruments import INSTRUMENTS
 from src.data.market_data import generate_demo_prices
 from src.simulation.ledger import SimulationLedger
@@ -211,12 +211,16 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
         with lock:
             try:
                 data = frame(context, symbol, interval)
+                if context == 'mt5':
+                    result['quote'] = mt5.latest_quote(symbol)
                 result.update(status='ready', reason='Synthetic data, not a broker price.' if context in paths else 'Historical bars; feed coverage and freshness require verification.', source=data.attrs['source'], as_of=data.attrs.get('fetched_at', pd.Timestamp.now(tz='UTC').isoformat()), bars=[{'time': int(pd.Timestamp(row.timestamp).timestamp()), **{key: float(getattr(row, key)) for key in ('open', 'high', 'low', 'close', 'volume')}} for row in data.itertuples()])
                 if context == 'paper':
                     try:
                         result['quote'] = paper.get_latest_quote(symbol)
                     except Exception:
                         result['reason'] = 'Historical bars available; current quote unavailable.'
+            except MT5ReadError as exc:
+                result.update(status=exc.status, reason=str(exc), quote=None, bars=[])
             except Exception:
                 pass
         return result

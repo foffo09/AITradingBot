@@ -27,5 +27,12 @@ an HttpOnly SameSite=strict cookie. No token in argv, JSON, URL or frontend stor
 
 The executable is unsigned. macOS signing/notarization and Windows signing are
 separate release steps. MetaTrader5 is optional and Windows-only; this bundle
-never installs or starts a terminal and has no MT5 trading method. Install and
-bundle the module separately on Windows to enable terminal reads.
+never installs a terminal and has no MT5 trading method. On Windows an explicit
+POST connection invokes SDK initialize(timeout=5000), which may launch the
+installed terminal and use its last configured account. Install optional
+`packaging/backend/requirements-mt5.txt` before the native Windows build to enable
+terminal reads. macOS never imports that module. The SDK documents the initialization
+timeout but exposes no per-call timeout for account/positions/orders/bars/ticks;
+a hard deadline for native reads or shutdown is not guaranteed. Process isolation
+would be needed before promising that deadline. No terminal or genuine account
+was accessed in the offline checks.
