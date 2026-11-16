@@ -79,6 +79,7 @@ def size_proposal(settings: AppSettings, snapshot: RiskSnapshot, side, levels, s
     exposure_cap = min(snapshot.equity, settings.initial_capital_usd)*settings.risk_max_exposure_fraction
     if side == 'BUY':
         quantity = min(quantity, manager.calculate_position_size(snapshot.cash, entry),
+                       min(snapshot.equity, settings.initial_capital_usd)*settings.risk_max_trade_fraction/entry,
                        (exposure_cap-snapshot.exposure)/entry,
                        snapshot.cash/(entry+cost))
     else:

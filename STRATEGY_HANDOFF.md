@@ -262,3 +262,71 @@ Esito finale osservato su macOS/Python3.12.14: **747 passati, 1 saltato,
 con1 skip. Compilazione, pip check e diff-check riusciti. Guard rete/credenziali
 zero;146 casi nuovi senza modificare test preesistenti. Skip Windows Proactor,
 warning preesistente websockets.legacy. Windows e broker autentico non provati.
+
+## 2026-11-16 — Boundary applicativo puro, contratto 1
+
+Worktree `p3-december-strategy-20261116`, branch
+`agents/p3-december-strategy-20261116`, base `fe98839`. Nuovo punto d'ingresso:
+
+```python
+from src.strategy.service import evaluate_proposal
+
+view = evaluate_proposal(
+    settings=settings, bars=bars, quote=quote,
+    source=bars.attrs['source'], as_of=decision_time,
+    symbol=symbol, interval=interval, risk_snapshot=verified_risk_snapshot,
+    context='paper', config=strategy_config,
+    prior_signal_ids=consumed_signal_ids,
+)
+```
+
+Tutti gli input sono espliciti; `config` e `prior_signal_ids` hanno gli stessi
+valori predefiniti del motore. Nessun accesso a env, filesystem, database,
+broker, API, UI o orologio durante la valutazione. Il risultato è il dizionario
+JSON-safe del motore con il solo campo aggiuntivo `contract_version='1'`.
+`StrategyEngine.evaluate` e `SignalProposal.to_dict` conservano il contratto
+precedente; non occorre cambiare i loro chiamanti. Import diretto dal modulo
+service, senza cambiare gli export storici del package strategy.
+
+`context` deve essere esattamente `paper`: demo, sim, simulation e contesti
+sconosciuti restituiscono WAIT/NO_TRADE con motivo esplicito, anche se il
+chiamante fornisce dati dall'aspetto operativo. `source` è obbligatoria e deve
+coincidere con la fonte originale in `bars.attrs`; non sostituisce mai i
+metadati. Il gate del motore verifica poi fonte attesa, autenticità dichiarata,
+chiusura barre, quote, freschezza e rischio. Il servizio non autentica un feed:
+il consumer deve attestare realmente la provenienza e mantenere il contesto
+della richiesta associato a simbolo e intervallo.
+
+Passare il DataFrame con attrs intatti e RiskSnapshot completo e verificato.
+Se contabilità/peak equity/contatori non sono dimostrabili, passare
+`risk_snapshot=None`: con gli altri input validi il risultato spiega che manca
+lo snapshot Paper verificato; livelli, entry, quantità e rischio restano None.
+Nessuna sostituzione con dati demo o valori zero. BUY/SELL validi restano
+proposte analitiche Paper; SELL riduce soltanto il long, nessuna autorizzazione
+operativa viene introdotta. Scadenza e ID consumati restano invariati; il
+servizio non persiste nulla né rinnova un evento scaduto/consumato.
+
+Audit rischio: riprodotto e corretto un limite BUY mancante. Con capitale
+iniziale 10.000 USD, equity 9.500 USD e stop stretto il vecchio dimensionamento
+poteva proporre 2.000 USD, oltre il cap del 20% della base prudenziale
+(1.900 USD). Ora applica anche quel minimo, oltre ai controlli già presenti.
+Nessuna soglia aumentata, formula strategica o configurazione modificata.
+Audit backtest in sola lettura: conservati fill next-bar, stop prudenziale
+nelle barre ambigue, costi e tranche disgiunte; nessun ulteriore difetto
+riprodotto in questo intervento. Il backtest continua a non replicare lo
+snapshot multi-asset del motore; non dimostra performance operative.
+
+Test dedicati: `tests/test_strategy_service.py` (28 casi) verifica import
+senza dipendenze broker/storage/trasporto, nessuna lettura from_env, BUY/SELL,
+WAIT/NO_TRADE, contesto, fonte, snapshot incompleto, timestamp stale/future,
+barre duplicate, expiry/ID consumati, JSON nonfinito e input invariati.
+`tests/test_strategy_risk.py` aggiunge il caso equity ridotta con stop stretto.
+Gruppo strategia/rischio/backtest: 255 passati, 0 falliti, guard rete e
+credenziali 0/0; compilazione completa riuscita. Prova macOS/Python 3.11,
+nessun feed/broker/server/ordine autentico; Windows e redditività non verificati.
+
+Verifica finale dello stesso worktree: suite completa **776 passati, 1 saltato,
+0 falliti, 1 warning in 33,10 s**. Guard rete=0, credenziali=0. Skip Windows
+Proactor sul Mac; warning preesistente `websockets.legacy`. `compileall`,
+`pip check` e `git diff --check` riusciti. WORKLOG condiviso, API, frontend e
+altri worktree non modificati; nessun push o merge.

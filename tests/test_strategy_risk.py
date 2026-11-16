@@ -68,3 +68,10 @@ def test_loss_never_increases_the_same_trade_risk_budget():
 def test_risk_api_rejects_a_position_for_another_symbol():
     with pytest.raises(RiskViolationError,match='symbol'):
         size_proposal(settings(),replace(snapshot(),position_symbol='AAPL'),'SELL',LEVELS,.1)
+
+
+def test_buy_notional_cap_uses_lower_equity_after_loss_even_with_tight_stop():
+    account = replace(snapshot(), equity=9500, pnl_today=-10)
+    levels = dict(entry=100, stop_distance=.1, target_distance=1)
+    result = size_proposal(settings(), account, 'BUY', levels, .1)
+    assert result['quantity'] * 100 <= 1900
