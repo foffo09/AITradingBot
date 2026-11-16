@@ -318,3 +318,35 @@ Scheda da compilare, senza dati personali o log integrali:
 Alla verifica iniziale: CI #5/#6 PASS agli SHA osservati; integrazione/release
 BLOCKED per draft/review e decisioni del responsabile pendenti. Il controllo
 delle fonti non costituisce review approvata o autorizzazione a cambiare policy.
+
+
+## Addendum — migrazione browser/desktop, direttiva 16 novembre 2026
+
+Le sezioni precedenti restano storia/procedura della catena CI #5→#6; nessuna
+integrazione è avvenuta per effetto di questo addendum. Per il nuovo prodotto
+valgono anche [architettura](ARCHITETTURA_APP.md) e l'unico
+[piano QA](END_TO_END_QA_PLAN.md). Non duplicare il piano.
+
+- [ ] Responsabile identifica candidato integrato, SHA/base, contratti e report
+  P1 UI/Tauri, P2 API/servizi/MT5 e P3 engine. Stessi schemi API e bundle React
+  nei due host. Report mancante = dipendenza esplicita, non task presunto concluso.
+- [ ] Start/health/timeout/crash/shutdown/cleanup e sessione locale verificati;
+  bind 127.0.0.1, Host/Origin/CORS/CSRF e capabilities minime, niente segreti
+  nel frontend/log/URL/CLI. Il vecchio FastAPI Omega non prova questi confini.
+- [ ] Suite offline e guard 0/0 sul candidato effettivo; CI Windows/macOS
+  sullo stesso SHA, più build native e packaging sidecar per ogni target.
+  Vecchi check verdi Python non certificano React/Tauri o un artifact installabile.
+- [ ] Prove installazione/avvio offline e manuali Windows11/macOS separate;
+  niente bypass di avvisi OS o caricamenti impliciti di credenziali personali.
+- [ ] Demo/Simulazione/Alpaca Paper/MT5 isolati; MT5 solo letture su Windows e
+  unsupported su macOS. Zero order_send o altre scritture MT5; nessun ordine
+  autentico nei test. MT5 reale richiede consenso e host/account Windows dell'utente.
+- [ ] Licenze/SBOM, notice e lock/hash transitive verificati, costi opzionali
+  dichiarati e nessun servizio a canone obbligatorio per le funzioni locali.
+- [ ] Blocker B01..B06 del piano risolti o valutati esplicitamente dal responsabile;
+  rischi finanziari e regole di sicurezza non possono essere aggirati da una deroga.
+
+Milestone prioritarie: 18/24/30 novembre, 7/14/18 dicembre; 19–31 dicembre
+solo blocker e nuova verifica degli SHA. Il calendario precedente della missione
+è storico. Alla BASE 3df4f82 non c'è un candidato migrato: readiness BLOCKED.
+Nessun nuovo merge/retarget/approvazione/dispatch/release/deploy è autorizzato.

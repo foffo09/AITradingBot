@@ -500,3 +500,104 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   già presenti, con protezioni più forti, nella release. Worktree agente e
   repository principale lasciati intatti; nessun ordine, server, automazione
   o push.
+
+
+## 2026-11-16 — Persona 4, missione unica December QA & Release
+
+- Direttiva prioritaria Notion letta nella scheda Brave: lo Sprint 06 precedente
+  è assorbito nel piano unico React/FastAPI/Tauri + packaging Python + MT5 read-only.
+  Scadenze prioritarie 18/24/30 novembre, 7/14/18 dicembre; poi solo blocker.
+- Ambiente audit: macOS 27.2.1 (26B131) arm64; sessione iniziata 11:55:10 UTC /
+  12:55:10 Europe/Rome. Fetch origin senza prune. Base attesa e osservata:
+  `3df4f8260fcbb85ea8ccf2c2b680f672adc89af4`. Nuovo branch locale
+  `agents/p4-december-qa-release-20261116`; worktree dedicato
+  `AITradingBot.worktrees/p4-december-qa-release-20261116`, inizialmente pulito.
+  Nessun branch/cartella preesistente riusato, nessun lavoro altrui modificato.
+- File: creati ARCHITETTURA_APP.md e END_TO_END_QA_PLAN.md; append alla matrice,
+  release gates e a questo worklog. Nessun codice, test, dipendenza o workflow
+  modificato. Documenti preparati localmente; nessun nuovo commit/push in questa
+  fase, non richiesti esplicitamente dalla direttiva corrente. HEAD resta BASE.
+- Audit Git: main fe988394d6ecdcb56763a81c627943b4cbe684e1; PR5 head
+  5e759404ef574c1dacc22a79a417f29362a8a2ef; PR6 head
+  97ff2966b9d8d82d6c6f10d30e9da125656e5259. Base PR6 = branch PR5, non main.
+  API GitHub: entrambe OPEN/DRAFT, review/richieste review vuote, check correnti
+  SUCCESS. Sono le sole due PR aperte nella lettura (100 risultati richiesti).
+  Branch main protected=false; endpoint regole/rulesets [], protezione classica
+  404: nessuna protezione applicata rilevata, non dedotta dal solo errore 404.
+- Audit delle consegne: feature/backend-market-data 1a68d5b, feature/dashboard-ui
+  432ecdd e feature/strategy-engine 93fde78 sono antenati main. P1 refresh
+  e1bd306d2f1e6c5b7db9b90bf1fdacf9ad4d7b24 è separato, delta 9 file legacy.
+  Nessun manifest React/Cargo/Tauri/MT5 nei tree osservati; nessun nuovo report
+  migrazione P1/P2/P3 ricevuto nei materiali P4 letti. Non equivale a dichiarare
+  non iniziato il lavoro locale degli altri. Nuovi contratti/candidato BLOCKED.
+- Sorgenti ispezionate senza import runtime: main.py:23-43 lega FastAPI a
+  127.0.0.1, legge configurazione locale e sceglie runtime; ui/control_box.py:
+  123-187 inizializza e avvia worker nel lifespan, usa token nell'HTML e API
+  legacy stato/controlli/comando. Nessun launcher avviato. Il nuovo contratto
+  applicativo/sessione non si deduce da questa console.
+- Script AST sui sei moduli src/strategy, eseguito in memoria, ha prodotto:
+
+```text
+STRATEGY_DIRECT_IMPORTS 6 modules; violations= []
+```
+
+  PASS solo per import diretti UI/API/broker vietati nel perimetro ispezionato;
+  non prova transitiva/runtime o consumer P3→P2 API→P1 UI integrato.
+- Comandi audit effettivi: git fetch/rev-parse/branch/for-each-ref/ls-tree,
+  merge-base --is-ancestor, diff --stat/--name-status; rg e AST senza eseguire
+  applicazione; gh pr view/list e API GET branch/rules/rulesets. Output:
+  base 3df4f82 corretta, feature storiche antenate, nuovo stack assente nei tree.
+- Evidenza CI solo storica riletta via statusCheckRollup: PR5 windows-tests
+  SUCCESS su5e75940 (run42921890791); PR6 windows-tests/macos-tests SUCCESS
+  su97ff296 (run43121098415). Conteggi OS/Python/guard dei run precedenti
+  conservati nella matrice, non riportati come nuovi test della migrazione.
+- Context7 ha risposto Unknown tool; consultate fonti ufficiali Tauri sidecar e
+  capabilities, FastAPI CORS, PyInstaller operating mode. Nessun pacchetto
+  installato. Architettura proposta, decisioni aperte A01..A07 e 35 scenari con
+  fixture, passi, test legacy mappati e test futuri esplicitamente non implementati.
+- Blocker ordinati B01 consegne/candidato, B02 sessione/lifecycle/API, B03
+  paginazione/riconciliazione/consumer, B04 build/manuali, B05 licenze/lock/costi,
+  B06 review/policy integrazione. Nessun task assegnato o duplicato.
+- In fase documentale non eseguiti pytest/compileall/pip check o build native:
+  manca il candidato identificato dal responsabile. Nessun PASS nuovo del prodotto,
+  nessun server, broker/feed/MT5 autentico, ordine o automazione. Windows11
+  manuale e MT5 reale restano fuori da prove Mac; consenso separato necessario.
+- Esito: documentazione QA pronta; prodotto migrato e release readiness BLOCKED.
+  Controlli documentali e stato finale sono registrati nella chiusura sotto.
+
+
+### Chiusura documentale osservata — 16 novembre
+
+Validatore Python eseguito in memoria, senza import applicativi né file helper:
+
+```text
+PASS DOC-01: scope esatto 5 file; index vuoto; nessun file applicativo cambiato
+PASS DOC-02: storici matrice/gates/worklog preservati
+PASS DOC-03: 28 link relativi esistenti; Markdown bilanciato; test referenziati presenti
+PASS DOC-04: 35 ID unici e campi completi; stati: {'PASS': 3, 'BLOCKED': 30, 'NON VERIFICATO': 2}
+PASS DOC-05: diagramma/confini presenti; nessun segreto letterale rilevato
+PRODOTTO: nessun test runtime/build eseguito, candidato non assegnato
+```
+
+Due tentativi iniziali del solo validatore documentale hanno evidenziato suoi
+limiti: regex ID non comprensiva di MT5 e confronto maiuscole/minuscole per
+Shutdown. Corretti nel controllo in memoria e rieseguito; nessun test di prodotto
+alterato o cancellato. I 3 PASS del catalogo sono audit Git, import diretti e
+CI storica, non 3 nuove prove runtime della migrazione.
+
+`git diff --check` e `git diff --no-index --check /dev/null` per ciascuno dei due
+nuovi documenti: exit 0 e output vuoto. Index vuoto. Stato locale atteso:
+
+```text
+ M docs/MATRICE_TEST.md
+ M docs/RELEASE_GATES.md
+ M docs/WORKLOG.md
+?? docs/ARCHITETTURA_APP.md
+?? docs/END_TO_END_QA_PLAN.md
+```
+
+HEAD/base resta 3df4f8260fcbb85ea8ccf2c2b680f672adc89af4, nessun nuovo commit o
+push. Solo questi cinque documenti; nessun dato personale letto. Il report
+Notion distingue consegna documentale pronta e candidato/prodotto BLOCKED.
+Prossimo passo: il responsabile conferma contratti/report e SHA candidato;
+solo allora esecuzioni native/browser/desktop e suite offline con evidenza esatta.

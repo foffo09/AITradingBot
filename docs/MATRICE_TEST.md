@@ -219,3 +219,53 @@ modifiche restano limitate ai due file autorizzati; PR #5 invariata e nessun
 merge/release. Il commit documentale successivo registra questa esecuzione:
 i numeri qui sopra restano attribuiti al relativo head e checkout, non a un
 commit futuro.
+
+
+## Missione December QA & Release — 16 novembre 2026
+
+Base documentale `3df4f8260fcbb85ea8ccf2c2b680f672adc89af4`; data/host audit:
+16 novembre, macOS 27.2.1 arm64, sessione iniziata 11:55:10 UTC.
+Unico [piano end-to-end](END_TO_END_QA_PLAN.md), **35 scenari**, con
+ID/owner/piattaforma/SHA/prerequisiti/fixture/passi/atteso/test/evidenza/stato.
+[Architettura target e decisioni](ARCHITETTURA_APP.md). Nessun candidato
+React/FastAPI/Tauri/MT5 integrato identificato: non attribuire al nuovo
+prodotto i PASS storici di Python/Streamlit.
+
+| Gruppo ID nel piano | Perimetro | Stato osservato in questa sessione |
+| --- | --- | --- |
+| QA-AUD-01 | Base, worktree, branch, ancestry, manifest | PASS solo audit documentale Git alla BASE |
+| QA-AUD-02 | Import diretti dei sei moduli src/strategy | PASS statico: nessun framework UI/API/broker; non prova transitiva/runtime |
+| QA-WEB-01..03 | Launcher, stessa UI/API, avvio offline | BLOCKED: nuovo stack non consegnato |
+| QA-SEC-01..04 | Bind/Host/Origin/CORS/CSRF/sessione/capabilities/segreti | BLOCKED, salvo SEC-04 NON VERIFICATO; manca artifact nuovo |
+| QA-LIF-01..03 | Start/health/timeout/crash/shutdown/cleanup | BLOCKED |
+| QA-CTX-01..03 | Demo/Sim/Paper/MT5 separati | BLOCKED per nuova UI/API; test legacy mappati, non rieseguiti qui |
+| QA-MT5-01..03 | Unsupported/unavailable/unverified/connected/stale, read-only | BLOCKED: nessun adattatore MT5 |
+| QA-DAT-01..02 | Dati/provenienza/tempi e risposte incomplete | BLOCKED sul nuovo contratto API |
+| QA-ORD-01..03 | Pagine, idempotenza, fill e panic | BLOCKED; recupero pieno post-fill non certificato |
+| QA-STR-01..02, QA-UI-01 | P3→P2 API→P1 UI e refresh | BLOCKED; proposta pura non è consumer integrato |
+| QA-BKT-01..02 | Causalità, costi, stop-first, OOS | BLOCKED per adapter nuovo; nessuna attestazione di profitti |
+| QA-PKG-01..03 | Build/installer nativi Windows/macOS | BLOCKED: manifest/artifact assenti |
+| QA-OSS-01 | Licenze, SBOM, lock e canoni | NON VERIFICATO; pin diretti Python non bastano |
+| QA-CI-01 | Stato dei run Python storici su head noti | PASS storico ricontrollato via GitHub, non build web/desktop |
+| QA-MAN-01, QA-REL-01 | UX Windows11/macOS e candidato esatto | BLOCKED |
+
+### Evidenza CI storica distinta dalla nuova release
+
+PR #5 OPEN/DRAFT, head `5e759404ef574c1dacc22a79a417f29362a8a2ef`, base
+main `fe988394d6ecdcb56763a81c627943b4cbe684e1`; check `windows-tests` SUCCESS:
+[run 42921890791](https://github.com/foffo09/AITradingBot/actions/runs/42921890791).
+PR #6 OPEN/DRAFT, head `97ff2966b9d8d82d6c6f10d30e9da125656e5259`, base
+branch #5 a `5e75940`; `windows-tests` e `macos-tests` SUCCESS:
+[run 43121098415](https://github.com/foffo09/AITradingBot/actions/runs/43121098415).
+Stati PR/check ricontrollati il 16 novembre; zero review e richieste review.
+I conteggi già documentati sono **storici**, non esecuzioni di oggi:
+Windows Server 2025 x64/Python 3.11.9 152 mirati/748 completi, 0 fail/skip;
+macOS 26.7.2 arm64/Python 3.11.9 152 mirati/747 completi, un solo skip Proactor.
+Guard 0/0 e compileall/pip/diff-check PASS nei run indicati, warning noto
+websockets.legacy. Nessuna build React/Tauri/Python sidecar in quel workflow.
+
+Per il prodotto nuovo, browser locale/desktop Windows/desktop macOS/build
+native/Windows11 manuale/MT5 autentico hanno SHA candidato NON ASSEGNATO e
+stato BLOCKED o NON VERIFICATO come nel piano. Le prove autentiche richiedono
+consenso separato e non possono inviare ordini. Il guard pytest esistente
+non viene indebolito per consentire E2E loopback: servirà harness distinto.
