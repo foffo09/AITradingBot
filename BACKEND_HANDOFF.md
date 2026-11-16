@@ -433,3 +433,44 @@ possono avvenire fra letture; non viene promesso uno snapshot transazionale.
 TDD: 3 regressioni fallite prima della modifica; gruppo backend/Paper/paginazione
 99 passati, 1 warning, guard 0/0. I 15 casi includono 1200 ordini su tre pagine,
 collisioni recuperabili, collisioni ambigue e budget finito.
+
+### MT5 — validazione letture e limiti nativi
+
+L'adapter opzionale ora richiede `terminal_info.connected is True`, login valido,
+server/currency non mancanti e balance/equity numerici finiti, mai booleani o
+stringhe. Collections mancanti/malformate e numeri non finiti nelle posizioni o
+negli ordini rendono l'intero snapshot unavailable: account null, liste vuote,
+nessun riuso di valori vecchi. `account.updated_at` è l'osservazione locale UTC,
+**non** un timestamp attestato dal server broker; source e valuta sono espliciti.
+
+`symbol_info_tick` fornisce bid/ask validati e midpoint, timestamp da time_msc UTC,
+fonte `MetaTrader 5 terminal tick`. Età accettata 0..120s. Tick assente/invalidato
+non diventa close storico; tick vecchio/futuro restituisce status stale con
+quote null e bars vuote nella risposta market. Le barre storiche controllano
+OHLC coerente, prezzi positivi finiti non booleani, volume non negativo,
+timestamp UTC ordinati unici non futuri; volume esplicito in tick, non azioni.
+Il terminale può usare simboli diversi dal catalogo: nessun alias inventato e
+nessun fallback su altro strumento/provider.
+
+Whitelist aggiunta: terminal_info e symbol_info_tick; restano solo initialize,
+shutdown, account_info, positions_get, orders_get, copy_rates_from_pos e costanti
+intervallo. Nessuna funzione di invio o modifica ordini chiamata/esposta.
+
+[Documentazione initialize MetaQuotes](https://www.mql5.com/en/docs/python_metatrader5/mt5initialize_py):
+timeout connessione in millisecondi, ora esplicito 5000. L'SDK può avviare il
+terminale installato e riutilizzare l'ultimo conto configurato solo dopo il POST
+connessione dell'utente. Non legge file credenziali dal servizio Python e nessun
+terminale autentico è stato aperto durante questo lavoro. **Le letture native e
+shutdown non offrono un timeout per chiamata documentato: non è garantita una
+deadline globale o la reattività in caso di blocco della DLL.** Serve isolamento
+di processo prima di prometterle. Il timeout initialize non risolve quel limite.
+
+[PyPI ufficiale MetaTrader5](https://pypi.org/project/metatrader5/) verificato:
+5.0.6231 ha wheel CPython3.11 WindowsAMD64. Aggiunto file optional
+`packaging/backend/requirements-mt5.txt` con marker Windows/AMD64; non installato
+su Mac, nessun import MetaTrader5 su Mac. La build nativa include hidden import
+quando il modulo è disponibile. Windows/SDK/DLL/terminale reali non verificati.
+
+TDD: 29 casi rossi prima della validazione e un ulteriore rosso booleani OHLC;
+32 nuovi casi totali e gruppo desktop di 58 verdi, guard 0/0. Casi API provano
+che dopo un tick buono un tick scaduto non conserva bid/ask/barre precedenti.
