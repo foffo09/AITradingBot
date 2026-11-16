@@ -12,6 +12,8 @@ $env:PAPER_EXECUTION_SCOPE = 'disabled'
 $data = Join-Path ([IO.Path]::GetTempPath()) ('AITradingBot web smoke ' + [guid]::NewGuid())
 $control = Join-Path $data 'web-service.json'
 $job = $null
+$duplicate = $null
+$phase = 'start'
 try {
     foreach ($round in 1..2) {
         $job = Start-Job -ArgumentList $root,$data -ScriptBlock {
@@ -22,6 +24,7 @@ try {
         $info = $null
         while ((Get-Date) -lt $deadline) {
             if ($job.State -eq 'Failed' -or $job.State -eq 'Completed') {
+                $phase = 'receive'
                 Receive-Job $job -ErrorAction Stop
                 throw 'Launcher exited before readiness'
             }
@@ -37,14 +40,24 @@ try {
         if ($health.status -ne 'ready') { throw 'Service not ready' }
         if ($round -eq 1) {
             $before = Get-Content -Raw -LiteralPath $control
-            $duplicateRejected = $false
-            try { & (Join-Path $root 'avvia_web.ps1') -NoBrowser -DataDirectory $data } catch { $duplicateRejected = $true }
-            if (-not $duplicateRejected) { throw 'Duplicate launcher accepted' }
+            $phase = 'duplicate'
+            # Expected native stderr/exit must stay in a separate job, not fail this CI step.
+            $duplicate = Start-Job -ArgumentList $root,$data -ScriptBlock {
+                param($root,$data)
+                & (Join-Path $root 'avvia_web.ps1') -NoBrowser -DataDirectory $data
+            }
+            if (-not (Wait-Job $duplicate -Timeout 20)) { throw 'Duplicate launcher hung' }
+            Receive-Job $duplicate -ErrorAction SilentlyContinue | Out-Null
+            if ($duplicate.State -ne 'Failed') { throw 'Duplicate launcher accepted' }
+            Remove-Job $duplicate -Force
+            $duplicate = $null
             if ((Get-Content -Raw -LiteralPath $control) -ne $before) { throw 'Duplicate changed owner record' }
             if ((Invoke-RestMethod "$origin/api/v1/health" -NoProxy).status -ne 'ready') { throw 'Duplicate interrupted first owner' }
         }
+        $phase = 'stop'
         & (Join-Path $root 'arresta_web.ps1') -DataDirectory $data
         if (-not (Wait-Job $job -Timeout 20)) { throw 'Launcher did not exit after stop' }
+        $phase = 'receive'
         Receive-Job $job -ErrorAction Stop
         if ($job.State -ne 'Completed') { throw 'Launcher failed' }
         Remove-Job $job
@@ -57,7 +70,11 @@ try {
         } finally { $probe.Dispose() }
     }
     Write-Output 'WINDOWS LAUNCHER PASS: real wrappers, duplicate rejected, shutdown, restart, closed socket; disposable data only.'
+} catch {
+    Write-Output "WINDOWS LAUNCHER FAIL: phase=$phase type=$($_.Exception.GetType().Name)"
+    throw
 } finally {
+    if ($duplicate) { Stop-Job $duplicate; Remove-Job $duplicate -Force }
     if ($job) {
         if (Test-Path -LiteralPath $control) {
             try { & (Join-Path $root 'arresta_web.ps1') -DataDirectory $data } catch { Write-Warning 'Owned test launcher did not confirm graceful shutdown' }

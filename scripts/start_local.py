@@ -84,13 +84,17 @@ def stop_instance(info, *, request=None, timeout=10):
     request(base + '/shutdown', method='POST')
     deadline = time.monotonic() + timeout
     while True:
+        current = None
         try:
             current = request(base + '/identity')
         except urllib.error.URLError as error:
             if isinstance(error.reason, ConnectionRefusedError):
                 return
-            raise
-        if not isinstance(current, dict) or any(current.get(k) != info[k] for k in ('pid', 'instance_id')):
+            if not isinstance(error.reason, ConnectionResetError):
+                raise
+        except ConnectionResetError:
+            pass  # Closing HTTP connections are not proof that the listener closed.
+        if current is not None and (not isinstance(current, dict) or any(current.get(k) != info[k] for k in ('pid', 'instance_id'))):
             raise RuntimeError('Identità cambiata durante arresto; nessun processo terminato.')
         if time.monotonic() >= deadline:
             raise RuntimeError('Timeout di arresto del servizio locale.')
@@ -238,8 +242,9 @@ def main(argv=None):
         return child.returncode
     except KeyboardInterrupt:
         return 0
-    except (OSError, ValueError, RuntimeError, urllib.error.URLError, portalocker.LockException):
-        print('Avvio/arresto non riuscito. Verifica build, directory e istanza locale; nessun ordine inviato.', file=sys.stderr)
+    except (OSError, ValueError, RuntimeError, urllib.error.URLError, portalocker.LockException) as error:
+        phase = 'stop' if args.stop else 'start'
+        print(f'Avvio/arresto non riuscito ({phase}/{type(error).__name__}). Verifica build, directory e istanza locale; nessun ordine inviato.', file=sys.stderr)
         return 1
     finally:
         if child is not None:

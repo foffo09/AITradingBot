@@ -184,3 +184,16 @@ def test_recovery_preserves_control_when_launcher_lock_has_an_owner(tmp_path, mo
         assert start_local.main(['--recover-stale', '--no-browser', '--data-dir', str(tmp_path),
                                  '--ui-dir', str(ui)]) == 1
         assert control.read_text() == record
+
+
+def test_shutdown_keeps_polling_after_connection_reset_until_refused():
+    from scripts.start_local import stop_instance
+    from urllib.error import URLError
+    from http.client import RemoteDisconnected
+    info = {'pid': 123, 'port': 8765, 'instance_id': 'a' * 32}
+    replies = iter([info, info, info, URLError(ConnectionResetError()), RemoteDisconnected(), URLError(ConnectionRefusedError())])
+    def request(*args, **kwargs):
+        value = next(replies)
+        if isinstance(value, Exception): raise value
+        return value
+    stop_instance(info, request=request, timeout=2)
