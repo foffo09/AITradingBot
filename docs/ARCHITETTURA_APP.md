@@ -185,3 +185,17 @@ Queste fonti non provano che il progetto abbia già implementato il target.
 Prossimo gate: ricevere SHA/report/contratti P1/P2/P3 e candidato integrato dal
 responsabile; applicare l'unico [piano QA](END_TO_END_QA_PLAN.md) e
 [release gates](RELEASE_GATES.md). Readiness del nuovo prodotto: **BLOCKED**.
+
+
+## Consolidamento verificato — branch completion, 16 novembre
+
+Il diagramma browser/desktop precedente è ora implementato alla base37a3840.
+Gli stati BLOCKED della ricognizione iniziale restano storici. La nuova API
+riusa un solo ledger per contesto e gli stessi engine/controlli di rischio.
+`OfflineExecutor` è un diario di controllo, non un secondo ledger né un adapter
+broker: comandi idempotenti, lockOS per contesto, eventi e intent persistenti.
+Le riconciliazioni Python confrontano snapshot sintetici completi con saldo e
+posizioni attesi forniti dal chiamante; non ricostruiscono contabilità autentica.
+L’API espone soltanto il dry-run locale. MT5ReadOnly resta il validatore nel figlio
+spawn; MT5Process nel padre applica deadline allo scambio e invalida errori.
+Le capability Tauri restano vuote, l’origine è esclusivamente127.0.0.1.

@@ -667,3 +667,51 @@ nel setuphook, faulttest sidecarassente→exit1senza panicPASS. Bundle90.62MiB,
 smokefrozen rafforzatoPASS e GUI nativa finaleLaunchServicesconcorrettomotivoP3,
 chiusuranormale/nessunorfano/porta65260chiusaPASS. Timeoutavvio15snon disabilitato.
 Nessuna modifica a soglie, credenziali, main o automazioni.
+
+
+## 16 novembre — completion isolato da37a3840
+
+Nuovo mandato autonomo su agents/codex-completion-20261116, worktree separato.
+Preservati main,PR7,quattrobranch e checkoutpersonale. Audit con tre revisioni
+indipendenti iniziali e review finale. Implementati: idempotenzaAPI/ledger,
+deadlineMT5 inprocesso, dry-run/controljournal e riconciliazione sintetica,
+contrattiUI/indicatori/metriche/backtest, launcherrecovery e monitor sidecar,
+CIwrapperPS e NSIS install/uninstall. Nessun ordine o automazione finanziaria.
+Mac:929PASS/1skip/1warning guard0/0;frontend34;Rust3;compileall/pipcheck/diffcheck0;
+source/frozenHTTP e build.app riusciti. EvidenzeGUI/CI finali da completare.
+VulnerabilitàPillow12.3 rilevate42;fix13incompatibileStreamlit<13. ReleaseBLOCCATA
+anche per licenza progetto/notice e proveWindows11/firma/nativehangmancanti.
+Dettagli e scelte in MASTER_AUDIT, LOCAL_APPLICATION e CODEX_MASTER_PROGRESS.
+
+
+Completion successivo: verificato Streamlit1.66.1 permettePillow13, quindi upgrade
+mirato e ambienteprivato. Suite931PASS/1skip/1warning48.69s guard0/0, pipcheck0 e
+pip-audit0. Il bundle non include piùPIL/Arrow inutilizzati: smokePASS e coldstart
+5.6624s contro15.229s, senza aumentare15s. Corretto stop con resetTCP transitorio.
+PRdraft8 pubblicata su branchcompletion, baseintegration; nessun mainmerge.
+NotionBrave debuggerunattached e fallbackIAB richiedeaccesso: report non salvato.
+GUI iniziale: riapertura involontaria in appdatastandard, dry-run fermato/appchiusa;
+nuovo diario di controllo conservato, nessun conto o ordine creato. Dettagli audit.
+
+
+Nuovi logCI hanno distinto startupWindowsValueError dal precedente rifiuto atteso;
+protocollo supervisor per redirectorvenv, test ownership invariati/estesi. Bundle
+esclude anche buildtoolruntime; diagnosticofrozen pubblica solo modulo mancante.
+SuiteMac936PASS/1skip/1warning38.53s guard0/0; compileall/pipcheck/diffcheck0.
+Cargo-audit0vulnerabilità,2warning non soppressi (proc-macro-error/glibLinux).
+SecondaGUIprivata impedita da schermo bloccato; backendhealthy privato fermato.
+
+
+## 17 novembre — chiusura completion
+
+Run43973548981/daa5b86 tuttoverde4/4: WindowsServer2025 937PASS,MacCI936PASS/1skip,
+frontend34/Rust3 entrambe, guard0/0. ProvewrapperPowerShell eNSISinstall/smoke
+UIinstallata/uninstall riuscite; nessuna pubblicazioneartifact. GUIprivataMac
+finale riuscita dopo sblocco: Demo/fillfittizio, Simulazioneseparata, backtest,
+dry-runstop, exit0/portachiusa. Bundle51.43MiB. Notionancoraindisponibile.
+Ultima guardia esecuzioni senzaIDstabile:5RED→GREEN, suite941PASS/1skip/1warning
+38.89s. Commitfinale invia questa guardia e la documentazione alla nuovaCI;
+checkdellaPR8 attestano il nuovoHEAD. Workingtree da lasciare pulito.
+ReleaseBLOCKED: licenza/notice, Windows11GUI/retention/firma/nativehang nonprovati.
+Nessun ordine, brokerautentico, merge main, deploy o release. Primo diario dry-run
+standardcreato duranteQA resta conservato, come segnalato all’utente.

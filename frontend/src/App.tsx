@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   api,
+  pendingTrade,
   type Context,
   type State,
   type Market,
@@ -30,11 +31,12 @@ const pages = [
   "Portafoglio",
   "Storico",
   "Backtesting",
+  "Automazione",
   "Connessioni",
   "Impostazioni",
 ] as const;
 type Page = (typeof pages)[number];
-const icons = ["◈", "⌁", "↗", "▣", "◷", "▥", "⇄", "⚙"];
+const icons = ["◈", "⌁", "↗", "▣", "◷", "▥", "▷", "⇄", "⚙"];
 function saved(key: string, fallback: string) {
   try {
     return localStorage.getItem(key) ?? fallback;
@@ -145,9 +147,9 @@ function ProposalPanel({
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  const expired =
-    typeof proposal?.expires_at === "string" &&
-    new Date(proposal.expires_at).getTime() <= now;
+  const expiry = typeof proposal?.expires_at === "string" ? Date.parse(proposal.expires_at) : NaN;
+  const actionable = proposal?.direction === "BUY" || proposal?.direction === "SELL";
+  const expired = actionable && (!Number.isFinite(expiry) || expiry <= now);
   const blocked =
     !proposal || proposal.validation_state === "NO_TRADE" || expired;
   return (
@@ -179,7 +181,7 @@ function ProposalPanel({
         ].map(([key, label]) => (
           <div key={key}>
             <dt>{label}</dt>
-            <dd>{number(proposal?.[key])}</dd>
+            <dd>{number(blocked ? null : proposal?.[key])}</dd>
           </div>
         ))}
       </dl>
@@ -297,7 +299,7 @@ function Backtesting({
         <p>
           Calcolo nel motore esistente sui dati del contesto selezionato. Costi
           e metriche provengono dal backend; nessun ordine viene inviato.
-          Intervallo del backtest: 1 giorno.
+          Intervallo del backtest: 1 giorno. SMA su singolo campione storico; OOS non eseguito.
         </p>
         <form onSubmit={run} className="inline-form">
           <label>
@@ -404,7 +406,8 @@ function LocalLedger({
     [side, setSide] = useState("buy"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [pending, setPending] = useState(() => pendingTrade(context));
   if (context === "paper" || context === "mt5")
     return (
       <p className="notice">
@@ -419,7 +422,7 @@ function LocalLedger({
     setBusy(true);
     try {
       if (kind === "account") await api.account(context, Number(capital));
-      else await api.trade(context, symbol, side, Number(quantity));
+      else await api.trade(context, pending?.symbol ?? symbol, pending?.side ?? side, pending?.quantity ?? Number(quantity));
       setNotice(
         kind === "account"
           ? "Conto virtuale disponibile. Il conto esistente non è stato azzerato."
@@ -429,6 +432,7 @@ function LocalLedger({
     } catch (e) {
       setError(message(e));
     } finally {
+      setPending(pendingTrade(context));
       setBusy(false);
     }
   }
@@ -437,8 +441,9 @@ function LocalLedger({
       <h2>Ledger virtuale · {contexts[context]}</h2>
       <p>
         Solo capitale fittizio e dati sintetici dichiarati. Demo e Simulazione
-        conservano conti separati.
+        conservano conti separati. Dopo un riavvio verifica lo storico prima di creare una nuova richiesta; la memoria delle richieste dipende dall’origine locale (anche dalla porta).
       </p>
+      {pending && <p className="notice">Registrazione con esito incerto: {pending.symbol} · {pending.side} · quantità {number(pending.quantity)}. Riprovando si conserva lo stesso identificativo; verifica anche lo storico.</p>}
       {!state?.account ? (
         <form className="inline-form" onSubmit={(e) => void act(e, "account")}>
           <label>
@@ -460,11 +465,11 @@ function LocalLedger({
         <form className="inline-form" onSubmit={(e) => void act(e, "trade")}>
           <label>
             Strumento
-            <input readOnly value={symbol} />
+            <input readOnly value={pending?.symbol ?? symbol} />
           </label>
           <label>
             Lato
-            <select value={side} onChange={(e) => setSide(e.target.value)}>
+            <select disabled={!!pending} value={pending?.side ?? side} onChange={(e) => setSide(e.target.value)}>
               <option value="buy">Acquisto virtuale</option>
               <option value="sell">Vendita virtuale</option>
             </select>
@@ -476,12 +481,13 @@ function LocalLedger({
               min="0.000001"
               step="any"
               required
-              value={quantity}
+              disabled={!!pending}
+              value={pending?.quantity ?? quantity}
               onChange={(e) => setQuantity(e.target.value)}
             />
           </label>
           <button className="primary" disabled={busy}>
-            Registra operazione virtuale
+            {pending ? "Riprova registrazione incerta" : "Registra operazione virtuale"}
           </button>
         </form>
       )}
@@ -547,6 +553,66 @@ function Connections({ onChanged }: { onChanged: () => void }) {
     </>
   );
 }
+function Automation({ context, state, onChanged }: {
+  context: Context;
+  state: State | null;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const current = state?.automation;
+  const local = context === "demo" || context === "simulation";
+  async function command(value: "start" | "pause" | "stop" | "cycle") {
+    setBusy(true);
+    setError("");
+    try {
+      await api.automation(context, value, crypto.randomUUID());
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      onChanged();
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="panel">
+      <h2>Automazione · dry-run</h2>
+      <p>Solo cicli analitici espliciti nei contesti locali. Nessun ordine broker viene inviato. Nessun ciclo periodico è avviato dal frontend.</p>
+      <strong>{text(current?.state)}</strong>
+      <p>{text(current?.reason)}</p>
+      <div className="button-group">
+        {([
+          ["start", "Avvia dry-run"],
+          ["pause", "Pausa dry-run"],
+          ["stop", "Arresta dry-run"],
+          ["cycle", "Esegui ciclo dry-run"],
+        ] as const).map(([value, label]) => (
+          <button key={value}
+            disabled={busy || !local || !current || current.execution_enabled !== false || current.mode !== "dry-run" || !(value === "start" ? ["STOPPED", "PAUSED"].includes(current.state) : value === "stop" ? ["RUNNING", "PAUSED", "ERROR"].includes(current.state) : current.state === "RUNNING")}
+            onClick={() => void command(value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {!local && <p className="notice">Automazione broker non disponibile da questo terminale.</p>}
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <dl className="metadata">
+        {[
+          ["last_start", "Ultimo avvio"], ["last_stop", "Ultimo arresto"],
+          ["last_cycle", "Ultimo ciclo"], ["last_error", "Ultimo errore"],
+          ["reconciliation", "Riconciliazione"],
+        ].map(([key, label]) => (
+          <div key={key}><dt>{label}</dt>
+            <dd>{key.startsWith("last_") && key !== "last_error" ? instant(current?.[key]) : text(current?.[key])}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="metrics">
+        <Metric label="Proposte" value={current?.proposals} />
+        <Metric label="Intenti dry-run" value={current?.intents} />
+      </div>
+    </section>
+  );
+}
 export default function App() {
   const [page, setPage] = useState<Page>("Panoramica"),
     [context, setContext] = useState<Context>("demo"),
@@ -590,8 +656,10 @@ export default function App() {
   }, [density]);
   useEffect(() => {
     const controller = new AbortController();
-    let active = true;
+    let active = true, inFlight = false;
     async function load() {
+      if (inFlight) return;
+      inFlight = true;
       try {
         await api.session(controller.signal);
       } catch (e) {
@@ -602,6 +670,7 @@ export default function App() {
           setErrors({ session: message(e) });
           setLoading(false);
         }
+        inFlight = false;
         return;
       }
       const results = await Promise.allSettled([
@@ -610,6 +679,7 @@ export default function App() {
         api.proposal(context, symbol, interval, controller.signal),
         api.instruments(controller.signal),
       ]);
+      inFlight = false;
       if (!active) return;
       const nextErrors: Record<string, string> = {};
       const [s, m, p, i] = results;
@@ -645,6 +715,7 @@ export default function App() {
       window.clearInterval(timer);
     };
   }, [context, symbol, interval, revision]);
+  const automationLabel = state?.automation.state === "stopped" || state?.automation.state === "STOPPED" ? "Automazione ferma" : `Automazione ${state?.automation.state ?? "N/D"}`;
   const offline = context === "demo" || context === "simulation";
   const account = state?.account;
   const accountCurrency =
@@ -729,6 +800,7 @@ export default function App() {
       {market?.reason && <p className="notice">{market.reason}</p>}
       <MarketChart
         bars={market?.bars ?? []}
+        indicators={market?.indicators}
         identity={`${context}/${symbol}/${interval}`}
         theme={theme}
         priceUnit={priceCurrency}
@@ -772,10 +844,10 @@ export default function App() {
         <div className="sidebar-bottom">
           <div className="status-line">
             <i className="status-dot" />
-            Automazione ferma
+            {automationLabel}
           </div>
           <p>
-            Nessun invio automatico.
+            Modalità dry-run; nessun invio broker.
             <br />
             Analisi e contabilità separate.
           </p>
@@ -874,6 +946,14 @@ export default function App() {
                   value={account?.realized_pnl}
                   unit={accountCurrency}
                 />
+              </div>
+              <div className="metrics">
+                <Metric label="P/L cumulativo netto stimato" value={account?.total_pnl} unit={accountCurrency} />
+                <Metric label="P/L realizzato giornaliero" value={account?.daily_realized_pnl} unit={accountCurrency} caption={`Giorno ${text(account?.pnl_day)} · ${text(account?.pnl_timezone)} · ledger`} />
+                <Metric label="Esposizione long" value={account?.market_value} unit={accountCurrency} caption="Valorizzazione mark del ledger; disponibile solo se fornita" />
+                <Metric label="Commissioni sostenute" value={account?.fees} unit={accountCurrency} />
+                <Metric label="Slippage sostenuto" value={account?.slippage} unit={accountCurrency} />
+                <Metric label="Spread sostenuto" value={account?.spread} unit={accountCurrency} />
               </div>
               <div className="analysis-grid">
                 {chart}
@@ -989,6 +1069,7 @@ export default function App() {
               />
             </>
           )}
+          {page === "Automazione" && <Automation key={context} context={context} state={state} onChanged={refresh} />}
           {page === "Connessioni" && <Connections onChanged={refresh} />}
           {page === "Impostazioni" && (
             <section className="panel settings">
@@ -1019,7 +1100,7 @@ export default function App() {
                 credenziale viene conservata qui.
               </p>
               <div className="notice">
-                <b>Automazione ferma</b>
+                <b>{automationLabel}</b>
                 <p>
                   {state?.automation.reason ??
                     "Questo frontend non espone percorsi di avvio o invio broker."}
@@ -1051,7 +1132,7 @@ export default function App() {
             <span>
               Origine e timestamp sempre espliciti · N/D = dato non disponibile
             </span>
-            <span>{contexts[context]} · Automazione ferma</span>
+            <span>{contexts[context]} · {automationLabel}</span>
           </footer>
         </main>
       </div>

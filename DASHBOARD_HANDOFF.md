@@ -354,3 +354,18 @@ malformati e non ricostruisce calendari. Il grafico mostra quality, calendario
 e contratto barre disponibili; N/D se assenti. Test di regressione API Python
 e consumer TypeScript riprodotti rossi e poi verdi. MT5 è ora limitato a conti
 Demo verificati oltre che read-only; errore esplicito senza dati vecchi.
+
+
+## Consolidamento completion
+
+Polling single-flight e abort al cambio identità; context/symbol/interval della
+proposta devono coincidere con la selezione. Scadenza assente/invalida/passata
+rende la proposta NO_TRADE e nasconde i livelli. Indicatori calcolati dal backend,
+selezionabili e inizialmente spenti; SMA/EMA prezzo, RSI pane separato.
+La pagina Automazione legge il backend e invia solo comandi dry-run espliciti,
+con pulsanti coerenti allo stato. Nessun effetto finanziario da rendering/polling.
+Operazioni virtuali persistono chiave/payload incerto in localStorage fino a
+conferma; rifiuto definitivo libera il form, timeout/5xx preserva identità.
+Cambio porta cambia origine: dopo riavvio verificare storico prima di nuova richiesta.
+P/L realizzato giornalieroUTC distinto dal totale mancante. Backtest SMA singolo
+campione con OOS non eseguito; metriche mancanti restanoN/D.

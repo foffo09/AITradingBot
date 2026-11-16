@@ -307,3 +307,60 @@ Fault nativo: sidecar mancante→exit1 senzapanic; bundlegenerato ripristinato.
 SbloccoMacrisolto; finale LaunchServices + GUI con metadata/proposta corretti,
 chiusura normale/porta chiusa/processi assentiPASS. Dettagli e timeout15s
 residuo nell'audit; nessun PASSWindows11 o brokerautentico dedotto.
+
+
+## Completion — evidenze locali del 16 novembre
+
+Base37a3840 + diff isolato; gli SHA dei commit e runCI successivi vanno riferiti
+al candidato effettivo, senza attribuire la baseline storica al nuovoSHA.
+
+| Prova | macOS27.2.1arm64 | WindowsCI nuovoSHA | Windows11GUI |
+|---|---|---|---|
+| compileall/Python3.11.18 | PASS exit0 | NON VERIFICATO | NON VERIFICATO |
+| Suite Python | PASS929/skip1/warn1;40.09s;guard0/0 | NON VERIFICATO | NON VERIFICATO |
+| API/ledger/readonly mirati | PASS113 | NON VERIFICATO | NON VERIFICATO |
+| Frontend/Node22.23.3 | PASS34;lint/typecheck/build0 | NON VERIFICATO | NON VERIFICATO |
+| Rust/Tauri | PASS3 e bundle.app90.77MiB | NON VERIFICATO | NON VERIFICATO |
+| HTTPsource/frozen | PASS;loopback/temp/no broker | NON VERIFICATO | NON VERIFICATO |
+| pipcheck/diffcheck | PASS | NON VERIFICATO | NON VERIFICATO |
+| npm audit | PASS0 advisory | NON VERIFICATO | NON VERIFICATO |
+| pip-audit | FAIL42 advisoryPillow;releaseBLOCKED | NON VERIFICATO | NON VERIFICATO |
+| PSwrapper/NSIS | NON VERIFICATO | NON VERIFICATO | NON VERIFICATO |
+| MT5autentico/nativehang frozen | NON VERIFICATO | NON VERIFICATO | NON VERIFICATO |
+
+Regressioncases: idempotency/payload/restart/concurrency, ownershipprocesso,
+stati dry-run, partial/filled/canceled/rejected/expired/unknown, pagine incomplete/
+overlap, dati mancanti/futuri, timeout/crashMT5, staleproposal/pollsingleflight.
+Test nuovi non sostituiscono né rimuovono quelli esistenti.
+
+
+### Aggiornamento dopo dipendenze compatibili e bundle minimo
+
+Nuova venv privataPython3.11.18: **931PASS,1skip,1warning in48.69s**, guard0/0.
+compileall exit0; pipcheck `No broken requirements found.` Streamlit1.66.1,
+Pillow13.0.0: pip-audit `No known vulnerabilities found`; npm audit0.
+Frontend34PASS/Rust3PASS; coldstartfrozen prima15.229s/dopo5.6624s, health0.0079s,
+idle0% su2s, RSS121168KiB,shutdown0.2602s. Misure locali non attestano altriOS.
+RunCI43970361875 su03200f7: suiteWindowsPASS, wrapperPSFAIL; candidato aggiornato
+con testresetTCP e diagnostico. Risultato finale del nuovoSHA nella PR8/Actions.
+La vecchia riga FAILPillow è storica, superata da upgradecompatibile+auditzero.
+
+
+Ultimo controllo dopo protocolloWindows/buildhook:936PASS/1skip/1warning38.53s,
+guard0/0. La confermaWindows del redirector e del pacchetto rimane demandata alla
+CI del prossimoSHA. Cargo-audit0vulnerabilità/2warning non soppressi. GUIcorrente
+Maclocked NON VERIFICATO; backend nativo privato healthy e stop con porta chiusa.
+
+
+### CI nativa completa e GUI finale (16–17 novembre)
+
+Codice `daa5b86`, run43973548981: quattrojobSUCCESS. WindowsServer2025/Python3.11.9:
+937PASS/0skip/1warning165.19s; Mac26.7.2arm64/Python3.11.9:936PASS/1skip/1warning109.86s,
+guard0/0. TargetCI152PASS, frontend34 eRust3 su entrambi. Source/frozenHTTP,
+wrapperPS/doppioavvio/stop/restart e NSISunsigned install/installedUI/uninstallPASS.
+GUI suMaclocale27.2.1: Demo/fillvirtuale privato, Simulazione separata, backtest,
+dry-run echiusura/portachiusaPASS. Bundle51.43MiB, primo probehealthy13.4164s;
+non una garanzia coldstart universale o misura paintUI.
+IDfill rafforzato dopo questaCI: locale941PASS/1skip/1warning38.89s guard0/0.
+Il nuovoHEAD ha checkCI propri nella PR8. Windows11GUI/brokerautentici restano
+NON VERIFICATI, licenza/notice BLOCKED. Niente release o ordini.

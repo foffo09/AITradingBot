@@ -46,6 +46,11 @@ fn main() {
                     &app.path().app_data_dir()?.join("local-service"),
                 )
                 .map_err(std::io::Error::other)?;
+                let handle = app.handle().clone();
+                service.monitor(move || {
+                    eprintln!("Backend locale terminato inaspettatamente; riavviare AITradingBot.");
+                    handle.exit(1);
+                });
                 let origin = service.url.clone();
                 let url = origin.parse()?;
                 app.manage(Mutex::new(Some(service)));

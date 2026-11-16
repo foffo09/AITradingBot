@@ -364,3 +364,30 @@ esecutore/riconciliazione nuovaUI, installerWindows/firma/notarizzazione e revie
 indipendente non completati. Nessun merge main, deploy o attivazione ordini.
 Guida e limiti: LOCAL_APPLICATION.md. Un timeoutavvio resta un rifiuto sicuro,
 non un'autorizzazione a bypassare coordinamento/gate o a riutilizzare dati vecchi.
+
+
+## Gate completion — decisione corrente
+
+Il candidato isolato aggiunge dry-run, idempotenzaAPI, deadlineprocessoMT5,
+lifecycle e testinstallerCI. La release resta **BLOCKED**, anche con CI verde:
+
+1. Dipendenza vulnerabile risolta: Streamlit1.66.1 + Pillow13.0.0; resolver,
+   pipcheck e pip-audit0 verificati. Il precedente blocco42advisory è storico.
+2. Licenza progetto assente; notice/SBOM completa del bundle e dipendenze UNKNOWN
+   da verificare prima della distribuzione. Non si inventa una licenza.
+3. Windows11GUI, retentionappdata/upgrade/installazione personale, firma/notarizzazione
+   e cleanup frozenWindows durante nativehang autentico NON VERIFICATI.
+4. Broker autentici ed esecuzione finanziaria fuori autorizzazione. Nessuna scrittura
+   broker. La riconciliazione offline non sblocca un’esecuzione autentica.
+
+InstallerCI non firmato e testato su WindowsServer non è un rilascioWindows11.
+La sentinella esterna non prova retentionappdataTauri. Startup15s invariato.
+Nessun merge, deploy o release; decisione successiva del responsabile necessaria.
+
+
+Aggiornamento17novembre: Il run esatto è **43973548981 / daa5b86**,
+4/4PASS con installerNSIS realmente installato/provato/disinstallato sul runner
+WindowsServer2025. La GUI Mac privata è stata verificata; restano Windows11GUI,
+retentionappdatareale/upgrade, licenza/notice, firma e nativehangfrozenautentico.
+La guardiaIDfill successiva ha941PASSlocali e una nuovaCI sul nuovoHEAD nellaPR8.
+Nessuna release autorizzata dal successoCI.

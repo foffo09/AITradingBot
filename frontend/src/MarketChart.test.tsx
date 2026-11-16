@@ -13,6 +13,7 @@ vi.mock("lightweight-charts", () => ({
   ColorType: { Solid: "solid" },
   CandlestickSeries: "candles",
   HistogramSeries: "volume",
+  LineSeries: "line",
   createChart: () => ({
     addSeries: () => stub.candle,
     panes: () => [],
@@ -80,4 +81,16 @@ it("rilegge il valore del crosshair dalle barre aggiornate", () => {
   );
   expect(screen.getByText("103")).toBeInTheDocument();
   expect(screen.queryByText("102")).not.toBeInTheDocument();
+});
+
+it('mostra e disattiva le serie ricevute dal backend senza ricalcolarle', async () => {
+  const {default: userEvent} = await import('@testing-library/user-event');
+  render(<MarketChart bars={[bar]} identity="demo/AAPL/1Day" theme="dark" indicators={[{id:'sma10',label:'SMA 10',pane:'price',unit:'USD',method:'SMA',parameters:{window:10},points:[{time:bar.time,value:101.25}]}]} />);
+  const toggle = screen.getByRole('checkbox',{name:/SMA 10/});
+  expect(toggle).not.toBeChecked();
+  await userEvent.click(toggle);
+  expect(stub.candle.setData).toHaveBeenCalledWith([{time:bar.time,value:101.25}]);
+  expect(toggle).toBeChecked();
+  await userEvent.click(toggle);
+  expect(toggle).not.toBeChecked();
 });

@@ -31,6 +31,9 @@ def build_command(output: Path) -> list[str]:
             '--hidden-import', 'src.strategy.service', '--hidden-import', 'MetaTrader5',
             '--collect-data', 'exchange_calendars', '--collect-data', 'pandas_market_calendars',
             '--exclude-module', 'streamlit', '--exclude-module', 'matplotlib',
+            # Local JSON/OHLC routes do not use image codecs or Arrow serialization.
+            '--exclude-module', 'PIL', '--exclude-module', 'pyarrow',
+            '--exclude-module', 'setuptools', '--exclude-module', 'pkg_resources',
             '--exclude-module', 'torch', '--exclude-module', 'tensorflow',
             str(ROOT / 'packaging/backend/entrypoint.py')]
 

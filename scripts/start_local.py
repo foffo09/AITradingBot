@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import http.cookiejar
 import json
 import os
@@ -12,6 +13,9 @@ import signal
 import subprocess
 import sys
 import threading
+import time
+
+import portalocker
 import urllib.error
 import urllib.request
 import webbrowser
@@ -23,7 +27,8 @@ def parse_identity(value, *, expected_pid=None):
     pid, port, instance = value.get('pid'), value.get('port'), value.get('instance_id')
     if (type(pid) is not int or pid <= 0 or type(port) is not int or not 1 <= port <= 65535
             or not isinstance(instance, str) or not re.fullmatch(r'[A-Za-z0-9_-]{16,128}', instance)
-            or (expected_pid is not None and pid != expected_pid)):
+            or (expected_pid is not None and pid != expected_pid
+                and (type(value.get('supervisor_pid')) is not int or value['supervisor_pid'] != expected_pid))):
         raise ValueError('Identità del servizio non valida.')
     return {'pid': pid, 'port': port, 'instance_id': instance}
 
@@ -69,7 +74,7 @@ def _requester(info):
     return request
 
 
-def stop_instance(info, *, request=None):
+def stop_instance(info, *, request=None, timeout=10):
     info = parse_identity(info)
     request = request or _requester(info)
     base = f"http://127.0.0.1:{info['port']}/api/v1"
@@ -78,6 +83,23 @@ def stop_instance(info, *, request=None):
         raise RuntimeError('Identità del processo cambiata: nessun arresto eseguito.')
     request(base + '/session')
     request(base + '/shutdown', method='POST')
+    deadline = time.monotonic() + timeout
+    while True:
+        current = None
+        try:
+            current = request(base + '/identity')
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, ConnectionRefusedError):
+                return
+            if not isinstance(error.reason, ConnectionResetError):
+                raise
+        except ConnectionResetError:
+            pass  # Closing HTTP connections are not proof that the listener closed.
+        if current is not None and (not isinstance(current, dict) or any(current.get(k) != info[k] for k in ('pid', 'instance_id'))):
+            raise RuntimeError('Identità cambiata durante arresto; nessun processo terminato.')
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Timeout di arresto del servizio locale.')
+        time.sleep(0.1)
 
 
 def shutdown_child(child, *, timeout=10):
@@ -116,9 +138,65 @@ def _read_control(path):
     return parse_identity(json.loads(path.read_text(encoding='utf-8')))
 
 
+
+@contextmanager
+def launcher_lock(directory):
+    path = directory / 'web-launcher.lock'
+    if path.is_symlink():
+        raise RuntimeError('Lock launcher non valido.')
+    descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        try:
+            portalocker.lock(descriptor, portalocker.LOCK_EX | portalocker.LOCK_NB)
+        except portalocker.LockException:
+            raise RuntimeError('Un’altra istanza del launcher è attiva.') from None
+        yield
+    finally:
+        os.close(descriptor)  # Never unlink the lock: all launchers must lock the same inode.
+
+
+def process_exists(pid):
+    if sys.platform == 'win32':
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel.OpenProcess(0x100000, False, pid)  # SYNCHRONIZE, no terminate rights.
+        if handle:
+            kernel.CloseHandle(handle)
+            return True
+        return ctypes.get_last_error() != 87  # Only ERROR_INVALID_PARAMETER proves absence.
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def recover_control(control, *, requested, request=None):
+    if not requested:
+        raise RuntimeError('Controllo già presente; arrestare il servizio o usare --recover-stale.')
+    info = _read_control(control)
+    if process_exists(info['pid']):
+        raise RuntimeError('Processo ancora presente: recupero rifiutato.')
+    request = request or _requester(info)
+    try:
+        request(f"http://127.0.0.1:{info['port']}/api/v1/identity")
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, ConnectionRefusedError) and _read_control(control) == info:
+            control.unlink()
+            return
+        raise
+    raise RuntimeError('Porta ancora occupata: recupero rifiutato.')
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='AITradingBot locale: nessun trading automatico.')
     parser.add_argument('--stop', action='store_true')
+    parser.add_argument('--recover-stale', action='store_true')
     parser.add_argument('--no-browser', action='store_true')
     parser.add_argument('--port', type=int, default=0)
     parser.add_argument('--data-dir', type=Path)
@@ -127,6 +205,7 @@ def main(argv=None):
     child = None
     identity = None
     control = None
+    ownership = None
     try:
         if not 0 <= args.port <= 65535:
             raise ValueError('Porta non valida.')
@@ -142,9 +221,11 @@ def main(argv=None):
         ui_dir = (args.ui_dir or root / 'frontend' / 'dist').resolve()
         if not (ui_dir / 'index.html').is_file():
             raise RuntimeError('Frontend non compilato. Esegui npm ci e npm run build nella radice del progetto.')
-        if control.exists() or control.is_symlink():
-            raise RuntimeError('File di controllo già presente: verifica/arresta la precedente istanza; non viene sovrascritto.')
         data_dir.mkdir(parents=True, exist_ok=True)
+        ownership = launcher_lock(data_dir)
+        ownership.__enter__()
+        if control.exists() or control.is_symlink():
+            recover_control(control, requested=args.recover_stale)
         env = dict(os.environ, PYTHON_DOTENV_DISABLED='1', AUTO_TRADE='false', PAPER_EXECUTION_SCOPE='disabled')
         child = subprocess.Popen([sys.executable, '-m', 'src.runtime.local_service',
             '--port', str(args.port), '--ui-dir', str(ui_dir), '--data-dir', str(data_dir)],
@@ -162,8 +243,9 @@ def main(argv=None):
         return child.returncode
     except KeyboardInterrupt:
         return 0
-    except (OSError, ValueError, RuntimeError, urllib.error.URLError):
-        print('Avvio/arresto non riuscito. Verifica build, directory e istanza locale; nessun ordine inviato.', file=sys.stderr)
+    except (OSError, ValueError, RuntimeError, urllib.error.URLError, portalocker.LockException) as error:
+        phase = 'stop' if args.stop else 'start'
+        print(f'Avvio/arresto non riuscito ({phase}/{type(error).__name__}). Verifica build, directory e istanza locale; nessun ordine inviato.', file=sys.stderr)
         return 1
     finally:
         if child is not None:
@@ -174,6 +256,8 @@ def main(argv=None):
                     control.unlink()  # Only this launcher's generated control record.
             except (OSError, ValueError, RuntimeError):
                 pass
+        if ownership is not None:
+            ownership.__exit__(None, None, None)
 
 
 def _interrupt(*_):

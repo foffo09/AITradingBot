@@ -32,8 +32,9 @@ def test_stdin_eof_requests_exit():
 import pytest
 
 
+@pytest.mark.parametrize('platform_name', ['darwin', 'win32'])
 @pytest.mark.parametrize('frozen', [False, True])
-def test_readiness_reports_actual_pid_and_native_supervisor_only(monkeypatch, capsys, frozen):
+def test_readiness_reports_actual_pid_and_native_supervisor_only(monkeypatch, capsys, frozen, platform_name):
     import asyncio
     import json
     from types import SimpleNamespace
@@ -41,7 +42,7 @@ def test_readiness_reports_actual_pid_and_native_supervisor_only(monkeypatch, ca
     async def started(server, sockets=None):
         server.started = True
     monkeypatch.setattr(local_service.uvicorn.Server, 'startup', started)
-    monkeypatch.setattr(local_service.sys, 'frozen', frozen, raising=False)
+    monkeypatch.setattr(local_service, 'sys', SimpleNamespace(frozen=frozen, platform=platform_name))
     monkeypatch.setattr(local_service.os, 'getpid', lambda: 101)
     monkeypatch.setattr(local_service.os, 'getppid', lambda: 99)
     server = object.__new__(local_service.LocalServer)
@@ -53,5 +54,5 @@ def test_readiness_reports_actual_pid_and_native_supervisor_only(monkeypatch, ca
     asyncio.run(server.startup(sockets=[sock]))
     readiness = json.loads(capsys.readouterr().out)
     assert readiness['pid'] == 101
-    assert readiness['supervisor_pid'] == (99 if frozen else None)
+    assert readiness['supervisor_pid'] == (99 if frozen or platform_name == 'win32' else None)
     assert readiness['instance_id'] == 'public-instance'

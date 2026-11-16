@@ -292,3 +292,34 @@ def test_reset_requires_new_explicit_account_parameters(tmp_path):
     )
     assert ledger.history() == []
     assert ledger.account()["cash"] == pytest.approx(90)
+
+
+def test_idempotency_key_rejects_a_different_payload(tmp_path):
+    ledger = make_ledger(tmp_path / "payload.sqlite3")
+    buy(ledger, quantity=0.1, idempotency_key='one-intent')
+    with pytest.raises(ValueError, match='different'):
+        buy(ledger, quantity=0.2, idempotency_key='one-intent')
+
+
+def test_daily_realized_pnl_uses_only_utc_closes(tmp_path):
+    ledger = make_ledger(tmp_path / 'daily.sqlite3')
+    assert ledger.summary(0, 0)['daily_realized_pnl'] == 0
+    buy(ledger)
+    closed = ledger.sell(symbol='AAPL', quantity=1, market_price=55, commission_bps=0, slippage_bps=0,
+        data_timestamp=datetime.now(timezone.utc).isoformat(), data_source='test feed', reason='close')
+    summary = ledger.summary(0, 0)
+    assert summary['daily_realized_pnl'] == pytest.approx(closed['net_pnl'])
+    assert summary['pnl_timezone'] == 'UTC'
+    with ledger._connect() as db:
+        db.execute("UPDATE closes SET closed_at='2000-01-01T00:00:00+00:00'")
+    assert ledger.summary(0, 0)['daily_realized_pnl'] == 0
+
+
+def test_concurrent_ledger_requests_with_same_key_commit_once(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    ledger = make_ledger(tmp_path / 'concurrent.sqlite3')
+    other = SimulationLedger(ledger.database_path)
+    with ThreadPoolExecutor(2) as pool:
+        results = list(pool.map(lambda item: buy(item, quantity=0.1), [ledger, other]))
+    assert sorted(result['duplicate'] for result in results) == [False, True]
+    assert ledger.positions()[0]['quantity'] == pytest.approx(0.1)
