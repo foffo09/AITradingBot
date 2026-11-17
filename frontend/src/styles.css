@@ -408,9 +408,17 @@ main {
   font-weight: 400;
   margin-left: 4px;
 }
+.analysis-layout, .analysis-layout label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.analysis-layout { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.analysis-layout input { width: 160px; accent-color: var(--accent); }
+.analysis-layout output { min-width: 3em; }
 .analysis-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2.15fr) minmax(270px, 1fr);
+  grid-template-columns: minmax(0, var(--analysis-main, 2.15fr)) minmax(270px, var(--analysis-side, 1fr));
   gap: 20px;
   align-items: start;
 }
@@ -726,10 +734,11 @@ footer {
 }
 @media (min-width: 1550px) {
   .analysis-grid {
-    grid-template-columns: minmax(0, 3fr) minmax(300px, 1fr);
+    grid-template-columns: minmax(0, var(--analysis-main, 3fr)) minmax(300px, var(--analysis-side, 1fr));
   }
 }
 @media (max-width: 1200px) {
+  .analysis-layout { display: none; }
   .sidebar {
     width: 190px;
   }

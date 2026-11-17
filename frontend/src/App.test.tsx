@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import App from "./App";
@@ -517,4 +517,37 @@ it('mantiene il motivo NO_TRADE del gate senza inventare una scadenza', async ()
   render(<App/>);
   expect(await screen.findByText('Synthetic data blocked by operational gate.')).toBeInTheDocument();
   expect(screen.queryByText('Proposta scaduta: richiedi un aggiornamento.')).not.toBeInTheDocument();
+});
+
+
+describe("pannelli analisi ridimensionabili", () => {
+  it("salva la ripartizione senza richieste finanziarie e la recupera al riavvio UI", async () => {
+    const first = render(<App />);
+    await screen.findByText("Paper non configurato");
+    const slider = screen.getByRole("slider", {name: "Larghezza relativa del grafico"});
+    expect(slider).toHaveAttribute("type", "range");
+    fireEvent.change(slider, {target: {value: "72"}});
+    expect(screen.getByRole("region", {name: "Analisi di mercato"})).toHaveStyle({"--analysis-main": "72fr", "--analysis-side": "28fr"});
+    expect(localStorage.getItem("aitb-analysis-width")).toBe("72");
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    first.unmount();
+    render(<App />);
+    expect(screen.getByRole("slider", {name: "Larghezza relativa del grafico"})).toHaveValue("72");
+  });
+
+  it.each(["NaN", "Infinity", "", "9", "99", "70px"])("ignora una preferenza invalida: %s", (value) => {
+    localStorage.setItem("aitb-analysis-width", value);
+    render(<App />);
+    expect(screen.getByRole("slider", {name: "Larghezza relativa del grafico"})).toHaveValue("68");
+  });
+
+  it("resta utilizzabile quando lo storage delle preferenze è indisponibile", async () => {
+    const denied = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {throw new Error("Storage denied");});
+    try {
+      render(<App />);
+      await screen.findByText("Paper non configurato");
+      fireEvent.change(screen.getByRole("slider", {name: "Larghezza relativa del grafico"}), {target:{value:"60"}});
+      expect(screen.getByRole("region", {name: "Analisi di mercato"})).toHaveStyle({"--analysis-main":"60fr"});
+    } finally {denied.mockRestore();}
+  });
 });

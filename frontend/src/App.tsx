@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useState,
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -626,6 +627,10 @@ export default function App() {
         ? "compact"
         : "comfortable",
     );
+  const [analysisShare, setAnalysisShare] = useState(() => {
+    const value = Number(saved("aitb-analysis-width", "68"));
+    return Number.isInteger(value) && value >= 50 && value <= 75 ? value : 68;
+  });
   const [state, setState] = useState<State | null>(null),
     [market, setMarket] = useState<Market | null>(null),
     [proposal, setProposal] = useState<Proposal | null>(null),
@@ -654,6 +659,9 @@ export default function App() {
     document.documentElement.dataset.density = density;
     persist("aitb-density", density);
   }, [density]);
+  useEffect(() => {
+    persist("aitb-analysis-width", String(analysisShare));
+  }, [analysisShare]);
   useEffect(() => {
     const controller = new AbortController();
     let active = true, inFlight = false;
@@ -955,10 +963,22 @@ export default function App() {
                 <Metric label="Slippage sostenuto" value={account?.slippage} unit={accountCurrency} />
                 <Metric label="Spread sostenuto" value={account?.spread} unit={accountCurrency} />
               </div>
-              <div className="analysis-grid">
+              <div className="analysis-layout">
+                <label>
+                  Larghezza relativa del grafico
+                  <input type="range" min="50" max="75" step="1" value={analysisShare}
+                    onChange={event => {
+                      const value = Number(event.target.value);
+                      if (Number.isInteger(value) && value >= 50 && value <= 75) setAnalysisShare(value);
+                    }} />
+                </label>
+                <output>{analysisShare}%</output>
+              </div>
+              <section className="analysis-grid" aria-label="Analisi di mercato"
+                style={{"--analysis-main": `${analysisShare}fr`, "--analysis-side": `${100-analysisShare}fr`} as CSSProperties}>
                 {chart}
                 <ProposalPanel proposal={proposal} error={errors.proposal} />
-              </div>
+              </section>
               <section className="panel">
                 <div className="panel-heading">
                   <h2>Posizioni del contesto</h2>
