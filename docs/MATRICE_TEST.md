@@ -1,5 +1,21 @@
 # Matrice dei test e dell'evidenza
 
+## Esito infrastruttura CI — successivo alla fotografia15:35UTC
+
+Tentativo1 del run44113161618: tre jobSUCCESS;local-appMac CANCELLED prima
+che un runner fosse assegnato. Run globaleFAILURE. Annotazione GitHub:
+"The job was not acquired by Runner of type hosted even after multiple attempts";
+segnalata capacità limitata dei runner macOSarm64. Non è un fallimento di
+compilazione/test: nessuno step di quel job è partito. Avviato soltanto il
+retry di quel job sullo stesso SHA codicee06d29f, tentativo2 in coda nella
+verifica15:39UTC. Nessuna alterazione workflow/runner/protezioni, nessun4/4
+attribuito. Build/sidecar/smokeMac locali giàPASS; testMacCI989PASS/1skip e
+Windows990PASS, packagingWindowsPASS confermati dai log del tentativo1.
+Il link canonico del run mostra l'eventuale esito successivo; stato remoto
+ancora parziale per disponibilità infrastruttura, non sostituito da un vecchio
+run verde. Questo commit resta solo documentazione, runtime identico a e06d29f.
+
+
 ## Evidenza remota della consegna — 17 novembre
 
 Codice verificato/pubblicato: e06d29f68fb0dc2292c7b485fd1a6ec81d931837.

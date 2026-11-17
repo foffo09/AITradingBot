@@ -154,6 +154,8 @@ Nessun branch owner o main modificato; stessa consegna e stesso branch dedicato.
 - [x] Test RED per preferenze durevoli/16route/protezioni.
 - [x] API e client/ui, suite989PASS/1skip,frontend51PASS,review race corretta.
 - [x] Commit/push follow-up e NotionP4; nuovaCI sullo SHA codicee06d29f.
-- [ ] Soloesito esterno:local-appMacQUEUED;altri3jobSUCCESS,logletti.
+- [ ] Soloesito esterno:local-appMacCANCELLEDtentativo1 senza runner;
+  annotazioneGitHub capacitàARM insufficiente.Retrysingolojobtentativo2QUEUED.
+  Altri3jobSUCCESS,logletti;non4/4.
   Windows990/Mac989+skip,frontend51/Rust3suWindows;Maclocale giàPASS.
   Nessuna release o verificaWindows11/MT5autentico dichiarata.
