@@ -1,5 +1,30 @@
 # Audit e integrazione applicazione locale — 16 novembre 2026
 
+## Evidenza remota della consegna — 17 novembre
+
+Codice verificato/pubblicato: e06d29f68fb0dc2292c7b485fd1a6ec81d931837.
+Run: https://github.com/foffo09/AITradingBot/actions/runs/44113161618
+Log dei tre job conclusi letti via API GitHub, non dedotti dal solo badge:
+- Windows Server2025 AMD64/Python3.11.9:152miratiPASS6.05s;
+  990completiPASS/0skip/1warning181.93s; guard0/0, Proactor eseguito,
+  compileall/pipcheck/diffcheckPASS.
+- macOS26.7.2 arm64/Python3.11.9:152miratiPASS4.00s;
+  989completiPASS/1skipProactor/1warning120.05s; guard0/0,
+  compileall/pipcheck/diffcheckPASS.
+- local-appWindows:51frontendPASS,3RustPASS5.80s;lint/TypeScript/build,
+  smokeHTTP sorgente/frozen, wrapperPowerShell vero e NSIS unsigned
+  install/smoke/uninstallPASS. Retention sentinella separata non prova app-data
+  personale/upgrade/GUIWindows11; nessuna pubblicazione installer.
+- local-appMac è ancora QUEUED nella fotografia15:35UTC: non dichiarato4/4.
+  Build/smokeMac locali sullo stesso codice giàPASS; il run remoto resta
+  consultabile per il suo esito successivo. Nessun cambio runner/protezioni.
+
+Questa chiusura modifica solo documentazione: il tree runtime/test/manifest
+resta quello del commit e06d29f. Nessuna suite ripetuta per attribuire al testo
+un nuovo risultato runtime. NotionP4 aggiornato, storico conservato; Hub/P1–P3
+senza editor e Guide accesso negato. Gate5/13 invariati, releaseBLOCCATA.
+
+
 ## Follow-up dopo 3c52188 — preferenze durevoli
 
 Difetto concreto: localStorage per origine perde tema/densità/pannelli quando

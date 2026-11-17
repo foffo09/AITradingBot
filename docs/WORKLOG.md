@@ -1,5 +1,14 @@
 # Registro del lavoro
 
+## Chiusura remota — 17 novembre
+
+Push codicee06d29f riuscito. CI44113161618:Windows990PASS,Mac989PASS/1skip;
+local-appWindowsPASS,51frontend/3Rust e wrapper/NSIS. Logletti;local-appMac
+ancoraQUEUED15:35UTC,non dichiarato4/4. Maclocale build/smokePASS.
+NotionP4 aggiornato;Hub/P1–P3/Guide limitati. Follow-up solo documentale,
+nessun runtime/test/manifest cambiato dopo e06d29f. Main/PR7/8 invariati.
+
+
 ## 17 novembre — chiusura preferenze durevoli nel branch master
 
 Dopo tre commit iniziali pubblicati, individuato limite di localStorage su porta

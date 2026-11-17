@@ -122,7 +122,7 @@ Piano (nessuna nuova libreria):
   test offline e percorsi temporanei; niente migrazioni o restore di dati personali.
 - [x] Suite Python completa/mirata/compileall/pipcheck, npm lint/typecheck/test/build,
   Rust/Tauri e smoke source/frozen sul Mac. Review finale, audit dipendenze e diff.
-- [ ] Aggiornare gli stessi handoff/docs/Notion, commit atomici e push soltanto
+- [x] Aggiornare gli stessi handoff/docs/Notion, commit atomici e push soltanto
   ramo master nuovo dopo controllo remoto. Nessun merge PR7/8 o pubblicazione release.
 
 Scelta: mantenere gli envelope v1 e i record provider estensibili JSON-safe,
@@ -153,4 +153,7 @@ e accorpate. Test riavvio su porta diversa e richieste senza autorità/aliasfile
 Nessun branch owner o main modificato; stessa consegna e stesso branch dedicato.
 - [x] Test RED per preferenze durevoli/16route/protezioni.
 - [x] API e client/ui, suite989PASS/1skip,frontend51PASS,review race corretta.
-- [ ] Commit/push follow-up, nuova CI sullo SHA pubblicato e Notion finale.
+- [x] Commit/push follow-up e NotionP4; nuovaCI sullo SHA codicee06d29f.
+- [ ] Soloesito esterno:local-appMacQUEUED;altri3jobSUCCESS,logletti.
+  Windows990/Mac989+skip,frontend51/Rust3suWindows;Maclocale giàPASS.
+  Nessuna release o verificaWindows11/MT5autentico dichiarata.
