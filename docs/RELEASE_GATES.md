@@ -11,8 +11,8 @@ scritto. Pubblicazione del solo branch autorizzata; release e merge restano viet
 | Gate | Stato reale | Evidenza e limite |
 | --- | --- | --- |
 |1Codice|COMPLETATA|Correzioni autorizzate, review indipendente e suite verde; non garanzia di assenza di ogni bug|
-|2Backend|COMPLETATA|14responsemodel,57APItest,source/frozenHTTP; provider autentici esclusi|
-|3Frontend|COMPLETATA|42test,lint/typecheck/build,range/browser390px e TauriMac privata|
+|2Backend|COMPLETATA|16responsemodel,77APItest,source/frozenHTTP; provider autentici esclusi|
+|3Frontend|COMPLETATA|51test,lint/typecheck/build,range/browser390px e TauriMac privata|
 |4Integrazione|COMPLETATA|UI/API/motore/sidecar verificati localmente con contesti isolati|
 |5Sicurezza|PARZIALMENTE COMPLETATA|Guard0/0,patchreview,auditpip/npm0; non scan esaustivo o attestazione nativehang|
 |6Licenze|BLOCCATA|Licenza titolare e NOTICE/SBOM effettiva ancora incompleti|

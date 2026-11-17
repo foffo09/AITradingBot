@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -16,6 +17,7 @@ import {
   type Instrument,
   type Backtest,
   type RecordData,
+  type Preferences,
 } from "./api";
 import { instant, number, text } from "./format";
 import MarketChart from "./MarketChart";
@@ -619,10 +621,10 @@ export default function App() {
     [context, setContext] = useState<Context>("demo"),
     [symbol, setSymbol] = useState("AAPL"),
     [interval, setIntervalValue] = useState("1Day");
-  const [theme, setTheme] = useState(() =>
+  const [theme, setTheme] = useState<Preferences["theme"]>(() =>
       saved("aitb-theme", "dark") === "light" ? "light" : "dark",
     ),
-    [density, setDensity] = useState(() =>
+    [density, setDensity] = useState<Preferences["density"]>(() =>
       saved("aitb-density", "comfortable") === "compact"
         ? "compact"
         : "comfortable",
@@ -631,6 +633,40 @@ export default function App() {
     const value = Number(saved("aitb-analysis-width", "68"));
     return Number.isInteger(value) && value >= 50 && value <= 75 ? value : 68;
   });
+  const currentPreferences = useRef<Preferences>({theme, density, analysis_width:analysisShare});
+  const preferencesLoaded = useRef(false),
+    preferencesSaving = useRef(false), preferencesAlive = useRef(true),
+    pendingPreferences = useRef<Preferences | null>(null);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
+  useEffect(() => {
+    preferencesAlive.current = true;
+    return () => {preferencesAlive.current = false; pendingPreferences.current = null;};
+  }, []);
+  const changePreferences = (change: Partial<Preferences>) => {
+    if (!preferencesReady) return;
+    const next = {...currentPreferences.current, ...change};
+    currentPreferences.current = next;
+    setTheme(next.theme); setDensity(next.density); setAnalysisShare(next.analysis_width);
+    pendingPreferences.current = next;
+    const flush = async () => {
+      if (preferencesSaving.current) return;
+      preferencesSaving.current = true;
+      try {
+        while (pendingPreferences.current && preferencesAlive.current) {
+          const values = pendingPreferences.current;
+          pendingPreferences.current = null;
+          try {
+            await api.savePreferences(values);
+            if (preferencesAlive.current) setPreferenceError(null);
+          } catch {
+            if (preferencesAlive.current) setPreferenceError("Preferenze non salvate nel servizio locale; modifica attiva solo in questa sessione.");
+          }
+        }
+      } finally {preferencesSaving.current = false;}
+    };
+    void flush();
+  };
   const [state, setState] = useState<State | null>(null),
     [market, setMarket] = useState<Market | null>(null),
     [proposal, setProposal] = useState<Proposal | null>(null),
@@ -680,6 +716,22 @@ export default function App() {
         }
         inFlight = false;
         return;
+      }
+      if (!preferencesLoaded.current) {
+        preferencesLoaded.current = true;
+        void api.preferences(controller.signal).then(values => {
+          if (!active) {preferencesLoaded.current = false; return;}
+          if (values) {
+            currentPreferences.current = values;
+            setTheme(values.theme); setDensity(values.density); setAnalysisShare(values.analysis_width);
+          }
+          setPreferenceError(null);
+          setPreferencesReady(true);
+        }).catch(() => {
+          if (!active) {preferencesLoaded.current = false; return;}
+          setPreferencesReady(true);
+          setPreferenceError("Preferenze del servizio locale non disponibili; ricarica per riprovare.");
+        });
       }
       const results = await Promise.allSettled([
         api.state(context, controller.signal),
@@ -916,6 +968,7 @@ export default function App() {
           {errors.session && <ErrorNote>{errors.session}</ErrorNote>}
           {errors.state && <ErrorNote>{errors.state}</ErrorNote>}
           {errors.instruments && <ErrorNote>{errors.instruments}</ErrorNote>}
+          {preferenceError && <ErrorNote>{preferenceError}</ErrorNote>}
           <div className="connection-status" role="status">
             <span>
               {state?.connection.reason ??
@@ -966,10 +1019,10 @@ export default function App() {
               <div className="analysis-layout">
                 <label>
                   Larghezza relativa del grafico
-                  <input type="range" min="50" max="75" step="1" value={analysisShare}
+                  <input type="range" disabled={!preferencesReady} min="50" max="75" step="1" value={analysisShare}
                     onChange={event => {
                       const value = Number(event.target.value);
-                      if (Number.isInteger(value) && value >= 50 && value <= 75) setAnalysisShare(value);
+                      if (Number.isInteger(value) && value >= 50 && value <= 75) changePreferences({analysis_width:value});
                     }} />
                 </label>
                 <output>{analysisShare}%</output>
@@ -1098,8 +1151,9 @@ export default function App() {
               <label>
                 Tema
                 <select
+                  disabled={!preferencesReady}
                   value={theme}
-                  onChange={(e) => setTheme(e.target.value)}
+                  onChange={(e) => {const value=e.target.value; if (value === "dark" || value === "light") changePreferences({theme:value});}}
                 >
                   <option value="dark">Scuro</option>
                   <option value="light">Chiaro</option>
@@ -1108,15 +1162,16 @@ export default function App() {
               <label>
                 Densità del layout
                 <select
+                  disabled={!preferencesReady}
                   value={density}
-                  onChange={(e) => setDensity(e.target.value)}
+                  onChange={(e) => {const value=e.target.value; if (value === "comfortable" || value === "compact") changePreferences({density:value});}}
                 >
                   <option value="comfortable">Comoda</option>
                   <option value="compact">Compatta</option>
                 </select>
               </label>
               <p>
-                Le preferenze sono salvate solo su questo dispositivo. Nessuna
+                Le sole preferenze grafiche sono salvate dal servizio locale su questo dispositivo, anche se cambia la porta. Nessuna
                 credenziale viene conservata qui.
               </p>
               <div className="notice">

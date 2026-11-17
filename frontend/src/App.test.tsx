@@ -59,6 +59,16 @@ beforeEach(() => {
         ),
       ),
   );
+  const fallback = fetcher.getMockImplementation()!;
+  let preferences = {theme:'dark', density:'comfortable', analysis_width:68};
+  let stored = false;
+  fetcher.mockImplementation(async (url:string, init?:RequestInit) => {
+    if (url.includes('/preferences')) {
+      if (init?.method === 'POST') {preferences=JSON.parse(String(init.body)); stored=true;}
+      return new Response(JSON.stringify({api_version:'1',preferences,stored}));
+    }
+    return fallback(url,init);
+  });
 });
 describe("terminale senza dati inventati", () => {
   it("mostra provenienza sintetica, N/D e automazione ferma", async () => {
@@ -529,7 +539,7 @@ describe("pannelli analisi ridimensionabili", () => {
     fireEvent.change(slider, {target: {value: "72"}});
     expect(screen.getByRole("region", {name: "Analisi di mercato"})).toHaveStyle({"--analysis-main": "72fr", "--analysis-side": "28fr"});
     expect(localStorage.getItem("aitb-analysis-width")).toBe("72");
-    expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST").every(([url]) => String(url).includes("/preferences"))).toBe(true);
     first.unmount();
     render(<App />);
     expect(screen.getByRole("slider", {name: "Larghezza relativa del grafico"})).toHaveValue("72");
@@ -549,5 +559,73 @@ describe("pannelli analisi ridimensionabili", () => {
       fireEvent.change(screen.getByRole("slider", {name: "Larghezza relativa del grafico"}), {target:{value:"60"}});
       expect(screen.getByRole("region", {name: "Analisi di mercato"})).toHaveStyle({"--analysis-main":"60fr"});
     } finally {denied.mockRestore();}
+  });
+});
+
+describe("preferenze durevoli del backend", () => {
+  it("attende il caricamento prima di salvare senza perdere le altre preferenze", async () => {
+    const base=fetcher.getMockImplementation()!;
+    let release: (response:Response)=>void = () => {};
+    fetcher.mockImplementation(async (url:string,init?:RequestInit)=>url.includes('/preferences') && init?.method !== 'POST'
+      ? new Promise<Response>(resolve=>{release=resolve;}) : base(url,init));
+    render(<App />);
+    await screen.findByText('Paper non configurato');
+    expect(screen.getByRole('slider',{name:'Larghezza relativa del grafico'})).toBeDisabled();
+    release(new Response(JSON.stringify({api_version:'1',stored:true,preferences:{theme:'light',density:'compact',analysis_width:71}})));
+    await waitFor(()=>expect(screen.getByRole('slider',{name:'Larghezza relativa del grafico'})).toBeEnabled());
+    fireEvent.change(screen.getByRole('slider',{name:'Larghezza relativa del grafico'}),{target:{value:'72'}});
+    await waitFor(()=>expect(fetcher.mock.calls.some(([,init])=>init?.method==='POST')).toBe(true));
+    const write=fetcher.mock.calls.find(([,init])=>init?.method==='POST')!;
+    expect(JSON.parse(String(write[1]?.body))).toEqual({theme:'light',density:'compact',analysis_width:72});
+  });
+
+  it("recupera le preferenze senza dipendere dallo storage della porta e senza POST all'avvio", async () => {
+    const base = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url: string, init?: RequestInit) => url.includes('/preferences')
+      ? new Response(JSON.stringify({api_version:'1', stored:true, preferences:{theme:'light',density:'compact',analysis_width:71}}))
+      : base(url, init));
+    render(<App />);
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'));
+    expect(document.documentElement.dataset.density).toBe('compact');
+    expect(screen.getByRole('slider', {name:'Larghezza relativa del grafico'})).toHaveValue('71');
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  });
+
+  it("serializza e accorpa le modifiche mentre una scrittura è in corso", async () => {
+    const base = fetcher.getMockImplementation()!;
+    const writes: Record<string, unknown>[] = [];
+    let release: (r:Response) => void = () => {};
+    fetcher.mockImplementation(async (url:string, init?:RequestInit) => {
+      if (url.includes('/preferences') && init?.method === 'POST') {
+        const preferences=JSON.parse(String(init.body));
+        writes.push(preferences);
+        if (writes.length === 1) return new Promise<Response>(resolve => {release=resolve;});
+        return new Response(JSON.stringify({api_version:'1',preferences,stored:true}));
+      }
+      return base(url,init);
+    });
+    render(<App />);
+    await screen.findByText('Paper non configurato');
+    const slider=screen.getByRole('slider',{name:'Larghezza relativa del grafico'});
+    fireEvent.change(slider,{target:{value:'70'}});
+    fireEvent.change(slider,{target:{value:'71'}});
+    fireEvent.change(slider,{target:{value:'72'}});
+    await waitFor(()=>expect(writes).toHaveLength(1));
+    release(new Response(JSON.stringify({api_version:'1',preferences:writes[0],stored:true})));
+    await waitFor(()=>expect(writes).toHaveLength(2));
+    expect(writes[1]).toEqual({theme:'dark',density:'comfortable',analysis_width:72});
+    expect(fetcher.mock.calls.filter(([, init])=>init?.method==='POST').every(([url])=>String(url).includes('/preferences'))).toBe(true);
+  });
+
+  it("segnala la preferenza non salvata senza bloccare i dati o cambiare il capitale", async () => {
+    const base=fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url:string,init?:RequestInit)=>url.includes('/preferences') && init?.method==='POST'
+      ? new Response(JSON.stringify({detail:'Unavailable'}),{status:503}) : base(url,init));
+    render(<App />);
+    await screen.findByText('Paper non configurato');
+    fireEvent.change(screen.getByRole('slider',{name:'Larghezza relativa del grafico'}),{target:{value:'70'}});
+    expect(await screen.findByText(/Preferenze non salvate/)).toBeInTheDocument();
+    expect(screen.getByRole('slider',{name:'Larghezza relativa del grafico'})).toHaveValue('70');
+    expect(screen.getAllByText('N/D').length).toBeGreaterThan(0);
   });
 });

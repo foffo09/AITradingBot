@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+import json
+import tempfile
 import os
 from pathlib import Path
 import secrets
@@ -34,7 +36,7 @@ from src.strategy.engine import SignalProposal
 from src.api.schemas import (
     Context, LocalContext, Interval, ErrorResponse, HealthResponse, IdentityResponse,
     ShutdownResponse, StateResponse, InstrumentsResponse, MarketResponse,
-    TradeResponse, BacktestResponse, ProposalResponse,
+    TradeResponse, BacktestResponse, ProposalResponse, Preferences, PreferencesResponse,
 )
 Positive = Annotated[float, Field(gt=0, le=1e12, strict=True, allow_inf_nan=False)]
 COOKIE = 'aitradingbot_session'
@@ -158,6 +160,48 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     @app.exception_handler(OSError)
     async def storage_error(request, exc):
         return JSONResponse({'detail': 'Local storage unavailable; no account state was inferred.'}, status_code=503)
+
+    preferences_path = root / 'local-v1-ui-preferences.json'
+
+    def check_preferences_path():
+        if preferences_path.is_symlink() or (preferences_path.exists() and preferences_path.stat().st_nlink > 1):
+            raise HTTPException(409, 'UI preference aliases are not allowed.')
+
+    @app.get('/api/v1/preferences', response_model=PreferencesResponse)
+    def get_preferences():
+        with lock:
+            check_preferences_path()
+            stored = preferences_path.exists()
+            if not stored:
+                values = Preferences(theme='dark', density='comfortable', analysis_width=68)
+            else:
+                try:
+                    with preferences_path.open('rb') as file:
+                        raw = file.read(4097)
+                    if len(raw) > 4096:
+                        raise ValueError('Oversized preferences')
+                    values = Preferences.model_validate(json.loads(raw.decode('utf-8')))
+                except (ValueError, RecursionError):
+                    raise HTTPException(503, 'UI preferences unavailable; stored values were not reset.') from None
+            return {'api_version': '1', 'preferences': values, 'stored': stored}
+
+    @app.post('/api/v1/preferences', response_model=PreferencesResponse)
+    def save_preferences(body: Preferences):
+        with lock:
+            check_preferences_path()
+            root.mkdir(parents=True, exist_ok=True)
+            descriptor, name = tempfile.mkstemp(dir=root, prefix='ui-preferences-', suffix='.tmp')
+            temporary = Path(name)
+            try:
+                with os.fdopen(descriptor, 'w', encoding='utf-8') as file:
+                    json.dump(body.model_dump(), file, ensure_ascii=False)
+                    file.flush()
+                    os.fsync(file.fileno())
+                check_preferences_path()
+                os.replace(temporary, preferences_path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            return {'api_version': '1', 'preferences': body, 'stored': True}
 
     @app.get('/api/v1/health', response_model=HealthResponse)
     def health():

@@ -1,5 +1,20 @@
 # Dashboard — contratti di integrazione Persona 2
 
+## Preferenze indipendenti dalla porta — follow-up 17 novembre
+
+localStorage da solo era insufficiente: cambia origine quando il servizio
+riparte su una porta diversa. Tema, densità e larghezza ora sono caricati da
+`/api/v1/preferences` dopo sessione, senza scrivere all'avvio. I tre controlli
+restano disabilitati fino all'esito iniziale: la review ha riprodotto la perdita
+di preferenze non modificate con GET ritardata; test RED→GREEN ora copre il caso.
+POST espliciti serializzati, ultima modifica accorpata; nessun retry automatico.
+Errore visibile e modifica locale conservata; nessuna richiesta finanziaria.
+LocalStorage resta cache non autorevole se esiste il file validato dal servizio.
+Suite frontend51PASS. Browser reale:68→69, tema light/densità compact, servizio
+chiuso0 e nuova porta; tutti e tre i valori ripristinati, console errori vuota,
+nessun conto creato o automazione avviata. Entrambi i servizi temporanei chiusi0.
+
+
 ## Pannelli completati — missione master 17 novembre
 
 La lacuna pannelli della fotografia precedente è corretta nel branch dedicato

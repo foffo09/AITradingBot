@@ -1,4 +1,9 @@
 export type Context = "demo" | "simulation" | "paper" | "mt5";
+export interface Preferences {
+  theme: "dark" | "light";
+  density: "comfortable" | "compact";
+  analysis_width: number;
+}
 export type RecordData = Record<string, unknown>;
 export interface State {
   api_version: "1";
@@ -252,6 +257,14 @@ export function parseBacktest(value: unknown): Backtest {
     })),
   };
 }
+function parsePreferences(value: unknown): {preferences: Preferences; stored: boolean} {
+  const d = version(value), p = object(d.preferences);
+  if ((p.theme !== "dark" && p.theme !== "light") ||
+      (p.density !== "comfortable" && p.density !== "compact") ||
+      typeof p.analysis_width !== "number" || !Number.isInteger(p.analysis_width) ||
+      p.analysis_width < 50 || p.analysis_width > 75 || typeof d.stored !== "boolean") invalid();
+  return {preferences:{theme:p.theme as Preferences["theme"], density:p.density as Preferences["density"], analysis_width:p.analysis_width as number},stored:d.stored as boolean};
+}
 const query = (c: Context, symbol?: string, interval?: string) =>
   new URLSearchParams({
     context: c,
@@ -269,6 +282,12 @@ export function pendingTrade(c: Context): {symbol: string; side: string; quantit
   } catch { return null; }
 }
 export const api = {
+  preferences: async (signal?: AbortSignal) => {
+    const result = parsePreferences(await request("/preferences", {signal}));
+    return result.stored ? result.preferences : null;
+  },
+  savePreferences: async (preferences: Preferences) =>
+    parsePreferences(await request("/preferences", {method:"POST",body:JSON.stringify(preferences)})).preferences,
   session: async (signal?: AbortSignal) => {
     version(await request("/session", { signal }));
   },

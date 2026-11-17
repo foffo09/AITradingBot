@@ -1,5 +1,15 @@
 # Registro del lavoro
 
+## 17 novembre — chiusura preferenze durevoli nel branch master
+
+Dopo tre commit iniziali pubblicati, individuato limite di localStorage su porta
+dinamica. Correzione minima API/UI,18test backend,2schema e9frontend aggiuntivi.
+Review ha rilevato race caricamento/scrittura: RED→GREEN e controlli sospesi fino
+all'esito iniziale. Suite989PASS/1skip,frontend51PASS, guard0/0. Build/smokeMac
+ripetuti e riavvio browser su nuova porta provato con dati temporanei. Nessun
+branch owner/main modificato. CI finale e Notion riportati nella chiusura.
+
+
 ## Missione master — codice e QA, 17 novembre
 
 Nuovo worktree/branch agents/master-consolidation-20261117 dalla basea6d3f60,

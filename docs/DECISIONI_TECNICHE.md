@@ -1,5 +1,14 @@
 # Decisioni tecniche
 
+## 17 novembre — preferenze senza dipendenza dalla porta
+
+Persistire solo tre campi UI in JSON atomico validato, nessuna nuova dipendenza.
+Sessione/Origin/lock riusati. Non usare SQLite finanziario per queste preferenze.
+Controlli UI disabilitati durante GET iniziale, così una modifica non cancella
+campi durevoli ancora ignoti; scritture serializzate/accorpate. Nessun retry
+finanziario, reset silenzioso di file corrotto o salvataggio di credenziali.
+
+
 ## D17 — DTO di uscita e pannelli, missione 17 novembre
 
 Envelope APIv1 tipizzati con Pydantic senza cambiare endpoint o sblocco di ordini.

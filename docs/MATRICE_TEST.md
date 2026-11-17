@@ -1,5 +1,19 @@
 # Matrice dei test e dell'evidenza
 
+## Follow-up preferenze — risultati successivi alla prima pubblicazione
+
+- Python completo seriale:989PASS/1skipProactor/1warning40.64s; guard rete0,
+  credenziali0. API77PASS2.24s include18test preferenze e16route tipizzate.
+- Frontend51PASS: race GET sospesa riprodotta1FAIL/45PASS prima del fix,
+  poi46PASS;5casi parser invalidi aggiuntivi tuttiPASS.
+- Compileall,pipcheck,lint,typecheck,build,diffcheckPASS. PyInstaller/TauriMac
+  ricostruiti dopo il codice, sidecar bundle identico al binario finale.
+- Smoke HTTP source/frozenPASS; browser su due porte consecutive ripristina
+  light/compact/69, errori console[], child entrambi0, app-data temporanea.
+- GUI Tauri precedente documentata separatamente; nuova prova preferenze nel
+  browser e bundle ricostruito non equivalgono a nuovo collaudo GUIWindows11.
+
+
 ## Missione master 17 novembre — nuova verifica locale
 
 - Python completo seriale969PASS/1skipProactor/1warning39.33s,guard0/0;

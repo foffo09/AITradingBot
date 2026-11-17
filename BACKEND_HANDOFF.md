@@ -1,5 +1,20 @@
 # Backend e market data — consegna al coordinatore
 
+## Preferenze grafiche durevoli — follow-up 17 novembre
+
+API v1 ora espone 16 route tipizzate. GET/POST `/api/v1/preferences` usano
+session cookie, stesso Origin per POST e il lock locale esistente. Envelope:
+`{api_version:"1", preferences:{theme,density,analysis_width}, stored:boolean}`.
+Solo dark/light, comfortable/compact e intero50–75; campi extra/finanziari
+respinti422. GET senza file restituisce default68/storedfalse senza creare
+cartelle, conti o ledger; il client conserva la cache legacy. Il primo cambio
+esplicito salva soltanto queste tre preferenze. JSON UTF-8 in app-data, limite4KiB,
+file temporaneo chiuso/fsync e os.replace atomico, aliasfile409; corruzione503
+senza reset o payload. Errori di scrittura preservano il file precedente.
+Non è configurazione finanziaria, sincronizzazione multiprocesso o backup conti.
+18test nuovi +2schema route: gruppo API77PASS, rete/credenziali0/0.
+
+
 ## Consolidamento implementato — missione master 17 novembre
 
 Branch `agents/master-consolidation-20261117`, base `a6d3f60`. La lacuna output

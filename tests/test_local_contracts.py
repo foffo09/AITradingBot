@@ -19,6 +19,7 @@ def service(tmp_path):
 
 @pytest.mark.parametrize('method,path', [
     ('get', '/health'), ('get', '/session'), ('get', '/identity'),
+    ('get', '/preferences'), ('post', '/preferences'),
     ('post', '/shutdown'), ('get', '/state'), ('get', '/instruments'),
     ('get', '/market'), ('post', '/local-account'), ('post', '/local-trades'),
     ('post', '/backtest'), ('get', '/proposal'), ('post', '/automation'),

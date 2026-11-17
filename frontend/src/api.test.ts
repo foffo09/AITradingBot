@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { request, parseMarket, parseState, parseProposal } from "./api";
+import { api, request, parseMarket, parseState, parseProposal } from "./api";
 
 describe("confine HTTP locale", () => {
   it("include cookie e header anche nel bootstrap senza leggere token", async () => {
@@ -210,4 +210,18 @@ it('libera una richiesta dopo rifiuto definitivo, conserva 409 ambiguo', async (
   await expect(api.trade('demo','AAPL','buy',1)).rejects.toThrow();
   expect(localStorage.getItem('aitb-pending-trade-demo')).not.toBeNull();
   localStorage.clear();
+});
+
+
+describe("preferenze dal servizio", () => {
+  it.each([
+    {theme:"evil", density:"compact", analysis_width:60},
+    {theme:"dark", density:"compact", analysis_width:Infinity},
+    {theme:"dark", density:"compact", analysis_width:49},
+    {theme:"dark", density:"compact", analysis_width:60.5},
+    {theme:"dark", density:"evil", analysis_width:60},
+  ])("rifiuta preferenze non valide: %j", async preferences => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({api_version:"1",stored:true,preferences}))));
+    await expect(api.preferences()).rejects.toThrow();
+  });
 });

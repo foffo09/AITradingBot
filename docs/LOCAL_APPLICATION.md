@@ -1,5 +1,16 @@
 # Applicazione locale React / FastAPI / Tauri
 
+## Follow-up preferenze — 17 novembre
+
+Tema, densità e larghezza ora sopravvivono a riavvio con porta diversa tramite
+servizio locale, non soltanto alla ricarica del browser. Solo campi UI nel file
+locale-v1-ui-preferences.json; nessun conto o database viene creato leggendo
+preferenze. Errori visibili, niente reset automatico. Controlli inizialmente
+inattivi finché la lettura termina. Provato nel browser Mac su due porte con
+app-data temporanea: light/compact/69 ripristinati. Ripetere in copia Windows11
+isolata; il clone da solo non isola l'app-data del desktop.
+
+
 ## Collaudo della missione master del 17 novembre
 
 Il branch di consegna è agents/master-consolidation-20261117, sopra a6d3f60/PR8;

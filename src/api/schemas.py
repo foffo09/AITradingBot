@@ -226,3 +226,14 @@ class ProposalResponse(Versioned):
                 'target_distance', 'reward_risk', 'net_reward_risk', 'quantity', 'risk_amount')):
             raise ValueError('Complete positive proposal values are required')
         return self
+
+
+class Preferences(Output):
+    theme: Literal['dark', 'light']
+    density: Literal['comfortable', 'compact']
+    analysis_width: Annotated[int, Field(ge=50, le=75)]
+
+
+class PreferencesResponse(Versioned):
+    preferences: Preferences
+    stored: bool

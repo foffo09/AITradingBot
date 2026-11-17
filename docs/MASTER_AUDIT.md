@@ -1,5 +1,24 @@
 # Audit e integrazione applicazione locale — 16 novembre 2026
 
+## Follow-up dopo 3c52188 — preferenze durevoli
+
+Difetto concreto: localStorage per origine perde tema/densità/pannelli quando
+cambia porta al riavvio. Aggiunti due endpoint protetti con sole preferenze UI,
+JSON atomico limitato/validato e senza creazione di conti in lettura. Nessuna
+modifica rischio, motore, broker, ledger o dipendenze. Nuovo file test_ui_preferences.
+Review indipendente ha trovato race di hydration: cambio anticipato sovrascrive
+altre preferenze. Riprodotta RED e corretta disabilitando i tre controlli fino
+all'esito del GET. Nessun test esistente eliminato o soglia indebolita.
+
+Risultato successivo: Python989PASS/1skip/1warning40.64s, API77PASS2.24s,
+frontend51PASS. Guard0/0; compileall,pipcheck,lint,typecheck/build/diffcheckPASS.
+PyInstaller/TauriMac51.44MiB ricostruiti; sidecar del bundle confrontato byte
+per byte. Source/frozenHTTPPASS. Browser reale su due porte conserva69/light/
+compact, console errori[], nessun conto/automazione e servizi chiusi0. Il
+precedente collaudo Tauri nativo resta attribuito al codice prima del follow-up;
+non si dichiara una nuova verifica GUIWindows11 o MT5. Gate13 invariati.
+
+
 ## Missione master eseguita — 17 novembre, consolidamento codice
 
 Nuovo mandato autorizza completamento, commit e push sul solo branch dedicato.

@@ -138,3 +138,19 @@ source/frozen/TauriMacPASS. Reviewdue rilievi riprodotti e corretti,nessun test
 preesistente eliminato. Timeoutlegacy concorrenti riportati e serialeverde.
 NativeMacprivata verificata; riaperturaAX dopoquit chiusa immediatamente,
 nessun processo residuo e nessuna azione finanziaria. Nuovi13gate inRELEASE_GATES.
+
+
+## Follow-up persistente: preferenze e porta dinamica
+
+Dopo la prima pubblicazione3c52188, rilevata lacuna condivisa: localStorage è
+separato per origine/porta, quindi reload funziona ma riavvio del servizio su
+porta diversa può perdere tema/densità/larghezza. Il requisito persistenza
+impostazioni del nuovo mandato richiede correzione, non una nuova strategia.
+Scelta: sole tre preferenze UI in JSON atomico validato nell'app-data, GET senza
+scritture/POST esplicito autenticato, nessun dato finanziario o segreto. UI legge
+una volta dopo bootstrap e salva solo dopo interazione, scritture serializzate
+e accorpate. Test riavvio su porta diversa e richieste senza autorità/aliasfile.
+Nessun branch owner o main modificato; stessa consegna e stesso branch dedicato.
+- [x] Test RED per preferenze durevoli/16route/protezioni.
+- [x] API e client/ui, suite989PASS/1skip,frontend51PASS,review race corretta.
+- [ ] Commit/push follow-up, nuova CI sullo SHA pubblicato e Notion finale.

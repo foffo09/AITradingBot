@@ -1,5 +1,15 @@
 # Architettura applicativa — decisioni QA per browser e desktop
 
+## Persistenza UI — 17 novembre, follow-up
+
+Il file locale-v1-ui-preferences.json vive nello stesso app-data esplicito del
+servizio, separato dai ledger e contiene solo tema/densità/larghezza. GET è
+senza effetti collaterali; POST protetto, schema chiuso e sostituzione atomica.
+Il browser non considera localStorage durevole tra porte. Nessuna migrazione
+DB, formula finanziaria o autorità broker aggiunta. Per contratti ed errori
+vedere BACKEND_HANDOFF; comportamento UI in DASHBOARD_HANDOFF.
+
+
 ## Consolidamento del contratto v1 — missione 17 novembre
 
 Schemas Pydantic di risposta aggiunti tra servizi e consumerReact; SDKnormalizzato
