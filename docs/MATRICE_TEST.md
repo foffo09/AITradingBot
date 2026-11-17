@@ -1,5 +1,45 @@
 # Matrice dei test e dell'evidenza
 
+## Missione master 17 novembre — nuova verifica locale
+
+- Python completo seriale969PASS/1skipProactor/1warning39.33s,guard0/0;
+  API57PASS2.19s, frontend42PASS, Rust3PASS3.05s.
+- Compileall/pipcheck/lint/typecheck/build/diffcheckPASS; source/frozenHTTP e
+  Tauri.app51.44MiB costruiti sul Mac. Nessun PASS trasferito a Windows11.
+-4timeoutAppTest15s durante esecuzioni concorrenti, elencati in MASTER_AUDIT;
+ 9casi interessatiPASS5.96s e suite serialePASS senza alterazioni dei test.
+- Nuovi28casi test_local_contracts:14routeOpenAPI,4snapshotmalformati,indicatori,
+  idempotenzadopofill,SDKJSON,BUYSELLincompleti,equitynull,Paperincompleto,
+ 2shapecomplete. Review ha riprodotto5RED aggiuntivi prima delle correzioni.
+-8casiApp.test nuovi: preferenza/persistenza,noPOST,6valori corrotti e storage
+  negato. Browserreale puntatore/tastiera/reload/390px/console[]PASS.
+- Backup/ripristino/integrità e isolamento provati ad hoc con SQLite temporaneo
+  e modelloledger esistente; non test di disinstallazione/retention personale.
+- CI nuova: consultare run sullo SHA pubblicato del branch master, mai dedurre
+  da queste proveMac un risultato Windows. Broker/MT5autentici non eseguiti.
+
+
+## Rilettura delle prove sul candidato a6d3f60 — 17 novembre 2026
+
+I risultati seguenti sono run già eseguiti sullo stesso SHA, ricontrollati senza
+riavviarli inutilmente. Owner QA P4; mock e dati temporanei, nessuna credenziale.
+Le sei prove manuali W11 del piano E2E sono BLOCKED, non eseguite sul Mac.
+
+| ID / descrizione | OS / SHA | Prerequisiti e comando effettivo | Atteso | Effettivo / evidenza / stato |
+| --- | --- | --- | --- | --- |
+| R17-PY-WIN: regressioni offline | Windows Server2025/Python3.11.9, a6d3f60 | Venv CI senza segreti; `python -m pytest -q -rs --junitxml=windows-test-results.xml` | Nessun fail, skip Proactor vietato, guard0/0 | 942PASS/0skip/1warning134.48s; run43976031716/job133680126181, **PASS** |
+| R17-PY-MAC: regressioni offline | macOS CI/Python3.11.9, a6d3f60 | Venv CI; `python -m pytest -q -rs --junitxml=macos-test-results.xml` | Nessun fail, solo skip OS previsto, guard0/0 | 941PASS/1skip/1warning117.66s; stesso run/job133680125993, **PASS** |
+| R17-APP: componenti/build/smoke | Runner Windows/macOS, a6d3f60 | `npm ci`, lint/typecheck/test/build; `cargo test --locked --manifest-path src-tauri/Cargo.toml`; smoke source/frozen e build del workflow | Componenti e artifact nativi funzionanti nel perimetro CI | Frontend34/Rust3 ciascuno, build/smoke PASS; job133680126056/133680125535, **PASS** |
+| R17-NSIS: installer CI | Windows Server2025, a6d3f60 | Build NSIS unsigned; `scripts/check_windows_installer.ps1` | Risorse installate, UI/sidecar HTTP smoke, uninstall e sentinella esterna intatta | Stringa NSIS PASS nei log del job Windows; **PASS** limitato, nessuna prova retention app-data reale |
+| R17-LOCAL: suite Mac privata | macOS27.2.1arm64/Python3.11.18, candidato a6d3f60 | `python -m pytest -q`; gruppo mirato esistente | Nessun fail, guard0/0 | Log locali:941PASS/1skip/1warning38.61s; mirati160PASS4.82s; **PASS** |
+| R17-LIC: integrità inventario | Mac, manifest a6d3f60 | Metadata ambiente/npm lock/Cargo metadata, lettura soli testi legali | Identità uniche, lock Cargo coerente, nessun percorso personale | 819 record unici; hash manifest/testi; assert passate; **PASS** raccolta, licenze distribuibili ancora BLOCKED |
+
+Link run: https://github.com/foffo09/AITradingBot/actions/runs/43976031716.
+Compilazione e pip check nello stesso run riusciti; nessun nuovo test applicativo
+aggiunto o rimosso dalla presente revisione documentale. Il warning noto è
+`websockets.legacy`; lo skip Mac è Windows Proactor. I documenti nuovi sono
+controllati separatamente, senza attribuirgli una nuova esecuzione di pytest.
+
 Legenda: **CODICE** = ispezionato; **TEST** = esecuzione automatica locale; **MOCK** = integrazione sostituita; **NON VERIFICATO** = manca una prova; **FUTURO** = proposta non implementata.
 
 Piattaforme effettivamente provate: macOS (`.venv` Python 3.12.14, esecuzioni storiche) e Windows (Python 3.11.9, suite completa del 2026-11-02). I numeri puntuali sono nel [WORKLOG](WORKLOG.md). I risultati sono specifici per piattaforma; la suite automatica Windows non certifica l'UX interattiva completa né integrazioni autentiche.

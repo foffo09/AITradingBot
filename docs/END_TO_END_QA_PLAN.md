@@ -1,5 +1,78 @@
 # Piano QA end-to-end unico — December QA & Release
 
+## Candidato della missione master — 17 novembre, successivo ad a6d3f60
+
+Usare branch agents/master-consolidation-20261117 e SHA del rapporto finale per
+eseguire gli stessi sei casiW11; a6d3f60 sotto è il riferimento precedente.
+Nuove asserzioni manuali: range pannelli con puntatore/frecce e reload, layout
+stretto a colonna; risposte malformate non diventano successo/BUY; errore503 dopo
+scrittura virtuale richiede stessaUUID e verifica storico, non un nuovo invio.
+Contatori/proveMac in MATRICE_TEST; nessun test Windows11 o MT5nativo inventato.
+
+
+> **Stato corrente, 17 novembre:** candidato `a6d3f60`, PR #8 basata sulla #7.
+> Il catalogo del 16 novembre sotto conserva la baseline storica. Implementazioni
+> e prove successive sono in MASTER_AUDIT/MATRICE_TEST; non sono ancora una
+> verifica Windows 11. Questa fase non crea un secondo piano o un nuovo task.
+
+## Verbale Windows 11 da eseguire — priorità corrente
+
+Owner QA: **P4**, referenti difetti UI/shell **P1**, API/sidecar/MT5 **P2**.
+SHA richiesto: `a6d3f60b9ee1ca9ae140dc268fd630794755c3a0`.
+**Prerequisito attualmente BLOCKED:** accesso a Windows 11 non disponibile negli
+strumenti di questa sessione. Nessun caso sottostante è stato eseguito sul Mac.
+Registrare Windows build/arch, WebView2, Python/Node/Rust, data UTC, hash installer,
+passi/comandi effettivi, screenshot redatti e processi/porte prima e dopo.
+
+Usare copia Git separata e dati fittizi. Per il desktop, una cartella clone
+diversa da sola **non isola app-data**: serve un profilo Windows di prova o VM
+autorizzata, privo di dati/credenziali/terminali personali. Non presumere che
+modificare APPDATA nell'ambiente ridiriga ogni API nativa. Se questo isolamento
+non è dimostrato, fermare il caso desktop e registrare BLOCKED. Non creare
+account di sistema, cambiare permessi o cancellare dati personali per il test.
+
+Preparazione nella copia autorizzata, PowerShell; i percorsi sono esempi locali:
+
+```powershell
+git clone --branch agents/codex-completion-20261116 --single-branch https://github.com/foffo09/AITradingBot.git AITradingBot-QA
+Set-Location AITradingBot-QA
+git status --short --branch
+git rev-parse HEAD
+# Fermarsi se HEAD non coincide con lo SHA sopra o esistono modifiche non proprie.
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -r packaging/backend/requirements.txt
+.\.venv\Scripts\python.exe -m compileall -q app.py config src tests
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pip check
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Non copiare .env o database dal checkout principale. Usare una sessione senza
+chiavi broker; pytest conserva le proprie guardie. Non collegare Alpaca/MT5
+autentici: il click di connessione non è compreso in questa autorizzazione.
+Per build nativa applicare i comandi esistenti in LOCAL_APPLICATION.md e
+packaging/backend/README.md; eventuali nuovi prerequisiti si verificano prima
+di installarli. Non scaricare/avviare installer di provenienza non verificata.
+
+| ID / descrizione | Prerequisiti e comando/passi | Atteso | Effettivo / evidenza / stato |
+| --- | --- | --- | --- |
+| W11-01 installer | Profilo isolato; installer generato dal candidato, hash registrato; installazione GUI e ispezione destinazione/shortcut/file; eseguire anche `scripts/check_windows_installer.ps1` dal contesto Python corretto | Installazione senza cambi di privilegi inattesi, risorse e notice presenti, nessun download occulto | Non eseguito su Windows 11; CI Server install/smoke/uninstall distinta. **BLOCKED** accesso OS |
+| W11-02 lifecycle | Installazione verificata; aprire, health/identity, chiudere, riaprire; rilevare solo PID/porta del processo posseduto; prova wrapper `scripts/check_windows_launchers.ps1` | UI/API locali, chiusura/riavvio puliti, nessun processo orfano o arresto di processi estranei | Nessun log/screenshot Windows 11. **BLOCKED** accesso OS |
+| W11-03 funzioni e contesti | Demo fittizia, Simulazione separata, Paper/MT5 scollegati; visitare tutte le pagine, grafici/intervalli/zoom, temi, ridimensionamento e pannelli; operazione virtuale esplicita solo nel ledger di prova | Provenienza visibile, N/D nei dati assenti, capitali separati, nessuna connessione o ordine broker, automazione ferma | Nessuna prova manuale Windows 11; unit/component/mock non la sostituiscono. **BLOCKED** accesso OS |
+| W11-04 errori e recupero | Ambiente di prova e processi identificati; seguire casi timeout/porta occupata/crash del catalogo; simulare solo sui processi di prova posseduti | Nessun kill per nome/porta, esito incerto bloccato, recovery esplicito, nessuna ripartenza finanziaria | Copertura automatica esistente, prova OS manuale assente. **BLOCKED** accesso OS |
+| W11-05 disinstallazione e retention | Salvare hash dei soli ledger fittizi nell'app-data attestata; chiudere app, disinstallare, inventariare residui, confrontare hash; reinstallare solo con autorizzazione nel profilo di prova | Binari/shortcut rimossi, nessun dato utente cancellato, retention e riavvio documentati | La sentinella CI è esterna ad app-data e non dimostra questo caso. **BLOCKED** accesso OS |
+| W11-06 MT5 isolato | Inizialmente package assente: unsupported/unavailable corretto. Per worker fake hang/crash usare `python -m pytest -q tests/test_mt5_process.py tests/test_mt5_readonly.py`; SDK/terminale autentico solo con incarico separato | Timeout/cleanup/fail-closed/read-only; nessuna chiamata operativa, account autentici mai usati da pytest | Mock nativi CI già PASS; frozen Windows con SDK/hang nativo e terminale non provati. **BLOCKED** per parte manuale/native |
+
+Ogni riga eredita owner, OS e SHA del verbale. A esecuzione completata aggiungere
+output/comandi effettivi e riferimento evidenza, senza sostituire gli esiti CI.
+PASS richiede tutti i sottopassi pertinenti, non il solo avvio della finestra.
+Upgrade da una versione precedente richiede due artifact identificati e dati
+di prova; non attribuire quel risultato alla semplice reinstallazione pulita.
+
 Owner QA: Persona 4. Direttiva prioritaria Notion del 16 novembre 2026.
 Base documentale (BASE): `3df4f8260fcbb85ea8ccf2c2b680f672adc89af4`.
 Audit: 16 novembre 2026, macOS 27.2.1 arm64, sessione iniziata alle 11:55:10 UTC.

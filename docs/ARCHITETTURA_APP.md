@@ -1,5 +1,23 @@
 # Architettura applicativa — decisioni QA per browser e desktop
 
+## Consolidamento del contratto v1 — missione 17 novembre
+
+Schemas Pydantic di risposta aggiunti tra servizi e consumerReact; SDKnormalizzato
+in JSON, senza nuove formule o autorità di esecuzione.503generico su output
+invalido, idempotenza mantenuta. Pannelli usano preferenza UI e CSSvariables,
+nessun cambiamento del flussoPython o dei confini di contabilità. Branch dedicato
+master-consolidation-20261117 sopra a6d3f60; nessun merge main o modifica branchowner.
+
+
+> **Fotografia corrente, 17 novembre 2026:** l'architettura descritta come target
+> nella baseline storica sotto è implementata nel candidato `a6d3f60` (PR #8
+> sopra #7). Browser e desktop condividono React/API; il backend nuovo non
+> autorizza ordini broker. Dettagli correnti: [audit](MASTER_AUDIT.md),
+> [20 gate](RELEASE_GATES.md), [verbale Windows 11](END_TO_END_QA_PLAN.md).
+> La separazione di un checkout non separa l'app-data desktop: per il collaudo
+> Windows serve un profilo/dati di prova effettivamente isolato. Nessuna nuova
+> decisione sulle interfacce o modifica dei componenti degli owner in questa fase.
+
 Missione unica December QA & Release, direttiva prioritaria Notion del
 16 novembre 2026. Documento decisionale **proposto**, non implementazione
 o contratto già accettato da P1/P2/P3. Owner della verifica: Persona 4.

@@ -1,5 +1,28 @@
 # Persona 3 — Strategy engine e integrazione
 
+## Contratto trasporto verificato — missione master 17 novembre
+
+Il motore, RiskManager, limiti e branch P3 sono invariati. Il DTO API ora
+rifiuta BUY/SELL incompleti (503 sanificato), senza ricalcolare livelli, sizing
+o autorizzazione. ID, timestamp con fuso, durata e valori completi sono requisiti
+di forma; freschezza/provenienza restano compito del gate originale e consumer.
+Due fixture complete BUY/SELL verificano la compatibilità della serializzazione,
+non la loro idoneità operativa. Nessun RiskSnapshot Paper verificato viene
+inventato: nuova UI rimane NO_TRADE con i dati attuali. Backtest singolo campione
+rimane esplicito, nessuna nuova performance o validazione OOS dichiarata.
+
+
+## Riesame contratti — 17 novembre 2026
+
+P3 `37afa86` già integrato nel candidato `a6d3f60` (PR #8 sopra #7); nessun nuovo
+motore, task o modifica al rischio. Il servizio puro e i test precedenti restano
+la fonte del contratto. Le richieste output OpenAPI/UI nei due handoff non
+autorizzano a cambiare `SignalProposal`, il gate o i limiti per semplificarli.
+API/nuova UI non attestano un RiskSnapshot Paper completo: restano NO_TRADE;
+nessun ordine deve essere derivato da un'etichetta BUY/SELL. Il backtest UI
+rimane singolo campione; le tranche OOS esistenti non sono collegate né dichiarate
+eseguite da questa revisione. Non è richiesta una nuova consegna duplicata P3.
+
 ## Base e ambito
 
 Worktree `AITradingBot-strategy`, branch `feature/strategy-engine`.

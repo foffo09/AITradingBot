@@ -1,5 +1,20 @@
 # Decisioni tecniche
 
+## D17 — DTO di uscita e pannelli, missione 17 novembre
+
+Envelope APIv1 tipizzati con Pydantic senza cambiare endpoint o sblocco di ordini.
+Record provider estensibili JSON-safe; dati non finiti o forma invalida503 generico,
+mai payload/traceback. Esito di scrittura virtuale non verificabile resta ambiguo:
+UUID conservata, niente header rejected inventato. JSON SDK normalizzato prima
+del DTO per non perdere UUID/Decimal/datetime. BUY/SELL richiedono forma completa,
+non si ricostruiscono livelli o rischio; default legacy incompleto solo NO_TRADE.
+
+Pannelli di analisi ripartibili con range HTML accessibile e CSSvariables,
+preferenza locale delimitata, fallback a colonna. Scartata libreria di docking:
+non necessaria per il requisito corrente. Nessuna formula, broker o rischio in UI.
+La validità del DTO non sostituisce gate operativo/freschezza o coordinatore.
+
+
 ## D1 — Separare contesti e fonti
 
 Stato: confermato da codice e test. Demo, ledger, backtest e Alpaca Paper non condividono capitale. I percorsi DB sono verificati anche per identità del file. L'alternativa di un unico saldo aggregato è rifiutata perché mescola contabilità diverse.

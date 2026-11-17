@@ -1,5 +1,60 @@
 # Applicazione locale React / FastAPI / Tauri
 
+## Collaudo della missione master del 17 novembre
+
+Il branch di consegna è agents/master-consolidation-20261117, sopra a6d3f60/PR8;
+nessun merge su main. DTO outputv1 e pannelli di analisi aggiornati. In Panoramica,
+Larghezza relativa del grafico funziona con puntatore e frecce, salva una
+preferenza50–75% e torna al default68 se invalida. Finestre strette: colonna
+singola. Non è docking libero; nessuna richiesta finanziaria nasce dal controllo.
+
+PowerShell, **copia di prova separata**, senza copiare .env o database:
+
+```powershell
+git clone --branch agents/master-consolidation-20261117 --single-branch https://github.com/foffo09/AITradingBot.git AITradingBot-QA-20261117
+Set-Location AITradingBot-QA-20261117
+git status --short --branch
+git rev-parse HEAD
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -r packaging/backend/requirements.txt
+.\.venv\Scripts\python.exe -m compileall -q app.py config src tests
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pip check
+npm.cmd ci
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
+.\.venv\Scripts\python.exe -m scripts.check_local_service
+```
+
+Confrontare HEAD con il commit del rapporto finale; se differisce, non attribuire
+risultati a quello SHA. Per avvio web isolato dopo i test, nella stessa copia:
+
+```powershell
+$qaData = Join-Path ([IO.Path]::GetTempPath()) ('AITradingBot-QA-' + [guid]::NewGuid())
+.\avvia_web.ps1 -NoBrowser -DataDirectory $qaData
+# Aprire l'URL 127.0.0.1 stampato. Ctrl+C per chiudere il launcher.
+# Da una seconda finestra nella stessa copia, se serve arresto esplicito:
+.\arresta_web.ps1 -DataDirectory $qaData
+```
+
+Conservare il valore di qaData per l'arresto dalla seconda finestra. Non
+collegare Paper/MT5 autentici durante questo verbale; utilizzare solo Demo e
+Simulazione fittizie, senza attivare automazioni finanziarie. Isolamento dati
+**desktop** diverso dal parametro web: serve profilo Windows/VM autorizzata e
+app-data attestata. Un clone o cambio APPDATA non sono prove sufficienti.
+Installazione, shortcut, GUI, crash, retention/upgrade: seguire W11-01..06 nel
+pianoQA. CI Server2025 non sostituisce la prova Windows11 dell'utente.
+
+Backup: chiudere l'app, conservare inventario dei file e usare SQLite backup
+per una snapshot coerente. Ripristinare soltanto in una directory nuova di prova,
+mai sopra l'originale; verificare integrity_check, foreign_key_check, conti,
+storico e isolamento prima di riaprire. Prova Mac solo su fixture completata;
+nessun backup/ripristino di dati personali eseguito dall'agente, nessun reset o
+restore UI introdotto. Controlli dry-run attivi/ambigui restano da riconciliare.
+
+
 Questa interfaccia si aggiunge a Streamlit, che resta disponibile come legacy.
 Non è una release e non introduce invii di ordini al broker.
 

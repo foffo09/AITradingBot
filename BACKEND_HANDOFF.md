@@ -1,5 +1,58 @@
 # Backend e market data — consegna al coordinatore
 
+## Consolidamento implementato — missione master 17 novembre
+
+Branch `agents/master-consolidation-20261117`, base `a6d3f60`. La lacuna output
+annotata nella fotografia precedente è ora corretta nel ramo dedicato del
+coordinatore, senza riscrivere il branch P2. `src/api/schemas.py` definisce DTO
+per tutte le 14 route, error envelope e record provider estensibili JSON-safe.
+I response_model sono applicati anche al bootstrap cookie: session restituisce
+un corpo validato, con le proprietà HttpOnly/SameSite conservate. OpenAPI si
+ottiene con `app.openapi()`; docs/openapi HTTP restano disabilitati.
+
+ResponseValidationError produce 503 con solo detail generico, senza payload,
+traceback o header di rifiuto definitivo. Dopo un fill virtuale già registrato,
+il client mantiene la stessa UUID e il retry recupera il fill senza duplicarlo.
+Oggetti SDK in posizioni/ordini vengono convertiti con jsonable_encoder prima
+alla validazione: UUID/Decimal/datetime conservano la rappresentazione JSON SDK.
+Record annidati non finiti vengono respinti, non sostituiti silenziosamente con
+null. I record finanziari rimangono estensibili; la validazione di conto/feed
+resta nel provider esistente, non viene duplicato un RiskManager nei DTO.
+
+BUY/SELL PAPER_PROPOSAL richiedono contesto Paper, ID/tipo ingresso, timestamp
+con timezone e vita positiva, valori calcolati completi/positivi/finiti. DTO
+valido non significa feed autentico, fresco o autorizzazione di invio: il gate
+resta nel motore e il consumer deve verificarne la scadenza. Risposte legacy
+parziali mantengono soltanto il default prudenziale WAIT/NO_TRADE e la ragione;
+non possono promuovere una proposta incompleta. Equity backtest richiede numeri;
+i null di riscaldamento restano ammessi solo negli indicatori.
+
+Prove: 28 casi nuovi in test_local_contracts, tutti offline; gruppo API 57PASS.
+RED osservato prima dei fix. Nessuna credenziale, ordine o nuova dipendenza.
+Contatori completi/piattaforme e limiti sono nel verbale MASTER_AUDIT.
+
+
+## Riesame integrazione — 17 novembre 2026
+
+Candidato `a6d3f60`, PR #8 sopra #7. Backend già consegnato da P2 (`1f1389b`)
+e consolidato nel ramo integrazione: non rifare il servizio o la paginazione.
+Questo aggiornamento QA non cambia il contratto o il codice degli owner.
+
+Limite effettivo da trattare nella missione P2 esistente: `create_local_app`
+usa Pydantic per gli input, ma i route handler restituiscono dict/JSONResponse
+senza response_model o annotazioni di risposta. `app.openapi()` è generabile,
+mentre gli endpoint pubblici docs/openapi sono deliberatamente disabilitati;
+non confondere generazione dello schema con uno schema completo delle risposte.
+Richiesta tecnica per P2: completare gli schemi output/errori v1 senza esporre
+docs via HTTP, cambiare campi, serializzare SDK o aggiungere autorità finanziaria;
+verificare schema e fixture con il parser TypeScript esistente e test degli
+errori/null/provenance/UTC. Non modificare React o motore per adattarli a schemi
+incompatibili. Non è un nuovo task assegnato né un'autorizzazione a pubblicare.
+
+Health `ready` attesta il servizio locale, non account, feed o rischio utilizzabili.
+MT5 rimane read-only, opzionale e non verificato con terminale autentico. Il
+collaudo Windows e i residui di packaging sono nel piano QA e nei release gates.
+
 ## Base e perimetro
 
 Base concordata: `67f6a47085905b523ff11828866efdb653ccb744`.

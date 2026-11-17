@@ -1,5 +1,76 @@
 # Gate di integrazione e release
 
+## Missione master — tredici gate distinti, 17 novembre
+
+Valutazione conservativa dopo le prove Mac: **5/13 COMPLETATA (38,46%)**,
+4 PARZIALMENTE COMPLETATA,2BLOCCATA,1DA VERIFICARE SU WINDOWS e1DA VERIFICARE SU MT5.
+È il conteggio dei13criteri del nuovo mandato, non confrontabile direttamente
+con il precedente12/20 e non una misura di redditività, assenza di bug o codice
+scritto. Pubblicazione del solo branch autorizzata; release e merge restano vietati.
+
+| Gate | Stato reale | Evidenza e limite |
+| --- | --- | --- |
+|1Codice|COMPLETATA|Correzioni autorizzate, review indipendente e suite verde; non garanzia di assenza di ogni bug|
+|2Backend|COMPLETATA|14responsemodel,57APItest,source/frozenHTTP; provider autentici esclusi|
+|3Frontend|COMPLETATA|42test,lint/typecheck/build,range/browser390px e TauriMac privata|
+|4Integrazione|COMPLETATA|UI/API/motore/sidecar verificati localmente con contesti isolati|
+|5Sicurezza|PARZIALMENTE COMPLETATA|Guard0/0,patchreview,auditpip/npm0; non scan esaustivo o attestazione nativehang|
+|6Licenze|BLOCCATA|Licenza titolare e NOTICE/SBOM effettiva ancora incompleti|
+|7Database|COMPLETATA|Persistenza/idempotenza testate;backup/restore/integrità su fixtureMac, non dati personali|
+|8Packaging|PARZIALMENTE COMPLETATA|PyInstaller/TauriMac51.44MiB;NSIS baselineCI, firma/notarizzazione/upgrade non attestati|
+|9Compatibilità Windows|PARZIALMENTE COMPLETATA|Portabilità e test nativeCI sullo SHA del branch da leggere separatamente dalla GUIWindows11|
+|10TestWindows11reali|DA VERIFICARE SU WINDOWS|Profilo/copia isolati,procedura W11 pronta; nessuna prova dalMac|
+|11MT5nativo|DA VERIFICARE SU MT5|Mock e processo isolato;SDK/terminale/hang nativi non provati|
+|12Documentazione|PARZIALMENTE COMPLETATA|Canonici aggiornati;NotionP4 editabile,Hub/P1–P3/Guide limitati|
+|13Release readiness|BLOCCATA|Gate6/10/11,review finaleQA e autorizzazione non chiusi|
+
+RuoliP1/P2/P3 restano proprietari delle rispettive aree: il coordinatore ha
+completato le lacune esplicitamente richieste in un nuovo worktree sopraPR8,
+non ha sovrascritto i loro branch né assegnato prompt duplicati. I risultati CI
+vanno letti sullo SHA effettivo pubblicato, senza riusare a6d3f60 per questi fix.
+
+
+## Fotografia corrente — 17 novembre 2026, candidato a6d3f60
+
+I gate storici sottostanti restano conservati. Questa tabella applica i **20
+criteri del mandato corrente**; PASS indica soltanto l'ambito di prova scritto.
+Le limitazioni non vengono rimosse contando i test. **12/20 gate soddisfatti
+(60%)**, non una stima della percentuale di codice finito o della sicurezza
+finanziaria. Release readiness: **BLOCKED**.
+
+| # | Criterio | Stato | Evidenza / limite / owner del residuo |
+| --- | --- | --- | --- |
+| 1 | Windows 11 desktop | BLOCKED | PC non esposto dagli strumenti; accesso richiesto al responsabile, verbale P4 pronto |
+| 2 | macOS desktop | PASS | GUI privata su daa5b86, UI/shell/launcher invariati fino ad a6d3f60, confronto Git eseguito; prova attribuita allo SHA originale |
+| 3 | Browser locale | PASS | Prova Mac con dati temporanei; nessuna estensione automatica a Windows 11 |
+| 4 | Backend FastAPI | PASS | Contratti/mock/smoke source e frozen, CI sul candidato; broker autentico non provato |
+| 5 | Tauri | PASS | Build native Windows/macOS, test Rust e GUI Mac; Windows 11 GUI resta gate 1 |
+| 6 | Sidecar | PASS | Handshake, source/frozen HTTP e shutdown in CI; hang nativo MT5 è gate 7 |
+| 7 | MT5 Windows read-only | BLOCKED | Mock Windows PASS; SDK/terminale e frozen native hang non provati, solo con autorizzazione separata; P2/P4 |
+| 8 | Demo/Simulazione separate | PASS | Ledger separati, isolamento/mock/GUI Mac; nessun capitale autentico |
+| 9 | Alpaca Paper isolato | PASS | API read-only e test con mock; nessun conto autenticato usato |
+| 10 | Strategy Engine | PASS | Motore puro, gate/rischio/expiry/deduplica offline; UI resta NO_TRADE senza RiskSnapshot verificato |
+| 11 | Sicurezza verificata | NON VERIFICATO | Test di sicurezza delimitati riusciti; review indipendente complessiva e native fault residui non chiusi; P4 |
+| 12 | CI Windows SHA candidato | PASS | Run43976031716, Windows Server2025:942PASS, guard0/0 |
+| 13 | CI macOS SHA candidato | PASS | Stesso run:941PASS/1skipProactor, guard0/0 |
+| 14 | Installer verificato | BLOCKED | NSIS CI install/smoke/uninstall PASS; GUI Windows11/upgrade/retention app-data reale mancanti; P4 |
+| 15 | Licenze complete | BLOCKED | LICENSE progetto assente; inventario819 record non è SBOM/NOTICE dell'artifact; responsabile + P4 |
+| 16 | Nessun segreto esposto rilevato | PASS | Perimetro sorgenti/diff esaminati e guard test0/0; non è garanzia su dati personali non aperti |
+| 17 | Nessun blocker critico | BLOCKED | Gate1/7/11/14/15 ancora aperti |
+| 18 | QA approvata | BLOCKED | Nessuna approvazione indipendente o del responsabile; PR7/8 draft senza review |
+| 19 | Documentazione aggiornata | BLOCKED | File canonici locali aggiornati; Hub/P1–P3 senza editor e Operating Guide non leggibile; sincronizzazione condivisa incompleta |
+| 20 | Responsabile informato | PASS | Stato, prove e blocchi comunicati nel report di questa consegna; non equivale ad approvazione |
+
+Dipendenza PR: **#8 → #7 → main**; stack storico **#6 → #5 → main** separato.
+Tutte draft/CLEAN nell'osservazione GitHub; nessuna review. Non sostituire i
+workflow più recenti con quelli storici, cambiare basi o fare merge senza scelta
+esplicita del responsabile. Nessuna pubblicazione nuova in questo mandato.
+
+Pericolo da evitare nel QA: clone separato non significa app-data desktop
+separata. Il test Windows richiede isolamento dimostrato del profilo/dati,
+senza toccare installazioni o ledger personali. Nessuna autenticazione reale
+o automazione finanziaria è necessaria al verbale offline.
+
 Procedura per il responsabile di `foffo09/AITradingBot`. Sprint 05, Persona 4.
 Questo documento descrive azioni future: **non le autorizza né le esegue**.
 Non abilita broker, feed, server, ordini, automazione, deploy o capitale reale.

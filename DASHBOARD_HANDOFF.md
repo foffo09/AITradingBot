@@ -1,5 +1,45 @@
 # Dashboard — contratti di integrazione Persona 2
 
+## Pannelli completati — missione master 17 novembre
+
+La lacuna pannelli della fotografia precedente è corretta nel branch dedicato
+`agents/master-consolidation-20261117`, senza modificare il branch P1.
+Panoramica espone un range HTML nativo per la larghezza relativa grafico/segnale
+(50–75%, default68). Usa CSS variables nel layout esistente e la preferenza
+locale aitb-analysis-width; valori corrotti vengono ignorati, storage negato
+non blocca il controllo. Sotto1200px il controllo è nascosto e i pannelli sono
+in colonna. Nessuna nuova libreria, formula o richiesta finanziaria.
+
+Otto casi aggiunti: persistenza, sei valori invalidi e storage negato. Suite
+frontend42PASS. Browser reale: click68→62, ArrowRight→63, reload mantiene63;
+colonne CSS effettive cambiano; a390px scrollWidth390, colonna358px, nessun
+controllo inapplicabile visibile e console errori vuota. Servizio privato di
+prova chiuso con exit0. È ripartizione dei due pannelli di analisi, non docking
+arbitrario di ogni scheda. La grafica/tema approvati sono conservati.
+
+
+## Riesame della nuova UI — 17 novembre 2026
+
+Ownership corrente: **P1 frontend**, P2 backend; il titolo originale sotto è
+storico. React/Tauri P1 `0598b57` è già integrato, candidato `a6d3f60`/PR #8
+sopra #7. Non ripetere bootstrap/migrazione o assegnare un secondo incarico.
+
+Requisito ancora incompleto individuato nella lettura: `App.tsx` espone tema
+chiaro/scuro e densità, `styles.css` usa colonne grid e breakpoint, ma non è
+stato individuato un controllo per ridimensionare manualmente i pannelli.
+Questo non è provato dal solo resize della finestra o dallo zoom del grafico.
+Annotazione per la missione P1 esistente, senza nuova assegnazione automatica:
+verificare e completare il requisito pannelli con controllo accessibile da
+tastiera/puntatore, limiti dimensionali e fallback responsive, riusando il layout
+esistente senza nuove librerie non necessarie. Testare preferenze/storage
+indisponibile e assenza di overflow; nessun cambiamento alle formule/API/rischio.
+È una lacuna di requisito, non un errore finanziario o un fallimento test inventato.
+
+Contratto API output ancora parzialmente descritto in OpenAPI: richiesta P2 nel
+BACKEND_HANDOFF, nessuna duplicazione della logica Python in TypeScript.
+GUI Windows 11, temi e pannelli devono essere verbalizzati nel piano QA; Mac
+e CI non sostituiscono quel collaudo. Nessun file frontend modificato qui.
+
 Branch: `feature/dashboard-ui`. Backend integrato con fast-forward al commit
 `1a68d5bbc25f3e1b6eceb0235f9ea2fdfa033240`, senza modificare i suoi moduli.
 Contratti di riferimento: [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md).

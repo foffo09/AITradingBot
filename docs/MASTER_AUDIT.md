@@ -1,5 +1,228 @@
 # Audit e integrazione applicazione locale — 16 novembre 2026
 
+## Missione master eseguita — 17 novembre, consolidamento codice
+
+Nuovo mandato autorizza completamento, commit e push sul solo branch dedicato.
+Worktree Codex `master-consolidation-20261117`, branch omonimo prefissato agents/,
+base a6d3f60. I10documenti della fase precedente sono copiati con git apply
+verificato; sorgente lasciata intatta. PR7/8 rilette, ancora draft/MERGEABLE e
+invariate. Main, branch P1/P2/P3/P4 e modifiche personali non toccati. Agent
+Operating Guide conferma accesso negato; Hub e tre missioni letti, nessuna nuova
+consegna o task duplicato. Nessun MCP Notion disponibile: instructions_version
+non è un parametro CUA e non viene inventato.
+
+### Problemi corretti con prove
+
+1. Risposte API non tipizzate:14successi senza schema OpenAPI e dati malformati
+   pubblicati HTTP200. DTO ora validano envelope, record JSON finiti, barre,
+   indicatori, proposta e backtest; errore output503 generico.21casi iniziali
+   RED→GREEN includono SDK JSON e conferma persa dopo fill/idempotenza.
+2. Review indipendente: mergefallback poteva lasciare BUY/PAPER_PROPOSAL con
+   campi critici null. Ora proposta incompleta respinta. Distinti equitynumerica
+   e puntoindicatore nullable;5casiRED→GREEN e2fixturecomplete compatibili.
+3. Pannelli: controllo nativo puntatore/tastiera, preferenza locale validata,
+   layout a colonna stretto, nessuna dipendenza o rifacimento grafico.8nuovi casi.
+
+Nuovi file: src/api/schemas.py e tests/test_local_contracts.py. Modificati runtime
+solo src/api/local_app.py, frontend/src/App.tsx/styles.css/App.test.tsx. Nessuna
+modifica a motore, rischio, broker, ledger, soglie o autorità di esecuzione.
+
+### Verifiche effettive Mac
+
+Python3.11.18/macOSarm64: suite stabile **969PASS/1skip/1warning39.33s**, guard0/0.
+API57PASS2.19s; gruppo backend/strategie/sicurezza/persistenza278PASS/1skip9.03s
+(prima degli ultimi7casi API). Frontend42PASS; npmci/lint/typecheck/build0.
+Rust3PASS3.05s; compileall0, pipcheck No broken requirements found, diffcheck0.
+Sorgente e frozenHTTP PASS: sessione,Origin,Demo fill,Sim separata,quote sintetiche,
+NO_TRADE,backtest,shutdown. PyInstaller e Tauri.app Mac **51.44MiB** build riuscite.
+Binario sidecar finale copiato e bundle ricostruito dopo le correzioni DTO.
+La prima prova cargo richiedeva il sidecar ancora mancante: prerequisito costruito,
+non rimosso dal manifest. Nessuna release/installer pubblico o firma simulata.
+
+Una suite avviata in contemporanea a build/altra suite ha mostrato4timeoutAppTest
+15s, non asserzioni finanziarie: live_quote_fragment_uses_current_selection_and_
+strategy_with_short_history, traditional_and_walk_forward_results_remain_separate_
+and_invalidate_independently, chart_rsi_handles_one_sided_and_flat_prices[0-50],
+refresh_does_not_erase_contradictory_backend_metadata[source]. Gruppo completo
+interessato rieseguito9PASS5.96s, poi suite seriale969PASS. Nessun test/soglia
+modificato o escluso. Concorrenza/sospensione dell'host resta limite di questa
+osservazione, non un bug prodotto dichiarato risolto. Warning websockets.legacy
+noto; solo skip Windows Proactor sul Mac.
+
+Browser locale privato: range click68→62/tasto→63/reload63, larghezze CSS mutate;
+viewport390px senza overflow, controllo nascosto e pannelli a colonna, console
+errori[]. Nessun conto creato dalla prova grafica. Backend posseduto chiuso exit0.
+Backup/ripristino SQLite provato con soli dati sintetici temporanei, via backup
+nativo verso directory nuova: capitale1000/cash900/posizione1/storico1 preservati,
+integrity_check=ok, foreign_key_check vuoto, originale invariato e Simulazione
+vuota. È procedura manuale controllata, non funzione di restore UI o prova di
+retention dopo disinstallazione. Prima invocazione helper ometteva tre parametri
+rischio obbligatori: corretta usando AppSettings esistenti, senza cambiare limiti.
+
+### Sicurezza, licenze e gate residui
+
+Auditpip runtime+packaging ripetuto: nessuna vulnerabilità nota rilevata; npmaudit0.
+Nessuna dipendenza/lock modificata. Inventario licenze819record della faseprima
+resta materiale di verifica, non SBOM/NOTICE finale del binario. LICENSEprogetto
+assente e componentiWindows/MT5 non certificati. Review indipendente di questa
+patch completata e rilievi trattati; non è uno scan esaustivo dell'intero repository.
+Nessun segreto/file.env/DBpersonale letto, broker autentico o ordine attivati.
+
+Windows11GUI, MT5SDK/terminale autentico, hangfrozenWindows/orfani dopo morte
+improvvisa del padre e retention/upgrade dopo disinstallazione restano da provare.
+Autorizzazione alla prova terminale autentico separata. Procedura Windows precisa
+in LOCAL_APPLICATION e pianoW11, senza copia delle credenziali. CI del nuovo
+branch deve attestare lo SHA pubblicato: risultati su a6d3f60 restano storici.
+
+
+## Ripresa del mandato — 17 novembre 2026
+
+Questa fotografia aggiorna lo stato corrente; le sezioni successive conservano
+le prove e le decisioni storiche. Nessun nuovo difetto applicativo riprodotto
+in questa fase: nessun codice prodotto, test, dipendenza o workflow modificato.
+Il mandato corrente richiede approvazione prima della pubblicazione: il vecchio
+permesso di commit/push non viene esteso a questa nuova consegna.
+
+Root verificata: worktree Codex `master-local-web-desktop-20261116`, branch
+`agents/codex-completion-20261116`, HEAD e upstream
+`a6d3f60b9ee1ca9ae140dc268fd630794755c3a0`. Fetch origin senza prune riuscito;
+index e working tree inizialmente vuoti, nessun merge in corso. Main remoto
+`fe988394d6ecdcb56763a81c627943b4cbe684e1` invariato. Checkout personale main
+`2b2d35a`: 17 file modificati e due nuovi file PaperExecutor preesistenti,
+preservati senza leggerne dati personali o annullarne modifiche.
+
+### Fotografia delle responsabilità
+
+| Area | Stato | Problemi residui | Responsabile | Prossima azione |
+| --- | --- | --- | --- | --- |
+| Frontend | React/Tauri consegnati e inclusi nel candidato | Windows 11 GUI e verifica completa temi/pannelli ancora da verbalizzare | Persona 1 | Riesame della consegna esistente, nessun nuovo incarico duplicato |
+| Backend | FastAPI/sidecar, paginazione e MT5 read-only coperti da mock/CI | MT5 nativo Windows e cleanup dopo morte improvvisa del padre non provati | Persona 2 | Prova isolata Windows prima di qualsiasi attestazione nativa |
+| Strategy | Servizio puro v1 e rischio verificati offline | RiskSnapshot operativo completo assente; UI resta NO_TRADE; backtest UI singolo campione | Persona 3 | Conservare il blocco, nessun rischio o risultato OOS inventato |
+| QA | CI esatta e prove Mac disponibili | Nessun accesso a Windows 11 fra gli strumenti attuali; QA indipendente non approvata | Persona 4 | Eseguire il verbale Windows già predisposto quando disponibile |
+| Integrazione | PR #8 dipende dalla #7 | Entrambe draft, nessuna review o approvazione | Responsabile | Riesame dello stack, nessun merge automatico |
+| Release | BLOCKED | Licenza progetto, attribuzioni, collaudo Windows/retention e approvazione | Responsabile | Fornire accesso al Windows di prova; decisioni licenza/release separate |
+
+Consegne remote conservate: P1 `0598b57`, P2 `1f1389b`, P3 `37afa86`,
+P4 `1542dce`. Sono già nella cronologia del candidato: non vanno rifatte.
+Le aree Notion correnti riportano ancora le missioni del 16 novembre, senza
+un nuovo report dei collaboratori successivo alla consegna integrata.
+
+### Pull request ricontrollate in lettura
+
+Tutte OPEN/DRAFT, merge state CLEAN, nessuna review o richiesta review nella
+risposta GitHub; ciò non equivale ad approvazione né alla risoluzione di tutti
+i possibili problemi d'integrazione. Titoli e file sono consultabili nei link.
+
+| PR | Branch / SHA head | Base / SHA | CI osservata | Delta e dipendenza |
+| --- | --- | --- | --- | --- |
+| [#5 — CI Windows](https://github.com/foffo09/AITradingBot/pull/5) | `agents/p4-windows-ci-20261110` / `5e75940` | main / `fe98839` | 1 SUCCESS | Workflow + matrice; stack CI storico |
+| [#6 — CI multipiattaforma](https://github.com/foffo09/AITradingBot/pull/6) | `agents/p4-cross-platform-ci-20261112` / `97ff296` | branch #5 / `5e75940` | 2 SUCCESS | Stessi due file, dipende dalla #5 |
+| [#7 — applicazione integrata](https://github.com/foffo09/AITradingBot/pull/7) | `integration/local-web-desktop-20261116` / `37a3840` | main / `fe98839` | 4 SUCCESS | React/Tauri/API/contratti/test/docs; stack applicativo |
+| [#8 — consolidamento locale](https://github.com/foffo09/AITradingBot/pull/8) | `agents/codex-completion-20261116` / `a6d3f60` | branch #7 / `37a3840` | 4 SUCCESS | 44 file, runtime/UI/dry-run/MT5/packaging/docs; dipende dalla #7 |
+
+Non applicare i workflow storici #5/#6 come snapshot sopra #7/#8: sovrappongono
+file già evoluti. Preparare un confronto dei diff prima di un'eventuale scelta
+del responsabile. Nessun merge, retarget, review, commit o push eseguito qui.
+
+### Evidenze esatte senza ripetizioni inutili
+
+Run [43976031716](https://github.com/foffo09/AITradingBot/actions/runs/43976031716),
+HEAD `a6d3f60`: quattro job SUCCESS ricontrollati. Log già conservati riletti:
+Windows Server 2025/Python 3.11.9 **942 passati, zero skip, 1 warning, 134,48 s**;
+macOS CI/Python 3.11.9 **941 passati, 1 skip, 1 warning, 117,66 s**.
+Entrambi: mirati 152, frontend 34, Rust 3, guard rete/credenziali 0/0,
+compileall/pip check, smoke HTTP source/frozen e build native riusciti.
+Windows: wrapper PowerShell e NSIS install/smoke/uninstall riusciti.
+Skip Mac: Proactor specifico Windows; warning noto `websockets.legacy`.
+
+Locale Mac sullo stesso candidato: **941 passati, 1 skip, 1 warning, 38,61 s**,
+mirati **160 passati, 4,82 s**, guard 0/0. Non vengono rieseguite suite o build
+invariate solo per cambiare la data del verbale. GUI Mac provata su `daa5b86`:
+il confronto `git diff --name-only daa5b86 a6d3f60` conferma che i successivi
+cambiamenti riguardano solo offline_executor, i suoi test e sei documenti.
+UI, shell e launcher della prova grafica sono invariati; la prova rimane
+attribuita al suo SHA, senza trasformarla in un nuovo collaudo completo.
+
+### Licenze e attribuzioni: inventario aggiornato
+
+Preparato fuori da Git un inventario JSON di **819 record**, con nome/versione,
+licenza dichiarata, scope, testi LICENSE/NOTICE/COPYING/copyright disponibili,
+hash dei testi e dei manifest. SHA256 dell'inventario:
+`fa2569c3f702f9276dd81a7bf763bddce6401b7914b313b9def72f1bfbb50b4f`.
+Nessun percorso personale o credenziale nel contenuto. Non è un artifact di
+distribuzione, una SBOM del binario o una certificazione di compatibilità legale.
+
+| Ecosistema | Inventario | Record con testi raccolti | Limite |
+| --- | ---: | ---: | --- |
+| Python | 120 | 118 | Ambiente Mac installato con strumenti build/test; non coincide con i 117 risolti dal precedente pip-audit né con il sidecar |
+| npm | 270 | 219 | Lock completo, inclusi pacchetti opzionali non installati su Mac e tool di sviluppo |
+| Cargo | 429 | 392 | Metadata verificati contro nome/versione del lock corrente; include target opzionali e build dependencies |
+
+56 pacchetti Python non espongono License-Expression: quasi tutti hanno metadata
+legacy/classifier e testi, quindi non sono automaticamente 56 licenze ignote.
+Peewee 4.5.3 non dichiara una licenza nei metadata letti, ma il LICENSE installato
+contiene concessione MIT e copyright Charles Leifer: testo conservato per review,
+senza modificare i metadata del fornitore. Per pyluach e Streamlit manca il testo
+nel wheel installato ispezionato: reperirlo dalla sorgente esatta prima del bundle
+di attribuzioni. I 51 npm e 37 Cargo senza testo raccolto restano esplicitamente
+incompleti; alcuni sono opzionali, altri installati. Non dedurre che siano inclusi
+o esclusi dal prodotto solo dalla presenza nel lock.
+
+Obblighi da completare sugli artifact effettivi, con owner QA + responsabile:
+
+- Manca LICENSE del progetto e il campo license in Cargo: decisione del titolare,
+  non scelta automatica di una licenza da parte dell'agente.
+- MIT/BSD/ISC/Zlib: conservare i testi/copyright richiesti dalle singole licenze.
+  Apache: conservare LICENSE e NOTICE applicabili; charts li incorpora già.
+- MPL (es. certifi/cssparser), licenze Unicode, Python/CNRI e componenti nativi
+  incorporati (es. NumPy) richiedono analisi specifica dei file distribuiti.
+  Non trattare un'espressione AND come OR né scegliere automaticamente un ramo.
+- PyInstaller 6.16: leggere l'eccezione del bootloader e le licenze degli hook;
+  la sua presenza non assegna una licenza al codice del progetto.
+- Inventariare separatamente Windows wheel/native DLL, runtime Python/OpenSSL,
+  WebView2, NSIS/plugin e SDK MT5 opzionale. MetaTrader5 non è compreso nella
+  prova standard né certificato OSS/canone zero da questo inventario.
+- Il bootstrap locale non richiede hosting/AI a pagamento; questo non attesta
+  la gratuità di feed, conti, dati di mercato o servizi facoltativi.
+- Preparare e verificare il pacchetto NOTICE insieme ai binari finali su ciascun
+  OS; nessun installer è pubblicato mentre questo gate è aperto.
+
+Audit vulnerabilità precedente allo stesso manifest: pip-audit 117 dipendenze,
+npm 270: zero advisory rilevate; cargo-audit zero vulnerabilità e due warning
+non soppressi (`proc-macro-error` unmaintained, `glib` nel ramo Linux).
+Questi risultati sono datati 16 novembre, non una nuova interrogazione del 17
+né prova di assenza assoluta di vulnerabilità. Nessuna dipendenza aggiornata qui.
+
+### Coordinamento Notion e prerequisito Windows
+
+Letti Team Hub e aree correnti P1–P4. Agent Operating Guide non leggibile:
+il collegamento nel Hub è etichettato «Nessun accesso» e la pagina diretta non
+mostra contenuto. Nessun accesso o abbonamento richiesto/alterato. Hub e P1–P3
+espongono contenuto di lettura senza controlli editabili nell'osservazione;
+P4 espone blocchi editabili. Non creare copie delle aree o task duplicati.
+
+Nessun PC Windows 11/terminale remoto è esposto dagli strumenti disponibili:
+richiesta al responsabile la modalità di accesso, senza chiedere credenziali.
+Il collaudo Windows è BLOCKED, non FAIL. Il verbale è nello stesso
+[piano QA](END_TO_END_QA_PLAN.md); i venti gate sono aggiornati in
+[RELEASE_GATES](RELEASE_GATES.md). Nessuna pubblicazione nuova autorizzata.
+
+Aggiornamento Notion **salvato e riletto dopo reload** nella pagina Persona 4:
+«RIPRESA MASTER — 17 novembre 2026 — RELEASE BLOCKED» presente una sola volta,
+con consegna precedente ancora presente. Screenshot locale conservato nelle
+evidenze QA fuori da Git. Hub/P1–P3 non aggiornati, nessun permesso modificato.
+Prima query DOM dopo reload cercava il tag main non presente nella nuova vista:
+nessuna prova positiva dedotta da quel controllo; rilettura body successiva ha
+confermato contenuto e unicità. Non è una nuova consegna dei singoli owner.
+
+Verifica statica mirata aggiuntiva: AST di local_app rileva **14 route**, zero
+response_model e zero annotazioni output; questo delimita la lacuna OpenAPI P2.
+App/CSS espongono temi/densità e griglia, senza controllo resize pannelli
+individuato: requisito P1 ancora incompleto, non un errore test inventato.
+Nei due moduli mt5 l'AST non trova chiamate dirette order_send/order_check/
+submit_order/cancel_order: prova statica delimitata, non attestazione nativa.
+Richieste tecniche nei rispettivi handoff, nessun nuovo prompt P1 assegnato.
+
 ## Consegna locale — 17 novembre 2026
 
 Branch `agents/codex-completion-20261116`, base `37a3840`, PR draft #8:

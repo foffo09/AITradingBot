@@ -1,5 +1,24 @@
 # Completamento autonomo — 16 novembre 2026
 
+## Mandato corrente — ripresa del 17 novembre
+
+- [x] Fetch senza prune; branch/HEAD/worktree/index verificati, checkout personale preservato.
+- [x] Quattro PR aperte ricontrollate: #8 dipende da #7, #6 da #5; draft e senza review.
+- [x] CI esatta a6d3f60:4/4SUCCESS,942Windows/941Mac+1skip,frontend34/Rust3,guard0/0.
+- [x] Letti Hub e P1–P4; Operating Guide resta non leggibile, Hub/P1–P3 senza editor osservato.
+- [x] Preparato verbale Windows11 nello stesso piano, senza fingere accesso al PC.
+- [x] Raccolto inventario819 licenze con testi/hash fuori da Git; gate distribuzione ancora bloccato.
+- [x] Identificate lacune pannelli P1 e schemi output OpenAPI P2 nei rispettivi handoff; nessun nuovo incarico.
+- [ ] Windows11/retention/upgrade e MT5 nativo: BLOCKED, accesso richiesto.
+- [ ] Licenza titolare/NOTICE artifact, audit e QA approvata: BLOCKED.
+- [ ] Sincronizzazione Notion completa: P4 aggiornata e riletta dopo reload; Hub/P1–P3 senza editor, Guide non leggibile.
+
+Il vecchio piano di pubblicazione sotto è cronologia. **Nessun nuovo staging,
+commit, push, merge o release senza approvazione esplicita** nel nuovo mandato.
+Questa fase modifica solo documentazione: prove sullo stesso SHA riutilizzate
+con attribuzione esatta; niente suite/build ripetute inutilmente o codice owner
+riscritto. Stato release e conteggio20criteri in RELEASE_GATES.md.
+
 ## Baseline e confini
 
 - Base remota verificata: `integration/local-web-desktop-20261116`, `37a3840775f8be65f5683789b8e728bf563a5c0f`.
@@ -82,3 +101,40 @@ Windows 11 GUI, broker autentici, firma/notarizzazione, permesso di distribuzion
 - Notion: BLOCCATO (Brave debuggerunattached, IAB senza sessione), report canonico pronto nel repo. Nessuna modifica permessi o login.
 - Gate release: BLOCCATO per licenza progetto/notice e proveWindows11/retention/firma/nativehangmancanti. Nessun ordine autenticato, capitale reale o deploy/release.
 - GUI: creato/fillDemo soltanto in nuova directorytemporanea attestata; Simulazione separata e NO_TRADE preservato. Primo diario standardaccidentale conservato come già segnalato, nessuna cancellazione di dati personali.
+
+## Missione master di completamento — 17 novembre, esecuzione
+
+Base a6d3f60, branch agents/master-consolidation-20261117, worktree separato.
+Nuovo mandato esplicito autorizza correzioni, test, commit e pubblicazione del
+solo branch dedicato. Preservati i dieci documenti locali della fase precedente,
+anche nella worktree sorgente. Nessun branch owner o main viene riscritto.
+Notion Hub/P1–P4 riletti; Guide conferma accesso negato. Nessun MCP Notion
+installato: instructions_version non è un parametro del controllo browser.
+
+Piano (nessuna nuova libreria):
+- [x] API: src/api/schemas.py e local_app.py; test_local_contracts.py. Prima test
+  RED per schema pubblico e risposta invalida, poi DTO Pydantic/additivi coerenti
+  con TypeScript. Errori output sanitizzati503, nessun retry o cambio finanziario.
+- [x] UI: App.tsx/styles.css e App.test.tsx; controllo nativo accessibile per
+  ripartire grafico/segnale, preferenza limitata/persistita e fallback responsive.
+  Nessun rifacimento grafico o formula nel client. Test RED→GREEN prima del codice.
+- [x] Audit portabilità/persistenza/lifecycle: riprodurre soltanto difetti reali,
+  test offline e percorsi temporanei; niente migrazioni o restore di dati personali.
+- [x] Suite Python completa/mirata/compileall/pipcheck, npm lint/typecheck/test/build,
+  Rust/Tauri e smoke source/frozen sul Mac. Review finale, audit dipendenze e diff.
+- [ ] Aggiornare gli stessi handoff/docs/Notion, commit atomici e push soltanto
+  ramo master nuovo dopo controllo remoto. Nessun merge PR7/8 o pubblicazione release.
+
+Scelta: mantenere gli envelope v1 e i record provider estensibili JSON-safe,
+validando campi e invarianti di trasporto senza duplicare RiskManager/engine.
+Scelta: range HTML accessibile, non una nuova libreria di docking; supporto a
+puntatore/tastiera e layout a colonna sui viewport stretti. Costo: non è docking
+arbitrario di ogni scheda, fuori dallo scope dell'interfaccia corrente.
+Windows11 GUI/MT5nativo/retentiondisinstallazione restano gate bloccati dalMac.
+
+
+Esito locale:969PASS/1skip/1warning,guard0/0;API57,frontend42,Rust3,build/smoke
+source/frozen/TauriMacPASS. Reviewdue rilievi riprodotti e corretti,nessun test
+preesistente eliminato. Timeoutlegacy concorrenti riportati e serialeverde.
+NativeMacprivata verificata; riaperturaAX dopoquit chiusa immediatamente,
+nessun processo residuo e nessuna azione finanziaria. Nuovi13gate inRELEASE_GATES.

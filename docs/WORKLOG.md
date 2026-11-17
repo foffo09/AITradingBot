@@ -1,5 +1,96 @@
 # Registro del lavoro
 
+## Missione master — codice e QA, 17 novembre
+
+Nuovo worktree/branch agents/master-consolidation-20261117 dalla basea6d3f60,
+fetch e ownership verificati; copiati soltanto i dieci documenti nostri precedenti,
+sorgente lasciata intatta. Nuovo mandato autorizza commit/push branch dedicato;
+main/PR7/PR8/branchowner preservati. GuideNotion accesso negato confermato.
+
+Implementati DTOoutput14route e errori503 sanificati; SDKJSONpreservato, no
+nonfiniti→null silenzioso, idempotenza dopo fill verificata. RangeHTML pannelli
+persistente50–75%, fallbackresponsive/storagecorrotto/negato. Zero dipendenze.
+Review indipendente: proposta incompleta poteva conservare BUY; aggiunto guard
+condizionale senza rifare RiskManager. EquityPoint separato dai nullindicatori.
+5nuove riproduzioniRED→GREEN;2shapecomplete verificano compatibilità. Il secondo
+rilievo, classificatoMinor dalla review, è trattato come completamento del
+contratto richiesto: equitynull causa rifiuto dell'intero backtest nel consumer.
+Non sostituisce gate dati/rischio; NO_TRADE resta il default legacy incompleto.
+
+Suite finale seriale969PASS/1skip/1warning39.33s,guard0/0;API57PASS2.19s,
+mirati278PASS/1skip9.03s prima degli ultimi7casi API;frontend42PASS;Rust3PASS3.05s;
+compileall/pipcheck/lint/typecheck/build/diffcheck0. Quattro timeoutAppTest15s
+osservati con build/suite concorrenti,9casi rieseguitiPASS5.96s e completa
+serialePASS senza cambiare test/timeout. Dettagli nel MASTER_AUDIT, non occultati.
+
+Source/frozenHTTPpass e bundleMac51.44MiB costruito; sidecar finale nel bundle
+confrontato byte-per-byte con dist. Cargo iniziale richiedeva sidecar non ancora
+preparato: costruito e ripetuto, nessun controllo rimosso. Adhoc backup/restore
+con capitale1000/cash900/posizione1/storico1,integritàok,originale invariato e
+Simvuota. Helper iniziale senza3parametri rischio fallivaTypeError, corretto con
+settingspreesistenti; nessun cambiamento alle soglie o dati personali.
+
+Browserprivato:click68→62,Right→63,reload63;390pxsenzaoverflow,colonna358px e
+console[].Backendchiusoexit0. GUI.app privata: data-dir/worker/porta58351
+attestati prima di getApp,primohealth13.5305s(nonpaint);puntatore+tastiera→63.
+DopoCmdQ, la letturaAX ha riaperto l'app con porta58403: nessuna azione eseguita
+nella nuovaistanza; chiusa subito senza ulteriori lettureAX che la rilanciassero.
+Originaleopenexit0,nessun processo del bundle rimasto; non si afferma che appdata
+standard non sia stata letta dal renderer. Nessuna operazione finanziaria,
+credenziale o DBpersonale aperto da CLI; screenshotprivato salvato prima.
+
+Auditpip e npm0advisory. Licenza progetto/NOTICE/Windows11/MT5nativo/retention
+restano gate espliciti. NativeUI provaMac non trasferita aWindows. Commit e
+push finali devono includere soltanto i18file previsti, senza artifact/cache/env.
+
+
+## 17 novembre 2026 — audit di readiness, nuovo mandato
+
+- Worktree Codex completion riusato pulito, branch agents/codex-completion-20261116,
+  HEAD/upstream a6d3f60. Fetch senza prune riuscito. Main remoto fe98839 e checkout
+  personale main2b2d35a con17modificati/2untracked preesistenti preservati.
+- PR5/6/7/8 rilette: tutte draft/CLEAN, review e richieste review vuote. #8 dipende
+  da#7, #6 da#5; nessun merge/retarget/push/review/dispatch eseguito.
+- Log già eseguiti sullo stessoSHA riletti, senza nuova suite inutile:
+  run43976031716 quattrojobSUCCESS, WindowsServer942PASS/0skip/1warning134.48s,
+  MacCI941PASS/1skip/1warning117.66s, frontend34/Rust3 ciascuno,guard0/0.
+  Locale941PASS/1skip38.61s e160mirati4.82s. Compileall/pipcheck/build/smoke/NSIS
+  rimangono prove del loro run, non nuove esecuzioni di questa fase documentale.
+- Notion: letti Hub/P1–P4, Guide non leggibile e link Nessun accesso. Hub/P1–P3
+  senza editor; P4 aggiornata nello stesso report conservando lo storico.
+  Reload+rilettura body: titolo aggiornamento una sola volta e storico presente;
+  screenshot conservato fuoriGit. Query iniziale main dopo reload non valida,
+  corretta con body; nessun falso PASS o cambio permessi/abbonamento.
+- Inventory819record:120Pythoninstallati/270npmlock/429Cargolock,729con testi
+  legali raccolti e hash. Cargo metadata confrontati al lock; identità uniche e
+  assenza percorsi personali controllate con assert. Artifact fuoriGit.
+  Licenza progetto/attribuzioni complete/binariWindows ancoraBLOCKED.
+- ASTlocalAPI:14route,0response_model,0annotazionioutput; lacuna P2 documentata.
+  P1 temi/densità presenti, nessun controllo resizepannelli individuato nel
+  rendering/CSS; annotato nell'incarico esistente, nessun nuovo prompt assegnato.
+  MT5AST:nessuna chiamata diretta operativa nei due moduli; prova solo statica.
+- Aggiornati trehandoff, audit, architettura, matrice, pianoQA con6casiWindows,
+  progress e20releasegates.12/20PASS(60%dei criteri delimitati),releaseBLOCKED.
+  CopiaGit separata non basta a isolare appdata: richiesto profilo di prova.
+- NessunWindows11 esposto dagli strumenti: chiesto metodo di accesso al
+  responsabile,senza credenziali. Nessun ordine/server/broker autentico o
+  automazione finanziaria. Solo documentazione modificata; nessuno staging,
+  commit,push,merge,installer pubblico o release nel nuovo mandato.
+- Alcuni tentativi apply_patch documentali con contesto errato sono stati
+  rifiutati prima della scrittura; corretti i contesti e applicati i soli file
+  previsti. Nessun file perso o test alterato; verifica finale separata sotto.
+
+Verifica finale effettiva: validatore documentale exit0. Perimetro esatto10file
+Markdown, tutti gli originali conservati (diff con sole inserzioni), link nuovi
+relativi risolti, nessun markerconflitto o segreto letterale sospetto nel testo
+aggiunto.20gate unici=12PASS/7BLOCKED/1NONVERIFICATO;6casiW11 presenti e non
+eseguiti.819identità licenze uniche,729con testi, hash artifact e sei manifest
+coincidenti. `git diff --check`:exit0/outputvuoto. Index vuoto, nessun untracked
+nel worktree, HEAD invariato; workingtree non pulito per i10documenti voluti.
+File: BACKEND_HANDOFF, DASHBOARD_HANDOFF, STRATEGY_HANDOFF; docs/ARCHITETTURA_APP,
+CODEX_MASTER_PROGRESS, END_TO_END_QA_PLAN, MASTER_AUDIT, MATRICE_TEST,
+RELEASE_GATES e WORKLOG (tutti .md). Nessun codice prodotto modificato.
+
 Le voci registrano risultati osservati, non promesse. I percorsi personali sono omessi; il checkout macOS indicato è `outputs/codex_omega_bot`, distinto da quello Windows.
 
 ## 2026-10-29 — Revisione di qualità precedente
