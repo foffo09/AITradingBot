@@ -10,8 +10,9 @@ import threading
 from uuid import UUID
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import pandas as pd
@@ -30,9 +31,11 @@ from src.strategy.moving_average import MovingAverageStrategy
 from src.strategy.trend import EMACrossoverStrategy
 from src.strategy.engine import SignalProposal
 
-Context = Literal['demo', 'simulation', 'paper', 'mt5']
-LocalContext = Literal['demo', 'simulation']
-Interval = Literal['1Min', '5Min', '15Min', '1Hour', '1Day', '1Week']
+from src.api.schemas import (
+    Context, LocalContext, Interval, ErrorResponse, HealthResponse, IdentityResponse,
+    ShutdownResponse, StateResponse, InstrumentsResponse, MarketResponse,
+    TradeResponse, BacktestResponse, ProposalResponse,
+)
 Positive = Annotated[float, Field(gt=0, le=1e12, strict=True, allow_inf_nan=False)]
 COOKIE = 'aitradingbot_session'
 
@@ -110,7 +113,8 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     mt5 = MT5Process()
     controls = {context: OfflineExecutor(root, context) for context in ('demo', 'simulation', 'paper', 'mt5')}
     settings = AppSettings(trading_mode='demo', paper_trading_enabled=False)
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None,
+        responses={code: {'model': ErrorResponse} for code in (401, 403, 409, 422, 503)})
 
     @app.middleware('http')
     async def local_boundary(request: Request, call_next):
@@ -145,26 +149,30 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     async def validation_error(request, exc):
         return JSONResponse({'detail': 'Invalid request parameters.'}, status_code=422)
 
+    @app.exception_handler(ResponseValidationError)
+    async def invalid_output(request, exc):
+        # Validation errors may contain provider/account data: never echo or log them.
+        return JSONResponse({'detail': 'Local response could not be verified; no state was inferred.'}, status_code=503)
+
     @app.exception_handler(sqlite3.Error)
     @app.exception_handler(OSError)
     async def storage_error(request, exc):
         return JSONResponse({'detail': 'Local storage unavailable; no account state was inferred.'}, status_code=503)
 
-    @app.get('/api/v1/health')
+    @app.get('/api/v1/health', response_model=HealthResponse)
     def health():
         return {'api_version': '1', 'status': 'ready'}
 
-    @app.get('/api/v1/session')
-    def session():
-        response = JSONResponse(health())
+    @app.get('/api/v1/session', response_model=HealthResponse)
+    def session(response: Response):
         response.set_cookie(COOKIE, token, httponly=True, samesite='strict', path='/api/v1')
-        return response
+        return health()
 
-    @app.get('/api/v1/identity')
+    @app.get('/api/v1/identity', response_model=IdentityResponse)
     def identity():
         return {'pid': os.getpid(), 'instance_id': app.state.instance_id}
 
-    @app.post('/api/v1/shutdown')
+    @app.post('/api/v1/shutdown', response_model=ShutdownResponse)
     def shutdown():
         callback = getattr(app.state, 'request_shutdown', None)
         if callback is None:
@@ -207,19 +215,19 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 if hasattr(account, 'model_dump'):
                     account = account.model_dump(mode='json')
                 public_account = {key: account.get(key) for key in ('cash', 'equity', 'buying_power', 'last_equity', 'currency')}
-                result.update(connection={'status': 'connected', 'reason': 'Alpaca Paper read-only; snapshot is not atomic.'}, account={**public_account, 'source': 'Alpaca Paper', 'updated_at': snap['updated_at']}, positions=snap['positions'], orders=snap['orders'])
+                result.update(connection={'status': 'connected', 'reason': 'Alpaca Paper read-only; snapshot is not atomic.'}, account={**public_account, 'source': 'Alpaca Paper', 'updated_at': snap['updated_at']}, positions=jsonable_encoder(snap['positions']), orders=jsonable_encoder(snap['orders']))
             except Exception:
                 result['connection'] = {'status': 'unavailable', 'reason': 'Paper snapshot unavailable; reconnect explicitly.'}
         elif context == 'mt5':
             result.update(mt5.snapshot())
         return result
 
-    @app.get('/api/v1/state')
+    @app.get('/api/v1/state', response_model=StateResponse)
     def get_state(context: Context = 'demo'):
         with lock:
             return state(context)
 
-    @app.get('/api/v1/instruments')
+    @app.get('/api/v1/instruments', response_model=InstrumentsResponse)
     def instruments():
         return {'api_version': '1', 'instruments': [{'symbol': symbol, 'name': info['name']} for symbol, info in INSTRUMENTS.items()]}
 
@@ -237,7 +245,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             return mt5.market_data(symbol, interval)
         raise ValueError('Explicit connection required.')
 
-    @app.get('/api/v1/market')
+    @app.get('/api/v1/market', response_model=MarketResponse)
     def market(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
         result = {'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'status': 'unavailable', 'reason': 'Market data unavailable; no fallback.', 'source': None, 'as_of': None, 'bars': [], 'quote': None, 'metadata': {}, 'indicators': []}
@@ -259,7 +267,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 result.update(status='unavailable', reason='Market data request failed; no fallback or cached values.', source=None, as_of=None, quote=None, bars=[], metadata={})
         return result
 
-    @app.post('/api/v1/local-account')
+    @app.post('/api/v1/local-account', response_model=StateResponse)
     def local_account(body: AccountInput):
         with lock:
             local = ledger(body.context)
@@ -272,7 +280,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 raise HTTPException(409, 'Local account already initialized.') from None
             return state(body.context)
 
-    @app.post('/api/v1/local-trades')
+    @app.post('/api/v1/local-trades', response_model=TradeResponse)
     def local_trade(body: TradeInput):
         _symbol(body.symbol)
         with lock:
@@ -292,7 +300,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 raise HTTPException(409, 'Simulated trade blocked by account, position or risk limits.', headers={'X-Request-Outcome': 'rejected'}) from None
             return {**state(body.context), 'fill': fill}
 
-    @app.post('/api/v1/backtest')
+    @app.post('/api/v1/backtest', response_model=BacktestResponse)
     def backtest(body: BacktestInput):
         _symbol(body.symbol)
         if body.short_window >= body.long_window:
@@ -307,7 +315,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
         curve = result.pop('equity_curve')
         return {'api_version': '1', 'context': body.context, 'symbol': body.symbol, 'source': data.attrs['source'], 'strategy': 'sma', 'parameters': {'short_window': body.short_window, 'long_window': body.long_window}, 'interval': '1Day', 'sample': {'start': data.iloc[0]['timestamp'].isoformat(), 'end': data.iloc[-1]['timestamp'].isoformat(), 'bars': len(data)}, 'validation': {'kind': 'single_sample', 'out_of_sample': None}, 'metrics': result, 'trades': trades, 'equity': [{'time': int(pd.Timestamp(timestamp).timestamp()), 'value': value} for timestamp, value in zip(data['timestamp'], curve)]}
 
-    @app.get('/api/v1/proposal')
+    @app.get('/api/v1/proposal', response_model=ProposalResponse)
     def proposal(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
         fallback = {**SignalProposal(symbol=symbol, reason='Risk snapshot and current market data are not verified for execution.').to_dict(), 'api_version': '1', 'contract_version': '1', 'context': context, 'interval': interval}
@@ -317,14 +325,14 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 data = frame(context, symbol, interval)
                 quote = paper.get_latest_quote(symbol) if context == 'paper' and paper else None
                 result = evaluate_proposal(settings=paper.settings if context == 'paper' and paper else settings, bars=data, quote=quote, source=data.attrs['source'], as_of=pd.Timestamp.now(tz='UTC'), symbol=symbol, interval=interval, risk_snapshot=None, context=context)
-                return {**result, 'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval}
+                return {**fallback, **result, 'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval}
             except ImportError:
                 fallback['reason'] = 'Strategy service unavailable; no proposal can be verified.'
             except Exception:
                 fallback['reason'] = 'Current market data or risk snapshot unavailable; no proposal can be verified.'
         return fallback
 
-    @app.post('/api/v1/automation')
+    @app.post('/api/v1/automation', response_model=StateResponse)
     def automation(body: AutomationInput):
         with lock:
             try:
@@ -334,7 +342,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 raise HTTPException(409, 'Dry-run ownership or transition could not be verified; no retry was performed.') from None
             return state(body.context)
 
-    @app.post('/api/v1/connections/paper')
+    @app.post('/api/v1/connections/paper', response_model=StateResponse)
     def connect_paper():
         nonlocal paper
         with lock:
@@ -354,7 +362,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 return {**state('paper'), 'connection': {'status': 'unavailable', 'reason': 'Paper connection failed; no account values are published.'}}
             return state('paper')
 
-    @app.post('/api/v1/connections/mt5')
+    @app.post('/api/v1/connections/mt5', response_model=StateResponse)
     def connect_mt5():
         with lock:
             mt5.connect()
