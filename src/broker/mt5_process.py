@@ -149,6 +149,8 @@ class MT5Process:
     def _fail(self, phase, started):
         """The worker is gone, hung or spoke garbage: say which, reap it, and raise."""
         process = self._process
+        if process is not None:
+            process.join(_CLEANUP_SECONDS)  # a broken pipe arrives before Windows reports the exit code
         exitcode = None if process is None else process.exitcode
         error_type = 'worker_exited' if exitcode is not None else 'timeout'
         detail = f'exited with code {exitcode}' if exitcode is not None else 'did not answer in time'

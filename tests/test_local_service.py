@@ -163,6 +163,7 @@ def test_mt5_reads_whitelisted_methods_only(monkeypatch):
         def order_send(self, *args): pytest.fail('No MT5 orders permitted')
     monkeypatch.setattr(mt5_readonly, 'sys', SimpleNamespace(platform='win32'))
     monkeypatch.setattr(mt5_readonly, 'importlib', SimpleNamespace(import_module=lambda name: Terminal()))
+    monkeypatch.setattr(mt5_readonly, '_terminal_running', lambda: True)  # real tasklist on Windows CI
     reader = mt5_readonly.MT5ReadOnly()
     reader.connect()
     assert reader.snapshot()['account']['cash'] == 100

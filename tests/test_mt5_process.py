@@ -199,6 +199,7 @@ def native_worker(connection):
         order_send=forbidden, order_check=forbidden)
     mt5_readonly.sys = SimpleNamespace(platform='win32')
     mt5_readonly.importlib = SimpleNamespace(import_module=lambda name: sdk)
+    mt5_readonly._terminal_running = lambda: True  # real tasklist on Windows CI
     class Reader(mt5_readonly.MT5ReadOnly):
         def latest_quote(self, symbol):
             if symbol == 'real':
