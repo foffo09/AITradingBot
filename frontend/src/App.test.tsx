@@ -660,6 +660,8 @@ describe("pagine aggiunte per la dismissione di Streamlit", () => {
     await waitFor(() => expect(screen.getByText(/Occupato \(lettura broker in corso\)/)).toBeInTheDocument());
     expect(screen.getByText("Invio ordini: disabilitato")).toBeInTheDocument();
     expect(screen.getByText("Non creato")).toBeInTheDocument();
+    expect(screen.getByText("0.1.0")).toBeInTheDocument();
+    expect(screen.getByText("Darwin arm64")).toBeInTheDocument();
   });
   it("Stato sistema rifiuta una risposta che non dichiara invio disabilitato", async () => {
     withRoutes({"/system": {api_version: "1", status: "ready", service_version: "0.1.0", python: "3", platform: "x",
@@ -676,6 +678,7 @@ describe("pagine aggiunte per la dismissione di Streamlit", () => {
     const row = screen.getByRole("row", { name: /AAPL/ });
     expect(row.textContent).toContain("N/D");
     expect(screen.getByRole("button", { name: "Rimuovi" })).toBeInTheDocument();
+    expect(screen.getByText(/la serie generata è la stessa per tutti gli strumenti/)).toBeInTheDocument();
   });
   it("walk-forward mostra i fold fuori campione restituiti dal motore", async () => {
     withRoutes({"/walk-forward": {api_version: "1", source: "synthetic-demo", selection_metric: "training net return", training_bars: 66,

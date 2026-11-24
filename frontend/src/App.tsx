@@ -824,6 +824,11 @@ function Watchlist({
             <button className="primary" disabled={busy || !candidate || symbols.length >= 20}>Aggiungi</button>
           </form>
           <p className="notice">La variazione confronta le ultime due chiusure giornaliere disponibili; non è una quotazione in tempo reale.</p>
+          {(context === "demo" || context === "simulation") && (
+            <p className="notice">
+              Dati sintetici dimostrativi: la serie generata è la stessa per tutti gli strumenti e non rappresenta i loro prezzi reali.
+            </p>
+          )}
         </>
       )}
     </section>
@@ -857,9 +862,17 @@ function SystemPanel({ revision }: { revision: number }) {
       {status && (
         <>
           <div className="metrics">
-            <Metric label="Versione servizio" value={null} caption={status.service_version} />
+            <article className="metric">
+              <span className="eyebrow">Versione servizio</span>
+              <strong>{status.service_version}</strong>
+              <small>Servizio locale FastAPI</small>
+            </article>
             <Metric label="Attivo da" value={status.uptime_seconds} unit="s" caption={`Avvio ${instant(status.started_at)}`} />
-            <Metric label="Piattaforma" value={null} caption={`${status.platform} · Python ${status.python}`} />
+            <article className="metric">
+              <span className="eyebrow">Piattaforma</span>
+              <strong>{status.platform}</strong>
+              <small>Python {status.python}</small>
+            </article>
           </div>
           <div className="table-wrap">
             <table>

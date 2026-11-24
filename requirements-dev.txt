@@ -1,3 +1,4 @@
 # Full offline test suite also exercises optional provider SDKs via mocks.
 -r requirements-omega.txt
 # pytest remains in requirements.txt for compatibility with existing launchers.
+ruff==0.17.6

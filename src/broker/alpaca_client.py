@@ -482,7 +482,7 @@ class AlpacaClient:
             return bars.sort_values("timestamp").reset_index(drop=True)
         except BrokerConnectionError:
             raise
-        except Exception as exc:  # pragma: no cover - requires broker/API failure
+        except Exception:  # pragma: no cover - requires broker/API failure
             self.logger.warning("Alpaca market-data request failed for %s.", symbol)
             raise BrokerConnectionError(
                 f"Market data unavailable for {symbol}. Verify data entitlements and the selected period."
@@ -534,7 +534,7 @@ class AlpacaClient:
             }
         except BrokerConnectionError:
             raise
-        except Exception as exc:  # pragma: no cover - requires broker/API failure
+        except Exception:  # pragma: no cover - requires broker/API failure
             self.logger.warning("Alpaca latest quote request failed for %s.", symbol)
             raise BrokerConnectionError(
                 f"Latest quote unavailable for {symbol}; last historical bar may still be available."

@@ -1,0 +1,3 @@
+# Minimal gate (AUDIT-L6): syntax errors and pyflakes only; style rules are not enforced yet.
+[lint]
+select = ["E9", "F"]

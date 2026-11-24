@@ -1,7 +1,6 @@
 """Non-financial preferences survive a port change; GET never creates storage."""
 import json
 import os
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient

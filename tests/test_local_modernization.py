@@ -2,7 +2,6 @@
 import os
 import threading
 import time
-from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient

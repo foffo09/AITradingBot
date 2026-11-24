@@ -1,4 +1,3 @@
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -219,7 +218,7 @@ def test_storage_failure_has_no_fallback_balance_or_internal_details(tmp_path):
     from src.api.local_app import create_local_app
     app = create_local_app(data_dir=tmp_path, port=8123)
     c = TestClient(app, base_url='http://127.0.0.1:8123', raise_server_exceptions=False)
-    h = authorize(c)
+    authorize(c)
     (tmp_path / 'local-v1-demo.sqlite3').write_text('invalid database')
     result = c.get('/api/v1/state?context=demo')
     assert result.status_code == 503
