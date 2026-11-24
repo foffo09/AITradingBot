@@ -1,15 +1,20 @@
 """Optional Windows terminal reader. No trading methods are exposed or called."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import importlib
 import math
 from numbers import Integral, Real
+import subprocess
 import sys
+import time
 
-import numpy as np
-import pandas as pd
+# numpy/pandas are imported only where bars are parsed: the reader runs in a spawn worker whose
+# start-up time is on the critical path of every connection (see docs/MT5_CONNECTION_FIX_REPORT.md).
 
 SOURCE = 'MetaTrader 5 terminal'
+INITIALIZE_TIMEOUT_MS = 5000
+_TERMINAL_IMAGES = ('terminal64.exe', 'terminal.exe')
 
 
 class MT5ReadError(ValueError):
@@ -39,6 +44,29 @@ def _records(items, required_numbers):
     return result
 
 
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _last_error(module):
+    """MT5's own (code, description) for the last failure; the description holds no credentials."""
+    try:
+        code, message = module.last_error()
+        return [int(code), str(message)[:120]]
+    except Exception:
+        return None
+
+
+def _terminal_running():
+    """True/False from the process list; None when it cannot be determined (then not enforced)."""
+    try:
+        listing = subprocess.run(['tasklist', '/FO', 'CSV', '/NH'], capture_output=True, text=True, timeout=5,
+                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout.lower()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return any(f'"{image}"' in listing for image in _TERMINAL_IMAGES)
+
+
 def _demo_account(module, account):
     mode = getattr(account, 'trade_mode', None)
     expected = getattr(module, 'ACCOUNT_TRADE_MODE_DEMO', None)
@@ -53,25 +81,49 @@ class MT5ReadOnly:
         self._reason = 'Explicit terminal connection required.'
 
     def connect(self):
+        """Connect read-only and report the outcome of every phase (status, phase, reason, MT5 code, time)."""
+        started = time.monotonic()
+
+        def outcome(status, phase, reason, mt5_error=None):
+            self._reason = reason
+            return {'status': status, 'phase': phase, 'reason': reason, 'mt5_error': mt5_error,
+                    'elapsed_ms': round((time.monotonic() - started) * 1000)}
+
         if sys.platform != 'win32':
-            self._reason = 'MetaTrader 5 is unsupported on this platform; Windows terminal required.'
-            return
+            return outcome('unsupported', 'platform', 'MetaTrader 5 is unsupported on this platform; Windows terminal required.')
         self.close()
         try:
             module = importlib.import_module('MetaTrader5')
-            if module.initialize(timeout=5000):
-                self._module = module
-                self._terminal()
-                self._reason = 'Windows terminal read-only; account observation is not a broker timestamp.'
-            else:
+        except Exception as error:
+            return outcome('unavailable', 'import', f'MetaTrader5 package not importable by the service interpreter ({type(error).__name__}); '
+                                                    'install packaging/backend/requirements-mt5.txt in the same environment.')
+        # The app never launches the terminal: initialize() would start it inside the desktop app's job
+        # object, and closing the app would then also close the user's terminal.
+        if _terminal_running() is False:
+            return outcome('unavailable', 'terminal_not_running', 'MetaTrader 5 terminal is not running: open it and sign in to a Demo account, then connect again.')
+        phase = 'initialize'
+        try:
+            if not module.initialize(timeout=INITIALIZE_TIMEOUT_MS):
+                error = _last_error(module)
                 module.shutdown()
-                self._reason = 'Terminal initialization unavailable.'
-        except Exception:
-            self._reason = 'Verified Demo account or optional MetaTrader 5 terminal unavailable.'
+                detail = f' (MT5 {error[0]}: {error[1]})' if error else ''
+                return outcome('unavailable', phase, f'Terminal initialization failed{detail}.', error)
+            self._module = module
+            phase = 'terminal_info'
+            info = module.terminal_info()
+            if info is None or getattr(info, 'connected', None) is not True:
+                raise MT5ReadError('Terminal is not connected to its trade server.')
+            phase = 'account'
+            _demo_account(module, module.account_info())
+        except Exception as error:
+            reason = str(error) if isinstance(error, MT5ReadError) else f'{phase} failed ({type(error).__name__}).'
+            mt5_error = _last_error(module)
             try:
                 self.close()
             except Exception:
-                self._reason = 'Demo verification failed and terminal cleanup was not confirmed.'
+                reason += ' Terminal cleanup was not confirmed.'
+            return outcome('unavailable', phase, reason, mt5_error)
+        return outcome('connected', 'connected', 'Windows terminal read-only; account observation is not a broker timestamp.')
 
     # shortcut: native reads expose no timeout, isolate MT5 in a process before requiring a hard deadline.
     def _terminal(self):
@@ -100,12 +152,20 @@ class MT5ReadOnly:
             cash, equity = _number(account.balance), _number(account.equity)
             positions = _records(terminal.positions_get(), ('volume', 'price_open', 'price_current', 'profit'))
             orders = _records(terminal.orders_get(), ('volume_initial', 'volume_current', 'price_open'))
-            updated_at = pd.Timestamp.now(tz='UTC').isoformat()
-            return {'connection': {'status': 'connected', 'reason': self._reason}, 'account': {'cash': cash, 'equity': equity, 'currency': account.currency, 'source': SOURCE, 'updated_at': updated_at}, 'positions': positions, 'orders': orders}
+            # Optional fields stay None (N/D) when the terminal does not provide a finite value.
+            def optional(name):
+                value = getattr(account, name, None)
+                return float(value) if isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value) else None
+            details = {name: optional(name) for name in ('profit', 'margin', 'margin_free', 'margin_level')}
+            return {'connection': {'status': 'connected', 'reason': self._reason},
+                    'account': {'cash': cash, 'balance': cash, 'equity': equity, **details, 'currency': account.currency,
+                                'server': account.server, 'source': SOURCE, 'updated_at': _now_iso()},
+                    'positions': positions, 'orders': orders}
         except Exception:
             return {'connection': {'status': 'unavailable', 'reason': 'Terminal account or snapshot is not verifiable.'}, 'account': None, 'positions': [], 'orders': []}
 
     def latest_quote(self, symbol):
+        import pandas as pd
         try:
             tick = self._terminal().symbol_info_tick(symbol)
             if tick is None:
@@ -127,6 +187,8 @@ class MT5ReadOnly:
             raise MT5ReadError('Terminal quote unavailable; no historical-price fallback.') from None
 
     def market_data(self, symbol, interval):
+        import numpy as np
+        import pandas as pd
         try:
             terminal = self._terminal()
             name = {'1Min': 'TIMEFRAME_M1', '5Min': 'TIMEFRAME_M5', '15Min': 'TIMEFRAME_M15', '1Hour': 'TIMEFRAME_H1', '1Day': 'TIMEFRAME_D1', '1Week': 'TIMEFRAME_W1'}[interval]

@@ -959,3 +959,24 @@ footer {
     transition: none !important;
   }
 }
+
+/* MT5 diagnostics: label/value pairs, wraps on narrow windows */
+.diagnostics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+}
+.diagnostics div {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  min-width: 0;
+}
+.diagnostics dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.diagnostics dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}

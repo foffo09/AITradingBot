@@ -31,6 +31,7 @@ def terminal(monkeypatch):
     )
     monkeypatch.setattr(mt5_readonly, 'sys', SimpleNamespace(platform='win32'))
     monkeypatch.setattr(mt5_readonly, 'importlib', SimpleNamespace(import_module=lambda name: module))
+    monkeypatch.setattr(mt5_readonly, '_terminal_running', lambda: True)
     reader = mt5_readonly.MT5ReadOnly()
     reader.connect()
     return reader, state
@@ -162,3 +163,82 @@ def test_non_demo_or_unknown_terminal_account_is_blocked_on_every_read(terminal,
     reader.connect()
     assert reader.snapshot()['connection']['status'] != 'connected'
     assert reader._module is None
+
+
+def _windows(monkeypatch, module=None, running=True, import_error=None):
+    def load(name):
+        if import_error:
+            raise import_error
+        return module
+    monkeypatch.setattr(mt5_readonly, 'sys', SimpleNamespace(platform='win32'))
+    monkeypatch.setattr(mt5_readonly, 'importlib', SimpleNamespace(import_module=load))
+    monkeypatch.setattr(mt5_readonly, '_terminal_running', lambda: running)
+    return mt5_readonly.MT5ReadOnly()
+
+
+def _sdk(**overrides):
+    calls = []
+    sdk = dict(initialize=lambda **kwargs: calls.append('initialize') or True, shutdown=lambda: calls.append('shutdown'),
+               terminal_info=lambda: SimpleNamespace(connected=True),
+               account_info=lambda: SimpleNamespace(trade_mode=0), last_error=lambda: (1, 'Success'),
+               ACCOUNT_TRADE_MODE_DEMO=0)
+    sdk.update(overrides)
+    return SimpleNamespace(**sdk), calls
+
+
+def test_connect_reports_every_phase_with_a_precise_reason(monkeypatch):
+    outcome = _windows(monkeypatch, import_error=ImportError('No module named MetaTrader5')).connect()
+    assert outcome['status'] == 'unavailable' and outcome['phase'] == 'import' and 'requirements-mt5' in outcome['reason']
+
+    module, calls = _sdk()
+    outcome = _windows(monkeypatch, module, running=False).connect()
+    assert outcome['phase'] == 'terminal_not_running' and calls == [], 'the app never launches the terminal'
+
+    module, calls = _sdk(initialize=lambda **kwargs: False, last_error=lambda: (-10005, 'IPC timeout'))
+    outcome = _windows(monkeypatch, module).connect()
+    assert outcome['phase'] == 'initialize' and outcome['mt5_error'] == [-10005, 'IPC timeout']
+    assert 'MT5 -10005: IPC timeout' in outcome['reason'] and calls == ['shutdown']
+
+    module, calls = _sdk(terminal_info=lambda: SimpleNamespace(connected=False))
+    outcome = _windows(monkeypatch, module).connect()
+    assert outcome['phase'] == 'terminal_info' and 'trade server' in outcome['reason'] and 'shutdown' in calls
+
+    module, calls = _sdk(account_info=lambda: SimpleNamespace(trade_mode=2))
+    outcome = _windows(monkeypatch, module).connect()
+    assert outcome['phase'] == 'account' and 'Demo' in outcome['reason'] and 'shutdown' in calls
+
+    module, calls = _sdk(terminal_info=lambda: (_ for _ in ()).throw(RuntimeError('native failure')))
+    outcome = _windows(monkeypatch, module).connect()
+    assert outcome['phase'] == 'terminal_info' and 'RuntimeError' in outcome['reason']
+
+    module, calls = _sdk()
+    reader = _windows(monkeypatch, module)
+    outcome = reader.connect()
+    assert outcome['status'] == 'connected' and outcome['phase'] == 'connected' and outcome['elapsed_ms'] >= 0
+    assert calls == ['initialize']
+
+
+def test_unknown_process_list_does_not_block_the_connection(monkeypatch):
+    module, calls = _sdk()
+    assert _windows(monkeypatch, module, running=None).connect()['status'] == 'connected'
+
+
+def test_snapshot_exposes_dashboard_fields_and_null_for_missing_ones(terminal):
+    reader, state = terminal
+    state.account.profit, state.account.margin, state.account.margin_free = 1., 20., 980.
+    state.account.margin_level = float('nan')
+    account = reader.snapshot()['account']
+    assert account['balance'] == 1000 and account['profit'] == 1 and account['margin_free'] == 980
+    assert account['margin_level'] is None, 'non-finite stays N/D'
+    assert account['server'] == 'Offline broker' and 'login' not in account
+
+
+def test_reader_and_worker_expose_no_write_operation():
+    """Read-only by construction: no MT5 trading call exists in the code paths the service can reach."""
+    from pathlib import Path
+    from src.broker import mt5_process
+    forbidden = ('order_send', 'order_check', 'order_modify', 'position_close', 'Close(', 'order_calc')
+    for module in (mt5_readonly, mt5_process):
+        source = Path(module.__file__).read_text(encoding='utf-8')
+        assert not [name for name in forbidden if name in source], module.__name__
+    assert mt5_process._OPERATIONS == {'connect', 'snapshot', 'latest_quote', 'market_data', 'close'}

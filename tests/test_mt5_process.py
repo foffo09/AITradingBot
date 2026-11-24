@@ -129,7 +129,13 @@ def test_frozen_bootstrap_diverts_before_importing_runtime(monkeypatch):
     assert diverted == [True]
 
 
+def ready(connection):
+    """First frame of the worker protocol (see mt5_process._worker)."""
+    connection.send(('ready', {'pid': os.getpid(), 'executable': sys.executable, 'python': 'fixture'}))
+
+
 def stalled_worker(connection):
+    ready(connection)
     operation, args = connection.recv()
     assert operation == 'connect'
     connection.send(('ok', None))
@@ -157,6 +163,7 @@ def test_worker_blocks_operations_outside_read_allowlist(module):
     process.start()
     child.close()
     try:
+        assert parent.poll(10) and parent.recv()[0] == 'ready'
         parent.send(('order_send', ()))
         assert parent.poll(5)
         assert parent.recv() == ('error', 'Unsupported terminal operation.', 'unavailable')
@@ -219,6 +226,7 @@ def test_real_native_validation_survives_process_boundary(module, monkeypatch):
 
 
 def malformed_worker(connection):
+    ready(connection)
     connection.recv()
     connection.send(('ok', None))
     connection.recv()
@@ -246,6 +254,8 @@ def silent_worker(connection):
 
 def test_connect_timeout_reaps_worker_and_allows_explicit_reconnect(module, monkeypatch):
     monkeypatch.setattr(module, '_worker', silent_worker)
+    startup = module._STARTUP_SECONDS
+    monkeypatch.setattr(module, '_STARTUP_SECONDS', .15)  # start-up has its own bound now
     before = {p.pid for p in multiprocessing.active_children()}
     reader = module.MT5Process(timeout=.15)
     started = time.monotonic()
@@ -254,9 +264,119 @@ def test_connect_timeout_reaps_worker_and_allows_explicit_reconnect(module, monk
     assert reader.snapshot()['account'] is None
     assert {p.pid for p in multiprocessing.active_children()} == before
     monkeypatch.setattr(module, '_worker', synthetic_worker)
+    monkeypatch.setattr(module, '_STARTUP_SECONDS', startup)
     reader.timeout = 5
     try:
         reader.connect()
         assert reader.snapshot()['account']['cash'] == 100
     finally:
         reader.close()
+
+
+def slow_start_worker(connection):
+    """Worker whose interpreter start-up is slow (heavy __main__ re-import on a cold Windows)."""
+    time.sleep(1.0)
+    ready(connection)
+    while True:
+        operation, args = connection.recv()
+        if operation == 'connect':
+            connection.send(('ok', {'status': 'connected', 'phase': 'connected', 'reason': 'fixture', 'mt5_error': None, 'elapsed_ms': 1}))
+        elif operation == 'close':
+            connection.send(('ok', None))
+            return
+        else:
+            connection.send(('ok', {'connection': {'status': 'connected', 'reason': 'fixture'}, 'account': {'cash': 1}, 'positions': [], 'orders': []}))
+
+
+def test_slow_worker_startup_is_not_charged_to_the_mt5_deadline(module, monkeypatch):
+    """Root cause of 'Terminal worker failed or exceeded its deadline' via the API: start-up ate the 5 s budget."""
+    monkeypatch.setattr(module, '_worker', slow_start_worker)
+    reader = module.MT5Process(timeout=.3)
+    try:
+        reader.connect()
+        assert reader.state == 'connected', reader.diagnostics
+        assert reader.diagnostics['worker']['startup_ms'] >= 900
+        assert reader.diagnostics['phase'] == 'connected'
+    finally:
+        reader.close()
+
+
+def slow_connect_worker(connection):
+    ready(connection)
+    operation, args = connection.recv()
+    time.sleep(.6)  # initialize() using part of its own timeout
+    connection.send(('ok', {'status': 'connected', 'phase': 'connected', 'reason': 'fixture', 'mt5_error': None, 'elapsed_ms': 600}))
+    connection.recv()
+    connection.send(('ok', None))
+
+
+def test_connect_budget_covers_the_initialize_timeout_not_the_short_read_deadline(module, monkeypatch):
+    assert module._CONNECT_SECONDS > module.INITIALIZE_TIMEOUT_MS / 1000, 'real budget must exceed initialize()'
+    monkeypatch.setattr(module, '_worker', slow_connect_worker)
+    monkeypatch.setattr(module, '_CONNECT_SECONDS', 3.0)
+    reader = module.MT5Process(timeout=.2)
+    try:
+        reader.connect()
+        assert reader.state == 'connected', reader.diagnostics
+    finally:
+        reader.close()
+
+
+def outcome_worker(connection):
+    ready(connection)
+    operation, args = connection.recv()
+    connection.send(('ok', {'status': 'unavailable', 'phase': 'initialize', 'reason': 'Terminal initialization failed (MT5 -6: Terminal: Authorization failed).',
+                            'mt5_error': [-6, 'Terminal: Authorization failed'], 'elapsed_ms': 42}))
+    connection.recv()
+    connection.send(('ok', None))
+
+
+def test_state_and_diagnostics_follow_the_verified_connect_outcome(module, monkeypatch):
+    """No more 'state disconnected while the worker reports connected' (or the reverse)."""
+    monkeypatch.setattr(module, '_worker', outcome_worker)
+    reader = module.MT5Process(timeout=2)
+    try:
+        reader.connect()
+        assert reader.state == 'unavailable'
+        diagnostics = reader.diagnostics
+        assert diagnostics['phase'] == 'initialize' and diagnostics['mt5_error'] == [-6, 'Terminal: Authorization failed']
+        assert diagnostics['error_type'] == 'mt5' and diagnostics['elapsed_ms'] == 42 and diagnostics['request_id']
+        assert diagnostics['worker']['pid'] > 0 and diagnostics['worker']['executable']
+        assert reader.snapshot()['account'] is None
+    finally:
+        reader.close()
+    monkeypatch.setattr(module, '_worker', synthetic_worker)
+    reader = module.MT5Process(timeout=5)
+    try:
+        reader.connect()
+        snapshot = reader.snapshot()
+        assert snapshot['connection']['status'] == 'connected' and reader.state == 'connected'
+        assert '100' not in str(reader.diagnostics), 'no balances in diagnostics'
+    finally:
+        reader.close()
+    assert reader.state == 'disconnected' and reader.diagnostics['worker'] is None
+
+
+def test_worker_crash_is_reported_with_its_exit_code(module):
+    reader = module.MT5Process(timeout=5)
+    try:
+        reader.connect()
+        with pytest.raises(module.MT5ReadError, match='exited with code 7'):
+            reader.latest_quote('crash')
+        assert reader.diagnostics['error_type'] == 'worker_exited' and reader.state == 'unavailable'
+        reader.connect()  # explicit reconnect after a crash
+        assert reader.snapshot()['account']['cash'] == 100
+    finally:
+        reader.close()
+
+
+def test_spawn_child_does_not_reimport_the_heavy_api_stack():
+    """The worker re-imports the service's __main__; that must not pull in FastAPI, pandas or broker SDKs."""
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    code = ('import sys; import src.runtime.local_service; import src.broker.mt5_process; '
+            'heavy = sorted(m for m in ("fastapi", "pandas", "numpy", "alpaca", "src.api.local_app") if m in sys.modules); '
+            'print(heavy); sys.exit(1 if heavy else 0)')
+    result = subprocess.run([sys.executable, '-c', code], cwd=root, capture_output=True, text=True,
+                            env={**os.environ, 'PYTHON_DOTENV_DISABLED': '1'})
+    assert result.returncode == 0, result.stdout + result.stderr

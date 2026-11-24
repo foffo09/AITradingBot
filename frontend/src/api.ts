@@ -66,6 +66,12 @@ export interface WalkForward {
   folds: WalkForwardFold[]; excluded: { test_start: string; test_end: string; reason: string }[];
 }
 export interface ContextStatus { connection: string; ledger: string; automation: string }
+export interface Mt5Diagnostics {
+  state: string; reason: string; phase: string | null; error_type: string | null;
+  mt5_error: (number | string)[] | null; elapsed_ms: number | null; request_id: string | null;
+  worker: { pid: number | null; executable: string | null; python: string | null; startup_ms?: number | null } | null;
+  at: string | null;
+}
 export interface SystemStatus {
   service_version: string; python: string; platform: string; started_at: string;
   uptime_seconds: number; order_submission: "disabled"; contexts: Record<string, ContextStatus>;
@@ -304,6 +310,22 @@ export function parseSystem(value: unknown): SystemStatus {
     })),
   };
 }
+export function parseMt5Diagnostics(value: unknown): Mt5Diagnostics {
+  const d = version(value);
+  const optionalString = (v: unknown) => (v === null || v === undefined ? null : string(v));
+  const optionalNumber = (v: unknown) => (v === null || v === undefined ? null : numeric(v));
+  const worker = d.worker === null || d.worker === undefined ? null : object(d.worker);
+  return {
+    state: string(d.state), reason: string(d.reason), phase: optionalString(d.phase), error_type: optionalString(d.error_type),
+    mt5_error: d.mt5_error === null || d.mt5_error === undefined ? null
+      : (Array.isArray(d.mt5_error) ? d.mt5_error.map((v) => (typeof v === "number" ? v : string(v))) : invalid()),
+    elapsed_ms: optionalNumber(d.elapsed_ms), request_id: optionalString(d.request_id), at: optionalString(d.at),
+    worker: worker && {
+      pid: optionalNumber(worker.pid), executable: optionalString(worker.executable),
+      python: optionalString(worker.python), startup_ms: optionalNumber(worker.startup_ms),
+    },
+  };
+}
 function parseWatchlist(value: unknown): string[] {
   const d = version(value);
   if (!Array.isArray(d.symbols) || typeof d.stored !== "boolean") invalid();
@@ -476,6 +498,7 @@ export const api = {
       body: JSON.stringify({ context: c, symbol, ...(training_bars ? {training_bars} : {}), ...(test_bars ? {test_bars} : {}) }),
     })),
   system: async (signal?: AbortSignal) => parseSystem(await request("/system", { signal })),
+  mt5Diagnostics: async (signal?: AbortSignal) => parseMt5Diagnostics(await request("/diagnostics/mt5", { signal })),
   watchlist: async (signal?: AbortSignal) => parseWatchlist(await request("/watchlist", { signal })),
   saveWatchlist: async (symbols: string[]) =>
     parseWatchlist(await request("/watchlist", { method: "POST", body: JSON.stringify({ symbols }) })),

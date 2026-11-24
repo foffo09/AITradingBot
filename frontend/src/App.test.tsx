@@ -695,3 +695,45 @@ describe("pagine aggiunte per la dismissione di Streamlit", () => {
     expect(screen.getByRole("row", { name: /3\/6/ }).textContent).toContain("N/D");
   });
 });
+describe("MetaTrader 5 in sola lettura", () => {
+  const withRoutes = (routes: Record<string, unknown>) => {
+    const base = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url: string, init?: RequestInit) => {
+      const hit = Object.keys(routes).find((path) => url.includes(path));
+      return hit ? new Response(JSON.stringify(routes[hit])) : base(url, init);
+    });
+  };
+  it("un errore di lettura MT5 non viene mostrato come conto vuoto", async () => {
+    render(<App />);
+    await userEvent.selectOptions(screen.getByLabelText("Contesto"), "mt5");
+    await userEvent.click(screen.getByRole("button", { name: "Portafoglio" }));
+    await waitFor(() => expect(screen.getByText(/questo non significa che il conto/)).toBeInTheDocument());
+    expect(screen.getByText(/N\/D: lettura non riuscita/)).toBeInTheDocument();
+  });
+  it("mostra i campi del conto MT5 collegato, con N/D per quelli assenti", async () => {
+    withRoutes({"/state": {...{api_version: "1", context: "mt5", positions: [], orders: [], trades: [], automation: {state: "STOPPED"}},
+      connection: {status: "connected", reason: "Windows terminal read-only"},
+      account: {cash: 1000, balance: 1000, equity: 1010, profit: 10, margin: 50, margin_free: 960, margin_level: null,
+        currency: "EUR", server: "Demo-Server", source: "MetaTrader 5 terminal", updated_at: "2026-11-24T10:00:00+00:00"}}});
+    render(<App />);
+    await userEvent.selectOptions(screen.getByLabelText("Contesto"), "mt5");
+    await userEvent.click(screen.getByRole("button", { name: "Portafoglio" }));
+    await waitFor(() => expect(screen.getByText("Demo-Server")).toBeInTheDocument());
+    expect(screen.getByText("Collegato")).toBeInTheDocument();
+    const level = screen.getByText("Livello margine").closest("article")!;
+    expect(level.textContent).toContain("N/D");
+    expect(screen.getByText(/0 ordini pendenti/)).toBeInTheDocument();
+  });
+  it("dopo la verifica MT5 mostra la diagnostica senza credenziali", async () => {
+    withRoutes({"/diagnostics/mt5": {api_version: "1", state: "unavailable", reason: "Terminal initialization failed (MT5 -10005: IPC timeout).",
+      phase: "initialize", error_type: "mt5", mt5_error: [-10005, "IPC timeout"], elapsed_ms: 5003, request_id: "abc123",
+      worker: {pid: 4242, executable: "python.exe", python: "3.11.9", startup_ms: 7300}, at: "2026-11-24T10:00:00+00:00"}});
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Connessioni" }));
+    await userEvent.click(screen.getByRole("button", { name: "Verifica MetaTrader 5" }));
+    await waitFor(() => expect(screen.getByText("Ultimo tentativo MetaTrader 5")).toBeInTheDocument());
+    expect(screen.getByText("-10005 · IPC timeout")).toBeInTheDocument();
+    expect(screen.getByText("7300 ms")).toBeInTheDocument();
+    expect(screen.getByText("initialize")).toBeInTheDocument();
+  });
+});

@@ -12,7 +12,6 @@ import threading
 
 import uvicorn
 
-from src.api.local_app import create_local_app
 
 
 def bind_loopback(port: int) -> socket.socket:
@@ -58,6 +57,9 @@ def main(argv=None):
     try:
         from src.utils import logging_config
         logging_config.LOG_DIR = args.data_dir / 'logs'
+        # Imported here, not at module level: the MT5 spawn worker re-imports this module as __mp_main__
+        # and must not pay for FastAPI, pandas and broker SDKs before answering (MT5 fix report).
+        from src.api.local_app import create_local_app
         app = create_local_app(data_dir=args.data_dir, port=sock.getsockname()[1], ui_dir=args.ui_dir)
         # 'error': uvicorn's protocol warnings (e.g. a request cut off while the socket closes on shutdown) are not
         # actionable for users and made the Windows launcher job fail on benign stderr; real errors stay logged.

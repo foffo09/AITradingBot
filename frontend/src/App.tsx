@@ -21,6 +21,7 @@ import {
   type Preferences,
   type WalkForward,
   type SystemStatus,
+  type Mt5Diagnostics,
 } from "./api";
 import { instant, number, text } from "./format";
 import MarketChart from "./MarketChart";
@@ -520,20 +521,54 @@ function LocalLedger({
     </section>
   );
 }
+function Mt5DiagnosticsPanel({ diagnostics }: { diagnostics: Mt5Diagnostics }) {
+  const worker = diagnostics.worker;
+  const rows: [string, string][] = [
+    ["Stato", diagnostics.state],
+    ["Fase", diagnostics.phase ?? "N/D"],
+    ["Motivo", diagnostics.reason],
+    ["Errore MT5", diagnostics.mt5_error ? `${diagnostics.mt5_error[0]} · ${diagnostics.mt5_error[1]}` : "N/D"],
+    ["Tipo di errore", diagnostics.error_type ?? "nessuno"],
+    ["Worker", worker ? `PID ${worker.pid ?? "N/D"} · Python ${worker.python ?? "N/D"}` : "non avviato"],
+    ["Interprete del worker", worker?.executable ?? "N/D"],
+    ["Avvio worker", worker?.startup_ms == null ? "N/D" : `${worker.startup_ms} ms`],
+    ["Durata fase", diagnostics.elapsed_ms == null ? "N/D" : `${diagnostics.elapsed_ms} ms`],
+    ["Richiesta", diagnostics.request_id ?? "N/D"],
+  ];
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">Diagnostica · nessuna credenziale</span>
+          <h2>Ultimo tentativo MetaTrader 5</h2>
+        </div>
+        <span className="badge muted">{instant(diagnostics.at)}</span>
+      </div>
+      <dl className="diagnostics">
+        {rows.map(([label, value]) => (
+          <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+        ))}
+      </dl>
+    </section>
+  );
+}
 function Connections({ onChanged }: { onChanged: () => void }) {
   const [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
-    [state, setState] = useState<State | null>(null);
+    [state, setState] = useState<State | null>(null),
+    [diagnostics, setDiagnostics] = useState<Mt5Diagnostics | null>(null);
   async function connect(c: "paper" | "mt5") {
     setBusy(c);
     setError("");
     setState(null);
+    setDiagnostics(null);
     try {
       setState(await api.connect(c));
       onChanged();
     } catch (e) {
       setError(message(e));
     } finally {
+      if (c === "mt5") setDiagnostics(await api.mt5Diagnostics().catch(() => null));
       setBusy("");
     }
   }
@@ -570,7 +605,42 @@ function Connections({ onChanged }: { onChanged: () => void }) {
           {state.connection.reason ?? "Verifica completata dal servizio."}
         </p>
       )}
+      {diagnostics && <Mt5DiagnosticsPanel diagnostics={diagnostics} />}
     </>
+  );
+}
+function Mt5Account({ state }: { state: State | null }) {
+  const account = state?.account;
+  const connected = state?.connection.status === "connected";
+  const currency = typeof account?.currency === "string" ? account.currency : "valuta N/D";
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">Terminale MetaTrader 5 · sola lettura</span>
+          <h2>Conto MT5</h2>
+        </div>
+        <span className={`badge ${connected ? "" : "muted"}`}>{connected ? "Collegato" : `Non collegato · ${state?.connection.status ?? "N/D"}`}</span>
+      </div>
+      {!connected && (
+        <p className="notice error" role="alert">
+          {state?.connection.reason ?? "Stato MT5 non disponibile."} La lettura non è riuscita: questo non significa che il conto
+          non abbia posizioni o ordini.
+        </p>
+      )}
+      <div className="metrics">
+        <Metric label="Server" value={null} caption={typeof account?.server === "string" ? account.server : "N/D"} />
+        <Metric label="Balance" value={account?.balance ?? account?.cash} unit={currency} caption="Terminale MT5" />
+        <Metric label="Equity" value={account?.equity} unit={currency} caption="Terminale MT5" />
+        <Metric label="Profitto" value={account?.profit} unit={currency} caption="Posizioni aperte" />
+        <Metric label="Margine" value={account?.margin} unit={currency} caption="Terminale MT5" />
+        <Metric label="Margine libero" value={account?.margin_free} unit={currency} caption="Terminale MT5" />
+        <Metric label="Livello margine" value={account?.margin_level} unit="%" caption="Terminale MT5" />
+        <Metric label="Posizioni / ordini pendenti" value={connected ? (state?.positions.length ?? null) : null}
+          caption={connected ? `${state?.orders.length ?? 0} ordini pendenti` : "N/D: lettura non riuscita"} />
+      </div>
+      <p className="notice">Valuta del conto: {currency} · aggiornato {instant(account?.updated_at)} · nessun ordine può essere inviato.</p>
+    </section>
   );
 }
 function Automation({ context, state, onChanged }: {
@@ -1360,6 +1430,7 @@ export default function App() {
           )}
           {page === "Portafoglio" && (
             <>
+              {context === "mt5" ? <Mt5Account state={state} /> : (
               <div className="metrics">
                 <Metric
                   label="Equity"
@@ -1382,6 +1453,7 @@ export default function App() {
                   unit={accountCurrency}
                 />
               </div>
+              )}
               <LocalLedger
                 key={context}
                 context={context}

@@ -310,3 +310,74 @@ def test_paper_monitor_verifies_and_reads_with_the_real_client_logic_but_cannot_
     with pytest.raises(PermissionError) as later:
         enabled.submit_order(symbol='AAPL', side='buy', quantity=1, client_order_id='never-sent')
     assert 'Only the dedicated Alpaca Paper client' not in str(later.value)
+
+
+def test_mt5_diagnostics_endpoint_is_protected_and_secret_free(tmp_path, monkeypatch):
+    from src.broker import mt5_process
+    c = client(tmp_path)
+    fresh = TestClient(c.app, base_url=ORIGIN)
+    assert fresh.get('/api/v1/diagnostics/mt5').status_code == 401, 'local session required'
+    body = c.get('/api/v1/diagnostics/mt5').json()
+    expected = 'unsupported' if not mt5_process._SUPPORTED else 'disconnected'
+    assert body['state'] == expected and body['worker'] is None
+    monkeypatch.setattr(mt5_process, '_SUPPORTED', True)
+    monkeypatch.setenv('ALPACA_SECRET_KEY', 'fake-secret-value')
+
+    def failing_connect(self):
+        self._worker_info = {'pid': 4242, 'executable': 'python.exe', 'python': '3.11.9', 'startup_ms': 7300}
+        self._diagnostics['request_id'] = 'req123'
+        self._record('unavailable', 'Terminal initialization failed (MT5 -10005: IPC timeout).', phase='initialize',
+                     error_type='mt5', mt5_error=[-10005, 'IPC timeout'], elapsed_ms=5003)
+    monkeypatch.setattr(mt5_process.MT5Process, 'connect', failing_connect)
+    state = c.post('/api/v1/connections/mt5', headers=H).json()
+    assert state['connection']['status'] == 'unavailable' and 'IPC timeout' in state['connection']['reason']
+    assert state['account'] is None and state['positions'] == [] and state['orders'] == []
+    diagnostics = c.get('/api/v1/diagnostics/mt5')
+    body = diagnostics.json()
+    assert body['phase'] == 'initialize' and body['mt5_error'] == [-10005, 'IPC timeout']
+    assert body['worker']['startup_ms'] == 7300 and body['request_id'] == 'req123'
+    assert 'fake-secret-value' not in diagnostics.text
+
+
+@pytest.mark.parametrize('context', ['mt5', 'paper'])
+def test_broker_contexts_cannot_reach_any_write_endpoint(tmp_path, context):
+    from uuid import uuid4
+    c = client(tmp_path)
+    attempts = {
+        '/api/v1/local-account': {'context': context, 'initial_cash': 1000},
+        '/api/v1/local-trades': {'context': context, 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1, 'idempotency_key': str(uuid4())},
+        '/api/v1/automation': {'context': context, 'command': 'start', 'request_id': str(uuid4())},
+    }
+    for path, body in attempts.items():
+        assert c.post(path, json=body, headers=H).status_code == 422, path
+    assert c.put('/api/v1/pending-trade', json=attempts['/api/v1/local-trades'], headers=H).status_code == 422
+    assert c.get('/api/v1/system').json()['order_submission'] == 'disabled'
+    assert c.get(f'/api/v1/state?context={context}').json()['automation']['state'] == 'STOPPED'
+
+
+def test_mt5_paper_demo_and_simulation_never_share_capital_or_records(tmp_path, monkeypatch):
+    from src.broker import mt5_process
+    monkeypatch.setattr(mt5_process, '_SUPPORTED', True)
+    snapshot = {'connection': {'status': 'connected', 'reason': 'fixture'},
+                'account': {'cash': 5000., 'balance': 5000., 'equity': 5100., 'currency': 'EUR', 'server': 'Demo-Server', 'source': 'MetaTrader 5 terminal', 'updated_at': 'now'},
+                'positions': [{'symbol': 'EURUSD', 'volume': 1.0, 'price_open': 1.1, 'price_current': 1.2, 'profit': 100.}], 'orders': []}
+
+    def connect(self):
+        self._process = object()
+        self._record('connected', 'fixture', phase='connected')
+    monkeypatch.setattr(mt5_process.MT5Process, 'connect', connect)
+    monkeypatch.setattr(mt5_process.MT5Process, '_request', lambda self, operation, *args, **kwargs: snapshot)
+    monkeypatch.setattr(mt5_process.MT5Process, 'close', lambda self: None)
+    c = client(tmp_path)
+    c.post('/api/v1/local-account', json={'context': 'demo', 'initial_cash': 1000}, headers=H)
+    c.post('/api/v1/local-account', json={'context': 'simulation', 'initial_cash': 2000}, headers=H)
+    from uuid import uuid4
+    assert c.post('/api/v1/local-trades', json={'context': 'demo', 'symbol': 'AAPL', 'side': 'buy', 'quantity': 1, 'idempotency_key': str(uuid4())}, headers=H).status_code == 200
+    mt5 = c.post('/api/v1/connections/mt5', headers=H).json()
+    assert mt5['account']['equity'] == 5100 and mt5['positions'][0]['symbol'] == 'EURUSD'
+    demo, simulation, paper = (c.get(f'/api/v1/state?context={x}').json() for x in ('demo', 'simulation', 'paper'))
+    assert demo['account']['initial_cash'] == 1000 and len(demo['positions']) == 1 and demo['positions'][0]['symbol'] == 'AAPL'
+    assert simulation['account']['cash'] == 2000 and simulation['positions'] == []
+    assert paper['account'] is None and paper['positions'] == []
+    assert sorted(p.name for p in tmp_path.glob('local-v1-*.sqlite3') if 'control' not in p.name) == ['local-v1-demo.sqlite3', 'local-v1-simulation.sqlite3'], 'no MT5 ledger'
+    assert c.get('/api/v1/state?context=mt5').json()['account']['currency'] == 'EUR'

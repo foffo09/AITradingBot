@@ -42,6 +42,7 @@ from src.api.schemas import (
     ShutdownResponse, StateResponse, InstrumentsResponse, MarketResponse,
     TradeResponse, BacktestResponse, ProposalResponse, Preferences, PreferencesResponse,
     WalkForwardResponse, SystemResponse, WatchlistBody, WatchlistResponse, PendingTradeResponse,
+    Mt5DiagnosticsResponse,
 )
 Positive = Annotated[float, Field(gt=0, le=1e12, strict=True, allow_inf_nan=False)]
 COOKIE = 'aitradingbot_session'
@@ -598,6 +599,12 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             except Exception:
                 return {**state('paper'), 'connection': {'status': 'unavailable', 'reason': 'Paper connection failed; no account values are published.'}}
             return state('paper')
+
+    @app.get('/api/v1/diagnostics/mt5', response_model=Mt5DiagnosticsResponse)
+    def mt5_diagnostics():
+        # Phase, error type, MT5 code, worker interpreter and timings: no credentials, balances or account ids.
+        with context_lock('mt5'):
+            return {'api_version': '1', **mt5.diagnostics}
 
     @app.post('/api/v1/connections/mt5', response_model=StateResponse)
     def connect_mt5():

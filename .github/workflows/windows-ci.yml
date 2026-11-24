@@ -53,6 +53,11 @@ jobs:
           $env:PROBE_HEAVY = '1'; python tests/probes/mt5_bootstrap.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: MT5 through the real API service (no terminal in CI, worker must start)
+        run: |
+          python -m scripts.check_mt5_api --expect-phase import
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Targeted offline tests
         run: |
           python -m pytest -q tests/test_backend_contract.py tests/test_broker.py tests/test_paper_safety.py tests/test_config.py tests/test_fx_rates.py tests/test_bar_timing.py | Tee-Object -FilePath windows-targeted.log

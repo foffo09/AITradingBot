@@ -302,3 +302,22 @@ class WatchlistResponse(Versioned):
 class PendingTradeResponse(Versioned):
     context: LocalContext
     pending: Record | None
+
+
+class Mt5WorkerInfo(Output):
+    pid: int | None
+    executable: str | None
+    python: str | None
+    startup_ms: int | None = None
+
+
+class Mt5DiagnosticsResponse(Versioned):
+    state: Literal['connected', 'disconnected', 'unavailable', 'unsupported']
+    reason: str
+    phase: str | None
+    error_type: str | None
+    mt5_error: list[int | str] | None
+    elapsed_ms: int | None
+    request_id: str | None
+    worker: Mt5WorkerInfo | None
+    at: str | None
