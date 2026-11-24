@@ -23,6 +23,8 @@ import time
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from src.broker.mt5_process import _private_path  # noqa: E402
 SAFE_ACCOUNT_FIELDS = ('currency', 'server', 'source', 'updated_at')
 
 
@@ -41,7 +43,7 @@ def main(argv=None):
     started = time.monotonic()
     service = subprocess.Popen(command, cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     report = {'service': 'frozen sidecar' if args.binary else 'source (python -m src.runtime.local_service)',
-              'service_python': None if args.binary else sys.executable}
+              'service_python': None if args.binary else _private_path(sys.executable)}
     try:
         ready = json.loads(service.stdout.readline())
         report['service_ready_s'] = round(time.monotonic() - started, 2)

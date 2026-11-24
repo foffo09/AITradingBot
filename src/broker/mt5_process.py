@@ -33,6 +33,14 @@ _CONNECT_SECONDS = INITIALIZE_TIMEOUT_MS / 1000 + 5.0
 _LOG = logging.getLogger('aitradingbot.mt5')
 
 
+def _private_path(path):
+    """Interpreter path for diagnostics without the user's home (it names the Windows account)."""
+    if not isinstance(path, str):
+        return None
+    home = os.path.expanduser('~')
+    return '~' + path[len(home):] if home not in ('', '~') and path.lower().startswith(home.lower()) else path
+
+
 def _worker(connection):
     try:
         # First message: proves the worker started and says which interpreter it runs on.
@@ -226,6 +234,7 @@ class MT5Process:
             self._thread = None
             info = ready[1]
             self._worker_info = {key: info.get(key) for key in ('pid', 'executable', 'python')}
+            self._worker_info['executable'] = _private_path(self._worker_info['executable'])
             self._worker_info['startup_ms'] = round((time.monotonic() - started) * 1000)
             self._status = 'connecting'
             try:

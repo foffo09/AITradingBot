@@ -381,3 +381,14 @@ def test_spawn_child_does_not_reimport_the_heavy_api_stack():
     result = subprocess.run([sys.executable, '-c', code], cwd=root, capture_output=True, text=True,
                             env={**os.environ, 'PYTHON_DOTENV_DISABLED': '1'})
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_diagnostics_do_not_reveal_the_user_profile(monkeypatch):
+    import os
+    from src.broker.mt5_process import _private_path
+    monkeypatch.setenv('HOME', '/Users/someone')
+    monkeypatch.setenv('USERPROFILE', '/Users/someone')
+    assert _private_path(os.path.join('/Users/someone', '.venv', 'python')).startswith('~')
+    assert 'someone' not in _private_path('/Users/someone/.venv/python')
+    assert _private_path('C:/Python311/python.exe') == 'C:/Python311/python.exe'
+    assert _private_path(None) is None

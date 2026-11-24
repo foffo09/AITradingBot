@@ -60,7 +60,7 @@ def _last_error(module):
 def _terminal_running():
     """True/False from the process list; None when it cannot be determined (then not enforced)."""
     try:
-        listing = subprocess.run(['tasklist', '/FO', 'CSV', '/NH'], capture_output=True, text=True, timeout=5,
+        listing = subprocess.run(['tasklist', '/FO', 'CSV', '/NH'], capture_output=True, text=True, errors='replace', timeout=5,
                                  creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout.lower()
     except (OSError, subprocess.SubprocessError):
         return None

@@ -58,9 +58,9 @@ jobs:
           python tests/probes/stdin_spawn.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: MT5 through the real API service (no terminal in CI, worker must start)
+      - name: MT5 through the real API service (SDK installed, no terminal in CI)
         run: |
-          python -m scripts.check_mt5_api --expect-phase import
+          python -m scripts.check_mt5_api --expect-phase terminal_not_running
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Targeted offline tests
@@ -252,6 +252,11 @@ jobs:
           if ($binary.Count -ne 1) { throw 'Expected one native sidecar' }
           python -m scripts.check_local_service --binary $binary.FullName
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($IsWindows) {
+            # Frozen sidecar: bundled MT5 SDK imported in the spawned worker, stops only because CI has no terminal.
+            python -m scripts.check_mt5_api --binary $binary.FullName --expect-phase terminal_not_running
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
           Copy-Item -LiteralPath $binary.FullName -Destination src-tauri/binaries/
       - name: Native Rust prerequisites
         run: |

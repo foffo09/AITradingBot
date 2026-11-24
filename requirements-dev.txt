@@ -2,3 +2,5 @@
 -r requirements-omega.txt
 # pytest remains in requirements.txt for compatibility with existing launchers.
 ruff==0.17.6
+# Windows AMD64 only: the launcher venv and the desktop sidecar need the real MT5 SDK (marker in the file).
+-r packaging/backend/requirements-mt5.txt
