@@ -1,5 +1,17 @@
 # Registro del lavoro
 
+## 24 novembre — Claude: audit macOS, correzioni M1/L1–L6, dismissione Streamlit (issue #9)
+
+Codex irraggiungibile (TLS verso chatgpt.com intercettato dalla rete); lavoro eseguito da Claude su
+richiesta dell'utente, in branch propri: audit `agents/claude-macos-audit-20261124`, correzioni
+`agents/claude-macos-m1-fix-20261124`, modernizzazione `agents/claude-complete-modernization-20261124`.
+M1 (lock globale) e L1–L6 corretti con test RED→GREEN; walk-forward, watchlist e stato sistema portati
+in React/FastAPI; Streamlit, `app.py`, launcher legacy e `src/ui` rimossi; DMG macOS arm64 costruito e
+installato in cartella isolata. Suite Python 880 passed/1 skipped da ambiente pulito senza Streamlit,
+frontend 59, Rust 4. Correzioni scritte e verificate dallo stesso agente: serve revisione indipendente.
+Dettagli: `docs/CLAUDE_MODERNIZATION_REPORT.md`, `docs/STREAMLIT_RETIREMENT_REPORT.md`,
+`docs/MACOS_QA_AUDIT.md`. Notion non accessibile da questa sessione.
+
 ## Esito infrastruttura CI — successivo alla fotografia15:35UTC
 
 Tentativo1 del run44113161618: tre jobSUCCESS;local-appMac CANCELLED prima

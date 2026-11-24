@@ -10,6 +10,7 @@ import {
 import {
   api,
   pendingTrade,
+  restorePendingTrade,
   type Context,
   type State,
   type Market,
@@ -18,6 +19,8 @@ import {
   type Backtest,
   type RecordData,
   type Preferences,
+  type WalkForward,
+  type SystemStatus,
 } from "./api";
 import { instant, number, text } from "./format";
 import MarketChart from "./MarketChart";
@@ -30,16 +33,18 @@ const contexts: Record<Context, string> = {
 const pages = [
   "Panoramica",
   "Mercati",
+  "Watchlist",
   "Segnali",
   "Portafoglio",
   "Storico",
   "Backtesting",
   "Automazione",
   "Connessioni",
+  "Stato sistema",
   "Impostazioni",
 ] as const;
 type Page = (typeof pages)[number];
-const icons = ["◈", "⌁", "↗", "▣", "◷", "▥", "▷", "⇄", "⚙"];
+const icons = ["◈", "⌁", "☰", "↗", "▣", "◷", "▥", "▷", "⇄", "◉", "⚙"];
 function saved(key: string, fallback: string) {
   try {
     return localStorage.getItem(key) ?? fallback;
@@ -411,6 +416,14 @@ function LocalLedger({
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [pending, setPending] = useState(() => pendingTrade(context));
+  useEffect(() => {
+    if (context !== "demo" && context !== "simulation") return;
+    const controller = new AbortController();
+    restorePendingTrade(context, controller.signal)
+      .then(() => setPending(pendingTrade(context)))
+      .catch(() => { /* Unreachable service: the existing error banner already reports it. */ });
+    return () => controller.abort();
+  }, [context]);
   if (context === "paper" || context === "mt5")
     return (
       <p className="notice">
@@ -447,7 +460,11 @@ function LocalLedger({
         conservano conti separati. Dopo un riavvio verifica lo storico prima di creare una nuova richiesta; la memoria delle richieste dipende dall’origine locale (anche dalla porta).
       </p>
       {pending && <p className="notice">Registrazione con esito incerto: {pending.symbol} · {pending.side} · quantità {number(pending.quantity)}. Riprovando si conserva lo stesso identificativo; verifica anche lo storico.</p>}
-      {!state?.account ? (
+      {state === null ? (
+        <p className="notice">
+          Stato del conto non disponibile: nessuna operazione è possibile finché il servizio locale non risponde.
+        </p>
+      ) : !state.account ? (
         <form className="inline-form" onSubmit={(e) => void act(e, "account")}>
           <label>
             Capitale iniziale · USD
@@ -495,7 +512,7 @@ function LocalLedger({
         </form>
       )}
       {error && <ErrorNote>{error}</ErrorNote>}
-      {notice && (
+      {notice && state !== null && (
         <p role="status" className="notice">
           {notice}
         </p>
@@ -616,13 +633,293 @@ function Automation({ context, state, onChanged }: {
     </section>
   );
 }
+function WalkForwardPanel({ context, symbol }: { context: Context; symbol: string }) {
+  const [training, setTraining] = useState(""),
+    [test, setTest] = useState(""),
+    [result, setResult] = useState<WalkForward | null>(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  async function run(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setResult(null);
+    setBusy(true);
+    try {
+      setResult(await api.walkForward(context, symbol, Number(training) || undefined, Number(test) || undefined));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">Validazione fuori campione</span>
+          <h2>Walk-forward · {symbol}</h2>
+        </div>
+        <span className="badge muted">Nessun ordine · nessun ledger</span>
+      </div>
+      <p>
+        Il motore sceglie le finestre SMA (2/4, 3/6, 5/10) solo sul training di ogni fold e le
+        verifica sulle barre successive. Lasciare vuoti i campi per il dimensionamento automatico.
+      </p>
+      <form onSubmit={run} className="inline-form">
+        <label>
+          Barre di training
+          <input type="number" min="12" step="1" placeholder="auto" value={training} onChange={(e) => setTraining(e.target.value)} />
+        </label>
+        <label>
+          Barre di test
+          <input type="number" min="12" step="1" placeholder="auto" value={test} onChange={(e) => setTest(e.target.value)} />
+        </label>
+        <button className="primary" disabled={busy}>{busy ? "Valutazione in corso…" : "Esegui walk-forward"}</button>
+      </form>
+      {error && <ErrorNote>{error}</ErrorNote>}
+      {result && (
+        <>
+          <p className="notice">
+            Fonte {result.source} · campione {result.sample.bars} barre giornaliere ({instant(result.sample.start)} →{" "}
+            {instant(result.sample.end)}) · training {result.training_bars}, test {result.test_bars}, passo {result.step_bars} ·
+            selezione: {result.selection_metric}.
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Periodo di test</th>
+                  <th scope="col">Finestre scelte</th>
+                  <th scope="col">Rendimento training %</th>
+                  <th scope="col">Rendimento OOS %</th>
+                  <th scope="col">Operazioni OOS</th>
+                  <th scope="col">Drawdown OOS %</th>
+                  <th scope="col">Sharpe OOS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.folds.map((fold) => (
+                  <tr key={fold.test_start}>
+                    <td>{instant(fold.test_start)} → {instant(fold.test_end)}</td>
+                    <td>{fold.parameters.short_window}/{fold.parameters.long_window}</td>
+                    <td>{number(fold.in_sample_return_pct)}</td>
+                    <td>{number(fold.out_of_sample.return_pct)}</td>
+                    <td>{number(fold.out_of_sample.total_trades)}</td>
+                    <td>{number(fold.out_of_sample.max_drawdown_pct)}</td>
+                    <td>{number(fold.out_of_sample.sharpe_ratio)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {result.folds.length === 0 && <p className="notice">Nessun fold valido: nessun risultato fuori campione.</p>}
+          {result.excluded.map((item) => (
+            <p className="notice" key={item.test_start}>
+              Fold escluso ({instant(item.test_start)} → {instant(item.test_end)}): {item.reason}
+            </p>
+          ))}
+          <p className="notice">I risultati fuori campione su dati storici o sintetici non dimostrano redditività futura.</p>
+        </>
+      )}
+    </section>
+  );
+}
+interface WatchRow { market: Market | null; error: string }
+function Watchlist({
+  context,
+  instruments,
+  onOpen,
+}: {
+  context: Context;
+  instruments: Instrument[];
+  onOpen: (symbol: string) => void;
+}) {
+  const [symbols, setSymbols] = useState<string[] | null>(null),
+    [rows, setRows] = useState<Record<string, WatchRow>>({}),
+    [candidate, setCandidate] = useState(""),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    api.watchlist(controller.signal).then(setSymbols).catch((e) => {
+      if (!controller.signal.aborted) setError(message(e));
+    });
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    if (!symbols) return;
+    const controller = new AbortController();
+    void Promise.allSettled(symbols.map((symbol) => api.market(context, symbol, "1Day", controller.signal))).then((results) => {
+      if (controller.signal.aborted) return;
+      // Keyed by context so a context switch never shows the previous context's prices.
+      setRows(Object.fromEntries(symbols.map((symbol, i) => {
+        const r = results[i];
+        return [`${context}/${symbol}`, r.status === "fulfilled" ? { market: r.value, error: "" } : { market: null, error: message(r.reason) }];
+      })));
+    });
+    return () => controller.abort();
+  }, [symbols, context]);
+  async function save(next: string[]): Promise<boolean> {
+    setError("");
+    setBusy(true);
+    try {
+      setSymbols(await api.saveWatchlist(next));
+      return true;
+    } catch (e) {
+      setError(message(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  const available = instruments.filter((i) => !symbols?.includes(i.symbol));
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">Strumenti seguiti</span>
+          <h2>Watchlist · {contexts[context]}</h2>
+        </div>
+        <span className="badge muted">Barre giornaliere · nessun ordine</span>
+      </div>
+      {error && <ErrorNote>{error}</ErrorNote>}
+      {symbols === null && !error && <p>Caricamento watchlist…</p>}
+      {symbols && (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Strumento</th>
+                  <th scope="col">Ultima chiusura</th>
+                  <th scope="col">Variazione %</th>
+                  <th scope="col">Fonte</th>
+                  <th scope="col">Aggiornato</th>
+                  <th scope="col">Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {symbols.map((symbol) => {
+                  const { market, error: rowError } = rows[`${context}/${symbol}`] ?? { market: null, error: "" };
+                  const bars = market?.bars ?? [];
+                  const last = bars.at(-1), previous = bars.at(-2);
+                  const change = last && previous ? ((last.close - previous.close) / previous.close) * 100 : null;
+                  return (
+                    <tr key={symbol}>
+                      <th scope="row">{symbol}</th>
+                      <td>{number(last?.close)}</td>
+                      <td>{number(change)}</td>
+                      <td>{rowError || (market?.status === "ready" ? market.source ?? "N/D" : market?.reason ?? "Caricamento…")}</td>
+                      <td>{instant(market?.as_of)}</td>
+                      <td>
+                        <button className="secondary" type="button" onClick={() => onOpen(symbol)}>Grafico</button>{" "}
+                        <button className="secondary" type="button" disabled={busy} onClick={() => void save(symbols.filter((s) => s !== symbol))}>
+                          Rimuovi
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {symbols.length === 0 && <p className="notice">Watchlist vuota.</p>}
+          <form className="inline-form" onSubmit={(e) => { e.preventDefault(); if (candidate) void save([...symbols, candidate]).then((saved) => { if (saved) setCandidate(""); }); }}>
+            <label>
+              Aggiungi strumento
+              <select value={candidate} onChange={(e) => setCandidate(e.target.value)}>
+                <option value="">Seleziona…</option>
+                {available.map((i) => <option key={i.symbol} value={i.symbol}>{i.symbol} · {i.name}</option>)}
+              </select>
+            </label>
+            <button className="primary" disabled={busy || !candidate || symbols.length >= 20}>Aggiungi</button>
+          </form>
+          <p className="notice">La variazione confronta le ultime due chiusure giornaliere disponibili; non è una quotazione in tempo reale.</p>
+          {(context === "demo" || context === "simulation") && (
+            <p className="notice">
+              Dati sintetici dimostrativi: ogni strumento ha una serie generata propria, che non rappresenta i suoi prezzi reali.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+const connectionLabels: Record<string, string> = {
+  local: "Ledger locale", connected: "Collegato (sola lettura)", disconnected: "Non collegato",
+  unsupported: "Non supportato su questa piattaforma", busy: "Occupato (lettura broker in corso)",
+  unavailable: "Non disponibile (riconnettere)",
+};
+function SystemPanel({ revision }: { revision: number }) {
+  const [status, setStatus] = useState<SystemStatus | null>(null),
+    [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    api.system(controller.signal).then((value) => { setStatus(value); setError(""); }).catch((e) => {
+      if (!controller.signal.aborted) { setStatus(null); setError(message(e)); }
+    });
+    return () => controller.abort();
+  }, [revision]);
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">Servizio locale</span>
+          <h2>Stato sistema</h2>
+        </div>
+        <span className="badge muted">Invio ordini: disabilitato</span>
+      </div>
+      {error && <ErrorNote>{error}</ErrorNote>}
+      {!status && !error && <p>Lettura stato…</p>}
+      {status && (
+        <>
+          <div className="metrics">
+            <article className="metric">
+              <span className="eyebrow">Versione servizio</span>
+              <strong>{status.service_version}</strong>
+              <small>Servizio locale FastAPI</small>
+            </article>
+            <Metric label="Attivo da" value={status.uptime_seconds} unit="s" caption={`Avvio ${instant(status.started_at)}`} />
+            <article className="metric">
+              <span className="eyebrow">Piattaforma</span>
+              <strong>{status.platform}</strong>
+              <small>Python {status.python}</small>
+            </article>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Contesto</th>
+                  <th scope="col">Connessione</th>
+                  <th scope="col">Ledger</th>
+                  <th scope="col">Automazione</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(status.contexts).map(([name, c]) => (
+                  <tr key={name}>
+                    <th scope="row">{contexts[name as Context] ?? name}</th>
+                    <td>{connectionLabels[c.connection] ?? c.connection}</td>
+                    <td>{c.ledger === "present" ? "Presente" : c.ledger === "absent" ? "Non creato" : "Non applicabile"}</td>
+                    <td>{c.automation}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 export default function App() {
   const [page, setPage] = useState<Page>("Panoramica"),
     [context, setContext] = useState<Context>("demo"),
     [symbol, setSymbol] = useState("AAPL"),
     [interval, setIntervalValue] = useState("1Day");
   const [theme, setTheme] = useState<Preferences["theme"]>(() =>
-      saved("aitb-theme", "dark") === "light" ? "light" : "dark",
+      saved("aitb-theme", "light") === "dark" ? "dark" : "light",
     ),
     [density, setDensity] = useState<Preferences["density"]>(() =>
       saved("aitb-density", "comfortable") === "compact"
@@ -1140,10 +1437,19 @@ export default function App() {
                 context={context}
                 symbol={symbol}
               />
+              <WalkForwardPanel key={`wf/${context}/${symbol}`} context={context} symbol={symbol} />
             </>
           )}
           {page === "Automazione" && <Automation key={context} context={context} state={state} onChanged={refresh} />}
           {page === "Connessioni" && <Connections onChanged={refresh} />}
+          {page === "Watchlist" && (
+            <Watchlist
+              context={context}
+              instruments={instruments}
+              onOpen={(next) => { clear(); setSymbol(next); setPage("Mercati"); }}
+            />
+          )}
+          {page === "Stato sistema" && <SystemPanel revision={revision} />}
           {page === "Impostazioni" && (
             <section className="panel settings">
               <span className="eyebrow">Preferenze locali</span>

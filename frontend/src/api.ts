@@ -55,6 +55,21 @@ export interface Backtest {
   trades: RecordData[];
   equity: { time: number; value: number }[];
 }
+export interface WalkForwardFold {
+  train_start: string; train_end: string; test_start: string; test_end: string;
+  parameters: Record<string, number>; in_sample_return_pct: number; in_sample_trades: number;
+  out_of_sample: RecordData;
+}
+export interface WalkForward {
+  source: string; training_bars: number; test_bars: number; step_bars: number;
+  selection_metric: string; sample: { start: string; end: string; bars: number };
+  folds: WalkForwardFold[]; excluded: { test_start: string; test_end: string; reason: string }[];
+}
+export interface ContextStatus { connection: string; ledger: string; automation: string }
+export interface SystemStatus {
+  service_version: string; python: string; platform: string; started_at: string;
+  uptime_seconds: number; order_submission: "disabled"; contexts: Record<string, ContextStatus>;
+}
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -121,8 +136,12 @@ export async function request(
       },
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError")
-      throw error;
+    // Only the caller's own cancellation is rethrown; WebKit reports the 12s timeout as AbortError too.
+    if (options.signal?.aborted) throw error;
+    if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError"))
+      throw new ApiError(
+        "Il servizio locale non ha risposto entro 12 secondi. Nuovo tentativo al prossimo aggiornamento.",
+      );
     throw new ApiError(
       "Servizio locale non raggiungibile. Verifica che il backend sia avviato.",
     );
@@ -257,6 +276,39 @@ export function parseBacktest(value: unknown): Backtest {
     })),
   };
 }
+export function parseWalkForward(value: unknown): WalkForward {
+  const d = version(value), sample = object(d.sample);
+  const window = (w: RecordData) => ({test_start: string(w.test_start), test_end: string(w.test_end)});
+  return {
+    source: string(d.source), selection_metric: string(d.selection_metric),
+    training_bars: numeric(d.training_bars), test_bars: numeric(d.test_bars), step_bars: numeric(d.step_bars),
+    sample: {start: string(sample.start), end: string(sample.end), bars: numeric(sample.bars)},
+    folds: records(d.folds).map(f => ({
+      ...window(f), train_start: string(f.train_start), train_end: string(f.train_end),
+      parameters: Object.fromEntries(Object.entries(object(f.parameters)).map(([k, v]) => [k, numeric(v)])),
+      in_sample_return_pct: numeric(f.in_sample_return_pct), in_sample_trades: numeric(f.in_sample_trades),
+      out_of_sample: object(f.out_of_sample),
+    })),
+    excluded: records(d.excluded).map(e => ({...window(e), reason: string(e.reason)})),
+  };
+}
+export function parseSystem(value: unknown): SystemStatus {
+  const d = version(value);
+  if (d.order_submission !== "disabled") invalid();
+  return {
+    service_version: string(d.service_version), python: string(d.python), platform: string(d.platform),
+    started_at: string(d.started_at), uptime_seconds: numeric(d.uptime_seconds), order_submission: "disabled",
+    contexts: Object.fromEntries(Object.entries(object(d.contexts)).map(([k, v]) => {
+      const c = object(v);
+      return [k, {connection: string(c.connection), ledger: string(c.ledger), automation: string(c.automation)}];
+    })),
+  };
+}
+function parseWatchlist(value: unknown): string[] {
+  const d = version(value);
+  if (!Array.isArray(d.symbols) || typeof d.stored !== "boolean") invalid();
+  return (d.symbols as unknown[]).map(string);
+}
 function parsePreferences(value: unknown): {preferences: Preferences; stored: boolean} {
   const d = version(value), p = object(d.preferences);
   if ((p.theme !== "dark" && p.theme !== "light") ||
@@ -280,6 +332,36 @@ export function pendingTrade(c: Context): {symbol: string; side: string; quantit
     if (payload.context !== c || typeof payload.symbol !== "string" || !["buy","sell"].includes(String(payload.side)) || typeof payload.quantity !== "number" || !Number.isFinite(payload.quantity) || payload.quantity <= 0) return null;
     return {symbol:payload.symbol, side:String(payload.side),quantity:payload.quantity};
   } catch { return null; }
+}
+const confirmKey = (c: Context) => `aitb-confirm-trade-${c}`;
+// A received outcome whose DELETE never reached the service: deliver it before anything else.
+async function deliverConfirmation(c: Context): Promise<boolean> {
+  let key: string | null;
+  try { key = localStorage.getItem(confirmKey(c)); } catch { return true; }
+  if (!key) return true;
+  try {
+    await request(`/pending-trade?${new URLSearchParams({ context: c, idempotency_key: key })}`, { method: "DELETE" });
+    localStorage.removeItem(confirmKey(c));
+    return true;
+  } catch {
+    return false;
+  }
+}
+export async function restorePendingTrade(c: Context, signal?: AbortSignal): Promise<void> {
+  await deliverConfirmation(c);
+  const d = version(await request(`/pending-trade?${query(c)}`, { signal }));
+  if (d.context !== c) invalid();
+  if (d.pending === null) return;
+  const p = object(d.pending);
+  // Already received by this browser: not uncertain, only its confirmation is still undelivered.
+  try { if (localStorage.getItem(confirmKey(c)) === string(p.idempotency_key)) return; } catch { /* no storage */ }
+  if (string(p.context) !== c || typeof p.quantity !== "number") invalid();
+  const payload = JSON.stringify({ context: c, symbol: string(p.symbol), side: string(p.side), quantity: p.quantity });
+  try {
+    localStorage.setItem(`aitb-pending-trade-${c}`, JSON.stringify({ payload, idempotency_key: string(p.idempotency_key) }));
+  } catch {
+    /* Without storage the retry cannot reuse the key; the service still blocks a different request. */
+  }
 }
 export const api = {
   preferences: async (signal?: AbortSignal) => {
@@ -343,16 +425,41 @@ export const api = {
     const pending = saved ? object(JSON.parse(saved)) : { payload, idempotency_key: crypto.randomUUID() };
     if (pending.payload !== payload || typeof pending.idempotency_key !== "string")
       throw new ApiError("Esito incerto: ripeti la stessa operazione prima di modificarla; verifica lo storico.");
+    if (!(await deliverConfirmation(c)))
+      throw new ApiError("Il servizio non ha ancora ricevuto la conferma dell'operazione precedente; riprova tra poco.");
+    const key = pending.idempotency_key;
+    const body = JSON.stringify({ context: c, symbol, side, quantity, idempotency_key: key });
+    // Remember the key before anything leaves the browser: if a response is lost, the retry reuses it.
     localStorage.setItem(storageKey, JSON.stringify(pending));
+    const finished = async (resync: boolean) => {
+      // The service keeps its record until told the outcome arrived. An undelivered DELETE stays noted
+      // and is retried before the next request, so a completed trade is never shown as uncertain.
+      // Storage errors never turn a received outcome into a failure: the key is still in memory.
+      try {
+        localStorage.setItem(confirmKey(c), key);
+        localStorage.removeItem(storageKey);
+      } catch { /* note not saved: the DELETE below is still attempted */ }
+      try {
+        await request(`/pending-trade?${new URLSearchParams({ context: c, idempotency_key: key })}`, { method: "DELETE" });
+        try { localStorage.removeItem(confirmKey(c)); } catch { /* harmless: delivered */ }
+      } catch { /* stays noted for deliverConfirmation */ }
+      if (resync) await restorePendingTrade(c).catch(() => undefined);
+    };
     try {
-      const result = parseState(await request("/local-trades", {
-        method: "POST", body: JSON.stringify({context: c, symbol, side, quantity, idempotency_key: pending.idempotency_key}),
-      }));
+      // The service keeps the record too: browser storage is per port and lost when the app restarts.
+      await request("/pending-trade", { method: "PUT", body });
+    } catch (error) {
+      // Definitively refused (another uncertain request is pending): show that one instead.
+      if (error instanceof ApiError && (error.status === 422 || error.outcome === "rejected")) await finished(true);
+      throw error; // otherwise uncertain: keep the key for the retry
+    }
+    try {
+      const result = parseState(await request("/local-trades", { method: "POST", body }));
       if (result.context !== c) throw new ApiError("Risposta del contesto non coerente.");
-      localStorage.removeItem(storageKey);
+      await finished(false);
       return result;
     } catch (error) {
-      if (error instanceof ApiError && (error.status === 422 || error.outcome === "rejected")) localStorage.removeItem(storageKey);
+      if (error instanceof ApiError && (error.status === 422 || error.outcome === "rejected")) await finished(true);
       throw error;
     }
   },
@@ -363,6 +470,15 @@ export const api = {
   },
   connect: async (c: "paper" | "mt5") =>
     parseState(await request(`/connections/${c}`, { method: "POST" })),
+  walkForward: async (c: Context, symbol: string, training_bars?: number, test_bars?: number) =>
+    parseWalkForward(await request("/walk-forward", {
+      method: "POST",
+      body: JSON.stringify({ context: c, symbol, ...(training_bars ? {training_bars} : {}), ...(test_bars ? {test_bars} : {}) }),
+    })),
+  system: async (signal?: AbortSignal) => parseSystem(await request("/system", { signal })),
+  watchlist: async (signal?: AbortSignal) => parseWatchlist(await request("/watchlist", { signal })),
+  saveWatchlist: async (symbols: string[]) =>
+    parseWatchlist(await request("/watchlist", { method: "POST", body: JSON.stringify({ symbols }) })),
   backtest: async (
     c: Context,
     symbol: string,

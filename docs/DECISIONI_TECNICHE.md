@@ -229,3 +229,14 @@ Streamlit1.66.1 (`pillow<14`), quindi aggiornati solo Streamlit ePillow13.0.0.
 Nuova venv nel worktree per non cambiare ambienti di altri; pip-audit ripetuto0.
 Esclusi dal solo sidecar PIL/pyarrow inutilizzati; misura avvio da15.229 a5.6624s,
 senza cambiare deadline15s. Nessuna rimozione di funzionalitàlegacy.
+
+## D17 — Dismissione di Streamlit (issue #9, 24 novembre)
+
+React/TypeScript + FastAPI + Tauri 2 diventano l'unico prodotto. Rimossi `app.py`, i launcher
+Streamlit, `src/ui/` e le dipendenze streamlit/plotly/pillow. Parità: walk-forward, watchlist e stato
+sistema portati nella nuova UI/API; esclusi per mandato l'automazione Paper con invio ordini,
+l'azzeramento del ledger, il conto in EUR con cambio esterno e il link TradingView.
+Lock per contesto (M1): una lettura broker lenta non blocca Demo/Simulazione. Tema chiaro predefinito.
+Dettagli e mappatura dei test rimossi: `docs/STREAMLIT_RETIREMENT_REPORT.md`.
+Alternativa rifiutata: archiviare `app.py` con test saltati se Streamlit manca, perché avrebbe lasciato
+test silenziosamente non eseguiti e un secondo percorso di avvio.

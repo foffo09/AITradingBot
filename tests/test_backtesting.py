@@ -1,4 +1,3 @@
-import pandas as pd
 
 from config.settings import AppSettings
 from src.backtesting.engine import BacktestEngine

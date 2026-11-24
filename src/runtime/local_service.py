@@ -59,7 +59,9 @@ def main(argv=None):
         from src.utils import logging_config
         logging_config.LOG_DIR = args.data_dir / 'logs'
         app = create_local_app(data_dir=args.data_dir, port=sock.getsockname()[1], ui_dir=args.ui_dir)
-        config = uvicorn.Config(app, host='127.0.0.1', port=sock.getsockname()[1], access_log=False, log_level='warning', proxy_headers=False, server_header=False, ws='none')
+        # 'error': uvicorn's protocol warnings (e.g. a request cut off while the socket closes on shutdown) are not
+        # actionable for users and made the Windows launcher job fail on benign stderr; real errors stay logged.
+        config = uvicorn.Config(app, host='127.0.0.1', port=sock.getsockname()[1], access_log=False, log_level='error', proxy_headers=False, server_header=False, ws='none')
         server = LocalServer(config)
         app.state.request_shutdown = lambda: setattr(server, 'should_exit', True)
         threading.Thread(target=watch_stdin, args=(server, sys.stdin), daemon=True).start()

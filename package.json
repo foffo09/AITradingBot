@@ -10,7 +10,7 @@
     "lint": "eslint frontend/src vite.config.ts",
     "test": "vitest run",
     "desktop": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "node scripts/desktop_build.mjs"
   },
   "dependencies": {
     "lightweight-charts": "5.3.0",

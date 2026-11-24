@@ -291,7 +291,8 @@ def broken_ack_serialization(**kwargs):
 
 @pytest.mark.parametrize('response', [None, {}, 'invalid',
     SimpleNamespace(model_dump=broken_ack_serialization), {'id': 'synthetic-ack', 'status': 'accepted',
-                                                         'client_order_id': 'different-intent'}])
+                                                         'client_order_id': 'different-intent'},
+    {'id': 'synthetic-ack', 'status': 'accepted'}])  # no client_order_id: identity not confirmed
 def test_ambiguous_or_mismatched_ack_blocks_connection_and_retry(monkeypatch, tmp_path, response):
     client, account, sent = coordinated_fake_client(monkeypatch, tmp_path, response)
     with client.paper_coordinator.acquire() as lease:

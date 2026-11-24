@@ -35,6 +35,8 @@ def build_command(output: Path) -> list[str]:
             '--exclude-module', 'PIL', '--exclude-module', 'pyarrow',
             '--exclude-module', 'setuptools', '--exclude-module', 'pkg_resources',
             '--exclude-module', 'torch', '--exclude-module', 'tensorflow',
+            # Test framework reached only through pandas' optional test helpers; never used at runtime.
+            '--exclude-module', 'pytest', '--exclude-module', '_pytest',
             str(ROOT / 'packaging/backend/entrypoint.py')]
 
 

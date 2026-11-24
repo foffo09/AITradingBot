@@ -7,8 +7,11 @@ import tempfile
 import os
 from pathlib import Path
 import secrets
+import platform
 import sqlite3
 import threading
+import time
+from contextlib import contextmanager
 from uuid import UUID
 from typing import Annotated, Literal
 
@@ -22,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from config.settings import AppSettings
 from src.backtesting.engine import BacktestEngine
+from src.backtesting.walk_forward import walk_forward_evaluate
 from src.broker.alpaca_client import AlpacaClient
 from src.broker.mt5_readonly import MT5ReadError
 from src.broker.mt5_process import MT5Process
@@ -37,6 +41,7 @@ from src.api.schemas import (
     Context, LocalContext, Interval, ErrorResponse, HealthResponse, IdentityResponse,
     ShutdownResponse, StateResponse, InstrumentsResponse, MarketResponse,
     TradeResponse, BacktestResponse, ProposalResponse, Preferences, PreferencesResponse,
+    WalkForwardResponse, SystemResponse, WatchlistBody, WatchlistResponse, PendingTradeResponse,
 )
 Positive = Annotated[float, Field(gt=0, le=1e12, strict=True, allow_inf_nan=False)]
 COOKIE = 'aitradingbot_session'
@@ -70,6 +75,24 @@ class BacktestInput(BaseModel):
     symbol: str
     short_window: Annotated[int, Field(ge=1, le=199, strict=True)] = 10
     long_window: Annotated[int, Field(ge=2, le=199, strict=True)] = 30
+
+
+SERVICE_VERSION = '0.1.0'
+# Same candidate grid the retired Streamlit dashboard used; selection happens on training slices only.
+WALK_FORWARD_CANDIDATES = ({'short_window': 2, 'long_window': 4}, {'short_window': 3, 'long_window': 6}, {'short_window': 5, 'long_window': 10})
+WALK_FORWARD_MIN_BARS = max(c['long_window'] for c in WALK_FORWARD_CANDIDATES) + 2
+DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'SPY']
+# Broker reads can take tens of seconds. Requests queued behind one would hold every worker
+# thread of the shared pool and stall Demo too, so they wait briefly and then answer 503 busy.
+BROKER_LOCK_WAIT_SECONDS = 2.0
+
+
+class WalkForwardInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    context: Context
+    symbol: str
+    training_bars: Annotated[int, Field(ge=WALK_FORWARD_MIN_BARS, le=5000, strict=True)] | None = None
+    test_bars: Annotated[int, Field(ge=WALK_FORWARD_MIN_BARS, le=5000, strict=True)] | None = None
 
 
 def _symbol(symbol: str) -> str:
@@ -110,7 +133,22 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     token = secrets.token_urlsafe(32)
     origin = f'http://127.0.0.1:{port}'
     host = f'127.0.0.1:{port}'
-    lock = threading.RLock()
+    # One lock per context: a slow Paper/MT5 network read must not block the local Demo/Simulation ledgers.
+    locks = {context: threading.RLock() for context in ('demo', 'simulation', 'paper', 'mt5')}
+    preferences_lock = threading.Lock()
+
+    @contextmanager
+    def context_lock(context):
+        lock = locks[context]
+        if context in ('paper', 'mt5'):
+            if not lock.acquire(timeout=BROKER_LOCK_WAIT_SECONDS):
+                raise HTTPException(503, 'Broker read already in progress; retry shortly. No cached or fallback values.')
+        else:
+            lock.acquire()
+        try:
+            yield
+        finally:
+            lock.release()
     paper = None
     mt5 = MT5Process()
     controls = {context: OfflineExecutor(root, context) for context in ('demo', 'simulation', 'paper', 'mt5')}
@@ -162,46 +200,84 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
         return JSONResponse({'detail': 'Local storage unavailable; no account state was inferred.'}, status_code=503)
 
     preferences_path = root / 'local-v1-ui-preferences.json'
+    watchlist_path = root / 'local-v1-watchlist.json'
+
+    def check_alias(path, detail):
+        if path.is_symlink() or (path.exists() and path.stat().st_nlink > 1):
+            raise HTTPException(409, detail)
 
     def check_preferences_path():
-        if preferences_path.is_symlink() or (preferences_path.exists() and preferences_path.stat().st_nlink > 1):
-            raise HTTPException(409, 'UI preference aliases are not allowed.')
+        check_alias(preferences_path, 'UI preference aliases are not allowed.')
+
+    def read_small_json(path):
+        with path.open('rb') as file:
+            raw = file.read(4097)
+        if len(raw) > 4096:
+            raise ValueError('Oversized local file')
+        return json.loads(raw.decode('utf-8'))
+
+    def write_json_atomically(path, data, prefix, check):
+        check()
+        root.mkdir(parents=True, exist_ok=True)
+        descriptor, name = tempfile.mkstemp(dir=root, prefix=prefix, suffix='.tmp')
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as file:
+                json.dump(data, file, ensure_ascii=False)
+                file.flush()
+                os.fsync(file.fileno())
+            check()
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @app.get('/api/v1/preferences', response_model=PreferencesResponse)
     def get_preferences():
-        with lock:
+        with preferences_lock:
             check_preferences_path()
             stored = preferences_path.exists()
             if not stored:
-                values = Preferences(theme='dark', density='comfortable', analysis_width=68)
+                values = Preferences(theme='light', density='comfortable', analysis_width=68)
             else:
                 try:
-                    with preferences_path.open('rb') as file:
-                        raw = file.read(4097)
-                    if len(raw) > 4096:
-                        raise ValueError('Oversized preferences')
-                    values = Preferences.model_validate(json.loads(raw.decode('utf-8')))
+                    values = Preferences.model_validate(read_small_json(preferences_path))
                 except (ValueError, RecursionError):
                     raise HTTPException(503, 'UI preferences unavailable; stored values were not reset.') from None
             return {'api_version': '1', 'preferences': values, 'stored': stored}
 
     @app.post('/api/v1/preferences', response_model=PreferencesResponse)
     def save_preferences(body: Preferences):
-        with lock:
-            check_preferences_path()
-            root.mkdir(parents=True, exist_ok=True)
-            descriptor, name = tempfile.mkstemp(dir=root, prefix='ui-preferences-', suffix='.tmp')
-            temporary = Path(name)
-            try:
-                with os.fdopen(descriptor, 'w', encoding='utf-8') as file:
-                    json.dump(body.model_dump(), file, ensure_ascii=False)
-                    file.flush()
-                    os.fsync(file.fileno())
-                check_preferences_path()
-                os.replace(temporary, preferences_path)
-            finally:
-                temporary.unlink(missing_ok=True)
+        with preferences_lock:
+            write_json_atomically(preferences_path, body.model_dump(), 'ui-preferences-', check_preferences_path)
             return {'api_version': '1', 'preferences': body, 'stored': True}
+
+    def check_watchlist_path():
+        check_alias(watchlist_path, 'Watchlist aliases are not allowed.')
+
+    def valid_watchlist(symbols):
+        if len(set(symbols)) != len(symbols) or any(symbol not in INSTRUMENTS for symbol in symbols):
+            raise HTTPException(422, 'Watchlist symbols must be unique known instruments.')
+        return symbols
+
+    @app.get('/api/v1/watchlist', response_model=WatchlistResponse)
+    def get_watchlist():
+        with preferences_lock:
+            check_watchlist_path()
+            if not watchlist_path.exists():
+                return {'api_version': '1', 'symbols': DEFAULT_WATCHLIST, 'stored': False}
+            try:
+                symbols = WatchlistBody.model_validate(read_small_json(watchlist_path)).symbols
+                valid_watchlist(symbols)
+            except (ValueError, RecursionError, HTTPException):
+                raise HTTPException(503, 'Watchlist unavailable; stored values were not reset.') from None
+            return {'api_version': '1', 'symbols': symbols, 'stored': True}
+
+    @app.post('/api/v1/watchlist', response_model=WatchlistResponse)
+    def save_watchlist(body: WatchlistBody):
+        with preferences_lock:
+            symbols = valid_watchlist(body.symbols)
+            write_json_atomically(watchlist_path, {'symbols': symbols}, 'watchlist-', check_watchlist_path)
+            return {'api_version': '1', 'symbols': symbols, 'stored': True}
 
     @app.get('/api/v1/health', response_model=HealthResponse)
     def health():
@@ -268,7 +344,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.get('/api/v1/state', response_model=StateResponse)
     def get_state(context: Context = 'demo'):
-        with lock:
+        with context_lock(context):
             return state(context)
 
     @app.get('/api/v1/instruments', response_model=InstrumentsResponse)
@@ -293,7 +369,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     def market(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
         result = {'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'status': 'unavailable', 'reason': 'Market data unavailable; no fallback.', 'source': None, 'as_of': None, 'bars': [], 'quote': None, 'metadata': {}, 'indicators': []}
-        with lock:
+        with context_lock(context):
             try:
                 data = frame(context, symbol, interval)
                 if context == 'mt5':
@@ -313,7 +389,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.post('/api/v1/local-account', response_model=StateResponse)
     def local_account(body: AccountInput):
-        with lock:
+        with context_lock(body.context):
             local = ledger(body.context)
             if local.account() is not None:
                 raise HTTPException(409, 'Local account already initialized; reset is not available.')
@@ -324,32 +400,87 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 raise HTTPException(409, 'Local account already initialized.') from None
             return state(body.context)
 
+    # An uncertain virtual trade is remembered by the service, not only by the browser: localStorage is
+    # per-origin and the dynamic port changes it on every launch, which allowed a duplicate after restart.
+    # The record is removed only by the client (DELETE) after it has *received* a definitive outcome:
+    # clearing it server-side on commit lost it whenever that response never reached the UI.
+    def pending_path(context):
+        return root / f'local-v1-{context}-pending-trade.json'
+
+    def check_pending_path(context):
+        check_alias(pending_path(context), 'Pending trade aliases are not allowed.')
+
+    def read_pending(context):
+        check_pending_path(context)
+        if not pending_path(context).exists():
+            return None
+        try:
+            return TradeInput.model_validate(read_small_json(pending_path(context))).model_dump(mode='json')
+        except (ValueError, RecursionError):
+            raise HTTPException(503, 'Pending virtual trade record unreadable; nothing was reset or executed.') from None
+
+    def clear_pending(context, key):
+        pending = read_pending(context)
+        if pending is not None and pending['idempotency_key'] == key:
+            pending_path(context).unlink()
+
+    @app.get('/api/v1/pending-trade', response_model=PendingTradeResponse)
+    def get_pending_trade(context: LocalContext):
+        with context_lock(context):
+            return {'api_version': '1', 'context': context, 'pending': read_pending(context)}
+
+    @app.put('/api/v1/pending-trade', response_model=PendingTradeResponse)
+    def put_pending_trade(body: TradeInput):
+        _symbol(body.symbol)
+        with context_lock(body.context):
+            pending, record = read_pending(body.context), body.model_dump(mode='json')
+            if pending is not None and pending != record:
+                raise HTTPException(409, 'Another uncertain virtual trade is pending; retry it first.', headers={'X-Request-Outcome': 'rejected'})
+            write_json_atomically(pending_path(body.context), record, f'{body.context}-pending-', lambda: check_pending_path(body.context))
+            return {'api_version': '1', 'context': body.context, 'pending': record}
+
+    @app.delete('/api/v1/pending-trade', response_model=PendingTradeResponse)
+    def delete_pending_trade(context: LocalContext, idempotency_key: UUID):
+        with context_lock(context):
+            clear_pending(context, str(idempotency_key))  # only the record with this key; idempotent
+            return {'api_version': '1', 'context': context, 'pending': read_pending(context)}
+
     @app.post('/api/v1/local-trades', response_model=TradeResponse)
     def local_trade(body: TradeInput):
         _symbol(body.symbol)
-        with lock:
-            if not paths[body.context].exists() or ledger(body.context).account() is None:
-                raise HTTPException(409, 'Initialize the local account explicitly first.', headers={'X-Request-Outcome': 'rejected'})
-            local = ledger(body.context)
-            data = frame(body.context, body.symbol, '1Day')
-            kwargs = dict(symbol=body.symbol, quantity=body.quantity, market_price=float(data.iloc[-1]['close']), commission_bps=settings.commission_bps, slippage_bps=settings.slippage_bps, spread_bps=settings.spread_bps, reason='Explicit local simulated trade', data_timestamp=data.iloc[-1]['timestamp'].isoformat(), data_source='synthetic-demo', idempotency_key=str(body.idempotency_key))
-            try:
-                if body.side == 'buy':
-                    fill = local.buy(**kwargs, max_trade_fraction=settings.risk_max_trade_fraction, max_exposure_fraction=settings.risk_max_exposure_fraction, daily_loss_limit_fraction=settings.daily_loss_limit_pct, max_positions=settings.max_positions)
-                else:
-                    fill = local.sell(**kwargs)
-            except IdempotencyConflictError:
-                raise HTTPException(409, 'Request identity already belongs to another operation; verify history.') from None
-            except ValueError:
-                raise HTTPException(409, 'Simulated trade blocked by account, position or risk limits.', headers={'X-Request-Outcome': 'rejected'}) from None
-            return {**state(body.context), 'fill': fill}
+        with context_lock(body.context):
+            key = str(body.idempotency_key)
+            pending = read_pending(body.context)
+            if pending is not None and pending['idempotency_key'] != key:
+                raise HTTPException(409, 'An uncertain virtual trade is pending; retry it with the same request first.', headers={'X-Request-Outcome': 'rejected'})
+            if pending is not None and pending != body.model_dump(mode='json'):
+                raise HTTPException(409, 'Request identity already belongs to another operation; verify history.')
+            # The pending record stays until the client confirms it received this outcome (DELETE).
+            return execute_local_trade(body)
+
+    def execute_local_trade(body):
+        if not paths[body.context].exists() or ledger(body.context).account() is None:
+            raise HTTPException(409, 'Initialize the local account explicitly first.', headers={'X-Request-Outcome': 'rejected'})
+        local = ledger(body.context)
+        data = frame(body.context, body.symbol, '1Day')
+        kwargs = dict(symbol=body.symbol, quantity=body.quantity, market_price=float(data.iloc[-1]['close']), commission_bps=settings.commission_bps, slippage_bps=settings.slippage_bps, spread_bps=settings.spread_bps, reason='Explicit local simulated trade', data_timestamp=data.iloc[-1]['timestamp'].isoformat(), data_source='synthetic-demo', idempotency_key=str(body.idempotency_key))
+        try:
+            if body.side == 'buy':
+                fill = local.buy(**kwargs, max_trade_fraction=settings.risk_max_trade_fraction, max_exposure_fraction=settings.risk_max_exposure_fraction, daily_loss_limit_fraction=settings.daily_loss_limit_pct, max_positions=settings.max_positions)
+            else:
+                fill = local.sell(**kwargs)
+        except IdempotencyConflictError:
+            raise HTTPException(409, 'Request identity already belongs to another operation; verify history.') from None
+        except ValueError:
+            raise HTTPException(409, 'Simulated trade blocked by account, position or risk limits.', headers={'X-Request-Outcome': 'rejected'}) from None
+        return {**state(body.context), 'fill': fill}
 
     @app.post('/api/v1/backtest', response_model=BacktestResponse)
     def backtest(body: BacktestInput):
         _symbol(body.symbol)
         if body.short_window >= body.long_window:
             raise HTTPException(422, 'Short window must be smaller than long window.')
-        with lock:
+        with context_lock(body.context):
             try:
                 data = frame(body.context, body.symbol, '1Day')
                 result = BacktestEngine(settings).run(data, short_window=body.short_window, long_window=body.long_window, periods_per_year=365 if '/' in body.symbol else 252).to_dict()
@@ -363,7 +494,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     def proposal(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
         fallback = {**SignalProposal(symbol=symbol, reason='Risk snapshot and current market data are not verified for execution.').to_dict(), 'api_version': '1', 'contract_version': '1', 'context': context, 'interval': interval}
-        with lock:
+        with context_lock(context):
             try:
                 from src.strategy.service import evaluate_proposal
                 data = frame(context, symbol, interval)
@@ -378,7 +509,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.post('/api/v1/automation', response_model=StateResponse)
     def automation(body: AutomationInput):
-        with lock:
+        with context_lock(body.context):
             try:
                 controls[body.context].command(body.command, str(body.request_id),
                     evaluate=lambda: proposal(body.context, 'AAPL', '1Day'))
@@ -386,10 +517,72 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 raise HTTPException(409, 'Dry-run ownership or transition could not be verified; no retry was performed.') from None
             return state(body.context)
 
+    started = time.time()
+
+    @app.get('/api/v1/system', response_model=SystemResponse)
+    def system():
+        contexts = {}
+        for context, lock in locks.items():
+            # Never wait behind a slow broker read: a held context lock is reported as busy.
+            if not lock.acquire(blocking=False):
+                contexts[context] = {'connection': 'busy', 'ledger': 'not_applicable', 'automation': 'N/D'}
+                continue
+            try:
+                if context in paths:
+                    connection, ledger_state = 'local', 'present' if paths[context].exists() else 'absent'
+                elif context == 'paper':
+                    connection, ledger_state = 'connected' if paper is not None else 'disconnected', 'not_applicable'
+                else:
+                    connection, ledger_state = mt5.state, 'not_applicable'
+                contexts[context] = {'connection': connection, 'ledger': ledger_state, 'automation': str(controls[context].status().get('state', 'N/D'))}
+            finally:
+                lock.release()
+        return {'api_version': '1', 'status': 'ready', 'service_version': SERVICE_VERSION,
+                'python': platform.python_version(), 'platform': f'{platform.system()} {platform.machine()}',
+                'started_at': pd.Timestamp(started, unit='s', tz='UTC').isoformat(),
+                'uptime_seconds': round(time.time() - started, 1), 'order_submission': 'disabled', 'contexts': contexts}
+
+    @app.post('/api/v1/walk-forward', response_model=WalkForwardResponse)
+    def walk_forward(body: WalkForwardInput):
+        _symbol(body.symbol)
+        with context_lock(body.context):
+            try:
+                data = frame(body.context, body.symbol, '1Day').reset_index(drop=True)
+            except Exception:
+                raise HTTPException(409, 'Market data unavailable; walk-forward not run, no fallback.') from None
+        rows = len(data)
+        if rows < WALK_FORWARD_MIN_BARS * 2:
+            raise HTTPException(409, f'Insufficient history: {WALK_FORWARD_MIN_BARS * 2} daily bars required, {rows} available.')
+        training = body.training_bars or min(max(rows // 3, WALK_FORWARD_MIN_BARS), rows - WALK_FORWARD_MIN_BARS)
+        test = body.test_bars or min(max(rows // 6, WALK_FORWARD_MIN_BARS), rows - training)
+        if training + test > rows or test < WALK_FORWARD_MIN_BARS:
+            raise HTTPException(422, f'Training ({training}) plus test ({test}) bars must fit the {rows} available daily bars, '
+                                     f'with at least {WALK_FORWARD_MIN_BARS} bars each.')
+        try:
+            result = walk_forward_evaluate(data, engine=BacktestEngine(settings), parameter_candidates=WALK_FORWARD_CANDIDATES,
+                training_bars=training, test_bars=test, data_source=data.attrs['source'],
+                backtest_options={'periods_per_year': 365 if '/' in body.symbol else 252})
+        except Exception:
+            raise HTTPException(409, 'Walk-forward unavailable for the requested data and parameters.') from None
+        stamp = lambda index: pd.Timestamp(data.iloc[index]['timestamp']).isoformat()
+        window = lambda item: {'train_start': stamp(item.train_start), 'train_end': stamp(item.train_end - 1),
+                               'test_start': stamp(item.test_start), 'test_end': stamp(item.test_end - 1)}
+        def metrics(backtest):
+            values = backtest.to_dict()
+            values.pop('trade_history'); values.pop('equity_curve')
+            return {key: None if isinstance(value, float) and not math.isfinite(value) else value for key, value in values.items()}
+        return {'api_version': '1', 'context': body.context, 'symbol': body.symbol, 'source': result.data_source, 'strategy': 'sma',
+                'interval': '1Day', 'sample': {'start': stamp(0), 'end': stamp(rows - 1), 'bars': rows},
+                'candidates': list(WALK_FORWARD_CANDIDATES), 'selection_metric': result.selection_metric,
+                'training_bars': result.training_bars, 'test_bars': result.test_bars, 'step_bars': result.step_bars,
+                'folds': [{**window(fold), 'parameters': fold.selected_parameters, 'in_sample_return_pct': fold.in_sample_return_pct,
+                           'in_sample_trades': fold.in_sample_trades, 'out_of_sample': metrics(fold.out_of_sample)} for fold in result.folds],
+                'excluded': [{**window(item), 'reason': item.reason} for item in result.excluded_folds]}
+
     @app.post('/api/v1/connections/paper', response_model=StateResponse)
     def connect_paper():
         nonlocal paper
-        with lock:
+        with context_lock('paper'):
             paper = None
             key, secret = os.getenv('ALPACA_API_KEY'), os.getenv('ALPACA_SECRET_KEY')
             if not key or not secret:
@@ -408,7 +601,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.post('/api/v1/connections/mt5', response_model=StateResponse)
     def connect_mt5():
-        with lock:
+        with context_lock('mt5'):
             mt5.connect()
             return state('mt5')
 

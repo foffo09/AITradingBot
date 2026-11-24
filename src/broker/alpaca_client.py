@@ -168,10 +168,11 @@ class AlpacaClient:
         return self._paper_client_is_paper and self.settings.trading_mode == "paper"
 
     def verify_connection(self) -> dict[str, Any]:
+        # Verification is a read. paper_trading_enabled gates submission only (submit_order and the
+        # automation re-check it); requiring it here made the read-only desktop monitor always fail.
         if (
             self.client is None
             or self.settings.trading_mode != "paper"
-            or not self.settings.paper_trading_enabled
             or not self._paper_client_is_paper
         ):
             self._paper_connection_verified = False
@@ -482,7 +483,7 @@ class AlpacaClient:
             return bars.sort_values("timestamp").reset_index(drop=True)
         except BrokerConnectionError:
             raise
-        except Exception as exc:  # pragma: no cover - requires broker/API failure
+        except Exception:  # pragma: no cover - requires broker/API failure
             self.logger.warning("Alpaca market-data request failed for %s.", symbol)
             raise BrokerConnectionError(
                 f"Market data unavailable for {symbol}. Verify data entitlements and the selected period."
@@ -534,7 +535,7 @@ class AlpacaClient:
             }
         except BrokerConnectionError:
             raise
-        except Exception as exc:  # pragma: no cover - requires broker/API failure
+        except Exception:  # pragma: no cover - requires broker/API failure
             self.logger.warning("Alpaca latest quote request failed for %s.", symbol)
             raise BrokerConnectionError(
                 f"Latest quote unavailable for {symbol}; last historical bar may still be available."
@@ -658,7 +659,7 @@ class AlpacaClient:
                 f"Alpaca Paper order request failed; no verified order response: {self.describe_error(exc)}"
             ) from None
         if (isinstance(order, dict) and order.get("id") and order.get("status")
-                and order.get("client_order_id", client_order_id) == client_order_id):
+                and order.get("client_order_id") == client_order_id):  # missing id is not a confirmation
             return dict(order)
         self._paper_connection_verified = False
         self._verified_account = None
