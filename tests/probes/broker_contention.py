@@ -4,6 +4,8 @@ Starts the real sidecar entry point (uvicorn + shared worker thread pool) with a
 hang, queues many Paper polls like a UI left open on Paper, then times a Demo request. Prints JSON.
 """
 import json
+import os
+from pathlib import Path
 import subprocess
 import sys
 import tempfile
@@ -28,11 +30,14 @@ if len(sys.argv) > 4 and sys.argv[4] == 'serve':
             return {'account': {'cash': '1'}, 'positions': [], 'orders': [], 'updated_at': 'now'}
     local_app.AlpacaClient = HangingPaper
     from src.runtime import local_service
-    local_service.main(['--port', '0', '--ui-dir', ROOT + '/frontend/dist', '--data-dir', sys.argv[5]])
+    local_service.main(['--port', '0', '--ui-dir', sys.argv[6], '--data-dir', sys.argv[5]])
     raise SystemExit
 
-env = {'PYTHON_DOTENV_DISABLED': '1', 'ALPACA_API_KEY': 'fake-key', 'ALPACA_SECRET_KEY': 'fake-secret', 'PATH': ''}
-server = subprocess.Popen([sys.executable, __file__, ROOT, str(HANG), str(QUEUED), 'serve', tempfile.mkdtemp()],
+env = {'PYTHON_DOTENV_DISABLED': '1', 'ALPACA_API_KEY': 'fake-key', 'ALPACA_SECRET_KEY': 'fake-secret', 'PATH': '',
+       'SYSTEMROOT': os.environ.get('SYSTEMROOT', '')}  # Windows sockets need SYSTEMROOT
+ui = Path(tempfile.mkdtemp())
+(ui / 'index.html').write_text('<!doctype html><title>probe</title>', encoding='utf-8')  # no React build needed
+server = subprocess.Popen([sys.executable, __file__, ROOT, str(HANG), str(QUEUED), 'serve', tempfile.mkdtemp(), str(ui)],
                           stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, cwd=ROOT)
 try:
     base = f"http://127.0.0.1:{json.loads(server.stdout.readline())['port']}"

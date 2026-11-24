@@ -206,8 +206,6 @@ def test_hung_paper_cannot_exhaust_the_worker_pool_of_the_real_server():
     import sys
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
-    if not (root / 'frontend' / 'dist' / 'index.html').is_file():
-        pytest.skip('React build required (npm run build)')
     probe = root / 'tests' / 'probes' / 'broker_contention.py'
     result = subprocess.run([sys.executable, str(probe), str(root), '20', '60'], capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr[-2000:]
