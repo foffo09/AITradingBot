@@ -759,13 +759,15 @@ function Watchlist({
     });
     return () => controller.abort();
   }, [symbols, context]);
-  async function save(next: string[]) {
+  async function save(next: string[]): Promise<boolean> {
     setError("");
     setBusy(true);
     try {
       setSymbols(await api.saveWatchlist(next));
+      return true;
     } catch (e) {
       setError(message(e));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -822,7 +824,7 @@ function Watchlist({
             </table>
           </div>
           {symbols.length === 0 && <p className="notice">Watchlist vuota.</p>}
-          <form className="inline-form" onSubmit={(e) => { e.preventDefault(); if (candidate) void save([...symbols, candidate]).then(() => setCandidate("")); }}>
+          <form className="inline-form" onSubmit={(e) => { e.preventDefault(); if (candidate) void save([...symbols, candidate]).then((saved) => { if (saved) setCandidate(""); }); }}>
             <label>
               Aggiungi strumento
               <select value={candidate} onChange={(e) => setCandidate(e.target.value)}>
@@ -835,7 +837,7 @@ function Watchlist({
           <p className="notice">La variazione confronta le ultime due chiusure giornaliere disponibili; non è una quotazione in tempo reale.</p>
           {(context === "demo" || context === "simulation") && (
             <p className="notice">
-              Dati sintetici dimostrativi: la serie generata è la stessa per tutti gli strumenti e non rappresenta i loro prezzi reali.
+              Dati sintetici dimostrativi: ogni strumento ha una serie generata propria, che non rappresenta i suoi prezzi reali.
             </p>
           )}
         </>

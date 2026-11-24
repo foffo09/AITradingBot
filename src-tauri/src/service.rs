@@ -141,7 +141,9 @@ impl Service {
             // Drain stdout so future status output cannot block the owned backend.
             let _ = std::io::copy(&mut reader, &mut std::io::sink());
         });
-        match receive.recv_timeout(Duration::from_secs(15)) {
+        // First launch after install/update includes OS scanning and PyInstaller extraction: 13 s was
+        // measured on an M5, so 15 s failed spuriously. Still fail-closed: kill + exit 1, no trading.
+        match receive.recv_timeout(Duration::from_secs(30)) {
             Ok(Ok(url)) => Ok(Self::from_child(child, url)),
             result => {
                 kill_owned(&mut child);

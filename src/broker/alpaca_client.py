@@ -658,7 +658,7 @@ class AlpacaClient:
                 f"Alpaca Paper order request failed; no verified order response: {self.describe_error(exc)}"
             ) from None
         if (isinstance(order, dict) and order.get("id") and order.get("status")
-                and order.get("client_order_id", client_order_id) == client_order_id):
+                and order.get("client_order_id") == client_order_id):  # missing id is not a confirmation
             return dict(order)
         self._paper_connection_verified = False
         self._verified_account = None

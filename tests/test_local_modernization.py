@@ -216,3 +216,10 @@ def test_pending_trade_is_cleared_on_definitive_rejection_and_scoped_per_context
     (tmp_path / 'local-v1-demo-pending-trade.json').write_text('{bad')
     assert c.get('/api/v1/pending-trade?context=demo').status_code == 503
     assert c.post('/api/v1/local-trades', json=other, headers=H).status_code == 503, 'unreadable record blocks, never guesses'
+
+
+def test_demo_series_differ_per_symbol_and_stay_deterministic():
+    from src.data.market_data import generate_demo_prices
+    aapl, msft = generate_demo_prices('AAPL'), generate_demo_prices('MSFT')
+    assert not aapl['close'].equals(msft['close'])
+    assert aapl['close'].equals(generate_demo_prices('AAPL')['close'])

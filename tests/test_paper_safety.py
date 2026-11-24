@@ -27,7 +27,8 @@ def test_paper_order_requires_verified_active_paper_client(monkeypatch, tmp_path
 
         def submit_order(self, request):
             calls.append(request)
-            return {"id": "paper-order-id", "status": "accepted"}
+            # Alpaca echoes the request's client_order_id in every order object.
+            return {"id": "paper-order-id", "status": "accepted", "client_order_id": request.client_order_id}
 
         def get_account(self):
             return {"id": "test-account", "status": "ACTIVE", "trading_blocked": False, "account_blocked": False}

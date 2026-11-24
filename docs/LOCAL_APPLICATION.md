@@ -167,7 +167,10 @@ API v1 in `src/api/local_app.py`; consumatore in `frontend/src/api.ts`.
 Aggiunte con la dismissione di Streamlit: `POST /walk-forward` (griglia 2/4, 3/6, 5/10, selezione solo
 sul training, nessuna scrittura ledger, 409 senza dati), `GET /system` (stato per contesto, mai in attesa
 di un lock occupato, `order_submission: disabled`), `GET/POST /watchlist` (file `local-v1-watchlist.json`,
-simboli noti e unici, massimo 20).
+simboli noti e unici, massimo 20), `GET/PUT /pending-trade` (richiesta virtuale incerta conservata dal
+servizio in `local-v1-<contesto>-pending-trade.json`: la UI la registra prima dell'invio, il servizio
+rifiuta un trade diverso finché è in sospeso e la cancella quando l'esito è certo; sopravvive al cambio
+di porta). Le letture Paper/MT5 attendono il lock del proprio contesto al massimo 2 s, poi 503.
 Gli input POST sono Pydantic con campi extra proibiti e numeri finiti positivi.
 Contesti ammessi: demo, simulation, paper, mt5. Errori input 422, assenza sessione
 401, origine vietata403, operazione locale/rischio/dati indisponibili409.
@@ -218,7 +221,7 @@ Python figlio. Non si termina un PID arbitrario ricevuto dalla rete.
 Chiusura finestra → shutdown stdin → attesa massima20s per due letture native5s
 più close5s/cleanup → eventuale kill del solo Child posseduto. Il monitor chiude
 la shell con exit1 se il backend muore; non riavvia automazioni. Il limite di
-avvio15s resta invariato.
+avvio era 15 s; dal 24 novembre è 30 s (falsi fallimenti al primo avvio).
 Bundle locale non firmato/notarizzato per distribuzione; nessuna release pubblicata.
 
 ## Verifica riproducibile senza broker
@@ -258,7 +261,7 @@ Verifica nativa Mac aggiuntiva, solo sul bundle generato:
 `python -m scripts.check_desktop_startup`. Simula sidecar assente, verifica
 uscita controllata1 senzapanic e ripristina il file. Lo smokeHTTP controlla anche
 motivo/provenienza della proposta, per distinguere NO_TRADE previsto da errore.
-Avvio desktop limitato a15s: dialoghiOS/avvio lento possono impedirlo; chiudere
+Avvio desktop limitato a 30 s (era 15 s fino al 24 novembre, primo avvio misurato fino a 13 s): dialoghiOS/avvio lento possono impedirlo; chiudere
 un eventuale ripristino finestre di macOS prima di riprovare. Il fallimento non
 abilita esecuzione né dati di ripiego. Nessuna provaWindowsGUI è implicita.
 

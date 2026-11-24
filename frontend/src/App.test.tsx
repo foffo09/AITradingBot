@@ -678,7 +678,7 @@ describe("pagine aggiunte per la dismissione di Streamlit", () => {
     const row = screen.getByRole("row", { name: /AAPL/ });
     expect(row.textContent).toContain("N/D");
     expect(screen.getByRole("button", { name: "Rimuovi" })).toBeInTheDocument();
-    expect(screen.getByText(/la serie generata è la stessa per tutti gli strumenti/)).toBeInTheDocument();
+    expect(screen.getByText(/ogni strumento ha una serie generata propria/)).toBeInTheDocument();
   });
   it("walk-forward mostra i fold fuori campione restituiti dal motore", async () => {
     withRoutes({"/walk-forward": {api_version: "1", source: "synthetic-demo", selection_metric: "training net return", training_bars: 66,
