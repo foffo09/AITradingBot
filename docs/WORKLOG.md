@@ -853,3 +853,15 @@ checkdellaPR8 attestano il nuovoHEAD. Workingtree da lasciare pulito.
 ReleaseBLOCKED: licenza/notice, Windows11GUI/retention/firma/nativehang nonprovati.
 Nessun ordine, brokerautentico, merge main, deploy o release. Primo diario dry-run
 standardcreato duranteQA resta conservato, come segnalato all’utente.
+
+## 24 novembre — MT5 tramite servizio e review v1 (Claude Code)
+
+Causa del fallimento MT5 via API dimostrata su Windows: il thread `watch_stdin` in `ReadFile` sincrono sulla pipe
+di stdin bloccava l'avvio del worker spawn (prova A/B CI 45454479694: 0,08 s / timeout / 0,08 s). Correzione
+`shutdown_stream()` in `src/runtime/local_service.py`; deadline separate, macchina a stati, diagnostica, crash con
+exit code. Branch `agents/claude-emergency-delivery-20261124`, CI 45455628867 verde su tutti i 5 job
+(Windows 907 PASS / 2 skip). UI: invito al conto virtuale, conto MT5 in Panoramica.
+Review v1 (`agents/claude-v1-review-20261124`): SDK MT5 assente dal venv del launcher e dal sidecar Windows
+(ora in requirements-dev, solo Windows AMD64), CI che verifica servizio e sidecar congelato fino a
+`terminal_not_running`; decodifica `tasklist` robusta; percorsi diagnostici senza profilo utente.
+Non verificato: terminale MT5 reale (gate 5, PC del proprietario). Nessun ordine, merge o release.
