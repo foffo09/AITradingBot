@@ -256,3 +256,64 @@ Nessun CRITICAL o HIGH.
 alcuna build Codex da verificare. Firma, notarizzazione e Intel restano gate di distribuzione
 separati, tutti aperti. Prossimo passo: correzioni Codex secondo l'handoff, poi riverifica
 completa di Claude sul nuovo SHA e sul nuovo artefatto.
+
+---
+
+# Fase 3 — correzione AUDIT-M1, 24 novembre 2026
+
+## Chi ha corretto e perché
+
+Codex Mac è stato avviato con `codex exec` in un worktree dedicato, ma non ha potuto lavorare:
+la rete corrente intercetta il TLS verso `chatgpt.com` e `api.openai.com` (certificato emesso da un
+firewall Fortinet), quindi Codex non raggiungeva il suo servizio. Nessuna modifica Codex.
+Su decisione dell'utente **la correzione M1 è stata scritta da Claude**, sul branch separato
+`agents/claude-macos-m1-fix-20261124`, commit `513a45f`. **Limite: correzione e verifica sono dello
+stesso agente**; serve una revisione di un secondo agente (Codex o umano) prima del merge.
+
+## Correzione
+
+`src/api/local_app.py`: il `threading.RLock()` unico è sostituito da un `RLock` per contesto
+(`demo`, `simulation`, `paper`, `mt5`) più un lock per le preferenze. Ogni route usa il lock del proprio
+contesto; `paper` e `mt5` sono letti/scritti solo sotto il proprio lock. Le chiamate annidate
+(`local_account`/`local_trade` → `state`, `automation` → `proposal`) restano nello stesso contesto (RLock).
+I controller dry-run usano già file e mutex per contesto (`local-v1-<context>-control.sqlite3`).
+Invariati: soglie, rischio, timeout broker, contratti API, messaggi, idempotenza, `BEGIN IMMEDIATE`.
+
+## Test
+
+| Verifica | Risultato |
+|---|---|
+| M1 senza `--runxfail` prima di togliere `xfail` | XPASS(strict) → `xfail` rimosso, asserzione invariata (< 1 s) |
+| M1 parametrizzato Demo + Simulazione | PASS (prima: 2.70 s di attesa) |
+| Nuovo: 12 thread stessa chiave idempotente, Demo + Simulazione | 1 sola fill per contesto, PASS |
+| `tests/test_qa_macos_audit.py` | **8 passed** |
+| API/ledger/executor/contratti | 113 passed |
+| Suite completa con coverage | **997 passed, 1 skipped**, nessun xfail, coverage 88% (`local_app.py` 93%), guard 0/0 |
+| compileall / diff --check / ruff F,E9 sui file toccati | PASS |
+| Smoke HTTP binario frozen | PASS |
+| `qa_sidecar_lifecycle.py` | 5/5 PASS (limite L3 invariato) |
+| App: sospensione 32 s + ripresa, stessa istanza Demo | PASS |
+| ⌘Q (voce di menu) | 0 processi in ≤200 ms, porta 52148 chiusa |
+
+Artefatti ricostruiti da `513a45f` (build Claude, arm64, firma ad-hoc):
+sidecar `3f62f5eff0df37f94c6b65cf491c4eb64f7538775dce45a14f5e04ed1cc88b43`,
+desktop `2ecbb4f7ac77777141c781ee4eef5fffd109081c028bd5293c868bc007042f8b` (invariato: nessuna modifica Rust),
+`.app` 51.46 MiB.
+
+Non testato: Paper autentico (nessuna credenziale, per mandato). La lentezza Paper è simulata con un client finto.
+
+## Stato problemi
+
+| ID | Gravità | Stato |
+|---|---|---|
+| M1 | MEDIUM | **RISOLTO** in `513a45f` (da revisionare da secondo agente) |
+| L1, L2, L3, L4, L5, L6 | LOW | APERTI, invariati |
+
+## Esito fase 3
+
+**APPROVATO CON RISERVE** per la build arm64 locale: M1 risolto e testato, ciclo di vita, timeout,
+modalità e SQLite verificati, nessun CRITICAL/HIGH. Riserve: sei LOW aperti (L1 e L4 visibili all'utente
+durante un blocco del backend), correzione M1 non revisionata da un secondo agente, build non prodotta da Codex.
+
+**Distribuzione a utenti finali: NON APPROVATA** — gate separati ancora aperti: firma Developer ID,
+notarizzazione e stapling, verifica Intel/x86_64, licenza/notice, CI macOS `local-app` completata.
