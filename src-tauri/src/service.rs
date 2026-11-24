@@ -19,9 +19,80 @@ struct Readiness {
     instance_id: String,
 }
 
-/// Kill the owned sidecar. On Unix it leads its own process group, so the PyInstaller
-/// worker it forked dies with it instead of being orphaned while blocked (AUDIT-L3).
-fn kill_owned(child: &mut Child) {
+/// Windows has no process groups: the sidecar and every process it creates are put in a Job Object
+/// that kills them all when terminated or when the shell's handle closes (also if the shell crashes).
+#[cfg(windows)]
+mod job {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    pub struct Job(HANDLE);
+    // The handle is only used for kernel calls that are safe from any thread.
+    unsafe impl Send for Job {}
+    unsafe impl Sync for Job {}
+
+    impl Job {
+        /// Children created by the sidecar after this call inherit the job.
+        pub fn assign(child: &std::process::Child) -> Option<Job> {
+            unsafe {
+                let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+                if handle.is_null() {
+                    return None;
+                }
+                let job = Job(handle);
+                let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                let configured = SetInformationJobObject(
+                    job.0,
+                    JobObjectExtendedLimitInformation,
+                    &info as *const _ as *const core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                );
+                if configured == 0 || AssignProcessToJobObject(job.0, child.as_raw_handle() as HANDLE) == 0 {
+                    return None;
+                }
+                Some(job)
+            }
+        }
+
+        pub fn terminate(&self) {
+            unsafe {
+                TerminateJobObject(self.0, 1);
+            }
+        }
+    }
+
+    impl Drop for Job {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod job {
+    pub struct Job;
+    impl Job {
+        pub fn assign(_child: &std::process::Child) -> Option<Job> {
+            None
+        }
+        pub fn terminate(&self) {}
+    }
+}
+
+/// Kill the owned sidecar and everything it started: Windows Job Object, or on Unix its own
+/// process group, so the PyInstaller worker cannot be orphaned while blocked (AUDIT-L3).
+fn kill_owned(child: &mut Child, job: Option<&job::Job>) {
+    if let Some(job) = job {
+        job.terminate();
+    }
     #[cfg(unix)]
     {
         extern "C" {
@@ -54,14 +125,22 @@ fn ready_url(line: &str, owned_pid: u32) -> Result<String, String> {
 
 pub struct Service {
     child: Arc<Mutex<Child>>,
+    job: Option<job::Job>,
     stopping: Arc<AtomicBool>,
     pub url: String,
 }
 
 impl Service {
+    #[cfg(test)]
     fn from_child(child: Child, url: String) -> Self {
+        let job = job::Job::assign(&child);
+        Self::with_job(child, url, job)
+    }
+
+    fn with_job(child: Child, url: String, job: Option<job::Job>) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
+            job,
             stopping: Arc::new(AtomicBool::new(false)),
             url,
         }
@@ -114,11 +193,13 @@ impl Service {
             .map_err(|_| {
                 "Backend confezionato non disponibile. Preparare il sidecar per questa piattaforma."
             })?;
+        // Assigned before the handshake: PyInstaller's worker is created after extraction and inherits it.
+        let job = job::Job::assign(&child);
         let pid = child.id();
         let stdout = match child.stdout.take() {
             Some(stdout) => stdout,
             None => {
-                kill_owned(&mut child);
+                kill_owned(&mut child, job.as_ref());
                 return Err("Stdout del servizio non disponibile.".into());
             }
         };
@@ -144,9 +225,9 @@ impl Service {
         // First launch after install/update includes OS scanning and PyInstaller extraction: 13 s was
         // measured on an M5, so 15 s failed spuriously. Still fail-closed: kill + exit 1, no trading.
         match receive.recv_timeout(Duration::from_secs(30)) {
-            Ok(Ok(url)) => Ok(Self::from_child(child, url)),
+            Ok(Ok(url)) => Ok(Self::with_job(child, url, job)),
             result => {
-                kill_owned(&mut child);
+                kill_owned(&mut child, job.as_ref());
                 Err(match result {
                     Ok(Err(error)) => error,
                     _ => "Timeout nell'avvio del servizio locale.".into(),
@@ -176,7 +257,7 @@ impl Service {
             }
             thread::sleep(Duration::from_millis(30));
         }
-        kill_owned(&mut child);
+        kill_owned(&mut child, self.job.as_ref());
     }
 }
 impl Drop for Service {
@@ -258,6 +339,33 @@ mod lifecycle_tests {
         thread::sleep(Duration::from_millis(200));
         let alive = Command::new("kill").args(["-0", &worker]).status().unwrap().success();
         assert!(!alive, "worker {worker} survived the forced shutdown");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn forced_shutdown_terminates_the_whole_windows_job() {
+        // A sidecar that starts its own child (like PyInstaller's worker) and never exits.
+        fn waitfor_running() -> bool {
+            let out = Command::new("tasklist")
+                .args(["/FI", "IMAGENAME eq waitfor.exe", "/NH"])
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).to_lowercase().contains("waitfor.exe")
+        }
+        assert!(!waitfor_running(), "precondition: no waitfor.exe already running");
+        let mut command = Command::new("cmd.exe");
+        command.args(["/D", "/C", "start /B waitfor /T 120 aitbjobprobe & ping -n 120 127.0.0.1 >nul"]);
+        command.stdin(Stdio::piped());
+        let mut service = Service::from_child(command.spawn().unwrap(), "fixture".into());
+        assert!(service.job.is_some(), "sidecar must be inside a job object");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !waitfor_running() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(100));
+        }
+        assert!(waitfor_running(), "grandchild started");
+        service.shutdown_within(Duration::from_millis(300));
+        thread::sleep(Duration::from_millis(500));
+        assert!(!waitfor_running(), "grandchild survived the forced shutdown");
     }
 
     #[test]
