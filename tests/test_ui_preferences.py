@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from src.api.local_app import create_local_app
 
-DEFAULTS = {'theme': 'dark', 'density': 'comfortable', 'analysis_width': 68}
+DEFAULTS = {'theme': 'light', 'density': 'comfortable', 'analysis_width': 68}
 CHANGED = {'theme': 'light', 'density': 'compact', 'analysis_width': 72}
 
 

@@ -221,7 +221,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             check_preferences_path()
             stored = preferences_path.exists()
             if not stored:
-                values = Preferences(theme='dark', density='comfortable', analysis_width=68)
+                values = Preferences(theme='light', density='comfortable', analysis_width=68)
             else:
                 try:
                     values = Preferences.model_validate(read_small_json(preferences_path))

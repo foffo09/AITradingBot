@@ -55,6 +55,21 @@ export interface Backtest {
   trades: RecordData[];
   equity: { time: number; value: number }[];
 }
+export interface WalkForwardFold {
+  train_start: string; train_end: string; test_start: string; test_end: string;
+  parameters: Record<string, number>; in_sample_return_pct: number; in_sample_trades: number;
+  out_of_sample: RecordData;
+}
+export interface WalkForward {
+  source: string; training_bars: number; test_bars: number; step_bars: number;
+  selection_metric: string; sample: { start: string; end: string; bars: number };
+  folds: WalkForwardFold[]; excluded: { test_start: string; test_end: string; reason: string }[];
+}
+export interface ContextStatus { connection: string; ledger: string; automation: string }
+export interface SystemStatus {
+  service_version: string; python: string; platform: string; started_at: string;
+  uptime_seconds: number; order_submission: "disabled"; contexts: Record<string, ContextStatus>;
+}
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -261,6 +276,39 @@ export function parseBacktest(value: unknown): Backtest {
     })),
   };
 }
+export function parseWalkForward(value: unknown): WalkForward {
+  const d = version(value), sample = object(d.sample);
+  const window = (w: RecordData) => ({test_start: string(w.test_start), test_end: string(w.test_end)});
+  return {
+    source: string(d.source), selection_metric: string(d.selection_metric),
+    training_bars: numeric(d.training_bars), test_bars: numeric(d.test_bars), step_bars: numeric(d.step_bars),
+    sample: {start: string(sample.start), end: string(sample.end), bars: numeric(sample.bars)},
+    folds: records(d.folds).map(f => ({
+      ...window(f), train_start: string(f.train_start), train_end: string(f.train_end),
+      parameters: Object.fromEntries(Object.entries(object(f.parameters)).map(([k, v]) => [k, numeric(v)])),
+      in_sample_return_pct: numeric(f.in_sample_return_pct), in_sample_trades: numeric(f.in_sample_trades),
+      out_of_sample: object(f.out_of_sample),
+    })),
+    excluded: records(d.excluded).map(e => ({...window(e), reason: string(e.reason)})),
+  };
+}
+export function parseSystem(value: unknown): SystemStatus {
+  const d = version(value);
+  if (d.order_submission !== "disabled") invalid();
+  return {
+    service_version: string(d.service_version), python: string(d.python), platform: string(d.platform),
+    started_at: string(d.started_at), uptime_seconds: numeric(d.uptime_seconds), order_submission: "disabled",
+    contexts: Object.fromEntries(Object.entries(object(d.contexts)).map(([k, v]) => {
+      const c = object(v);
+      return [k, {connection: string(c.connection), ledger: string(c.ledger), automation: string(c.automation)}];
+    })),
+  };
+}
+function parseWatchlist(value: unknown): string[] {
+  const d = version(value);
+  if (!Array.isArray(d.symbols) || typeof d.stored !== "boolean") invalid();
+  return (d.symbols as unknown[]).map(string);
+}
 function parsePreferences(value: unknown): {preferences: Preferences; stored: boolean} {
   const d = version(value), p = object(d.preferences);
   if ((p.theme !== "dark" && p.theme !== "light") ||
@@ -367,6 +415,15 @@ export const api = {
   },
   connect: async (c: "paper" | "mt5") =>
     parseState(await request(`/connections/${c}`, { method: "POST" })),
+  walkForward: async (c: Context, symbol: string, training_bars?: number, test_bars?: number) =>
+    parseWalkForward(await request("/walk-forward", {
+      method: "POST",
+      body: JSON.stringify({ context: c, symbol, ...(training_bars ? {training_bars} : {}), ...(test_bars ? {test_bars} : {}) }),
+    })),
+  system: async (signal?: AbortSignal) => parseSystem(await request("/system", { signal })),
+  watchlist: async (signal?: AbortSignal) => parseWatchlist(await request("/watchlist", { signal })),
+  saveWatchlist: async (symbols: string[]) =>
+    parseWatchlist(await request("/watchlist", { method: "POST", body: JSON.stringify({ symbols }) })),
   backtest: async (
     c: Context,
     symbol: string,

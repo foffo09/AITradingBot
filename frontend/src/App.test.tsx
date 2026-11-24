@@ -595,10 +595,11 @@ describe("preferenze durevoli del backend", () => {
   it("recupera le preferenze senza dipendere dallo storage della porta e senza POST all'avvio", async () => {
     const base = fetcher.getMockImplementation()!;
     fetcher.mockImplementation(async (url: string, init?: RequestInit) => url.includes('/preferences')
-      ? new Response(JSON.stringify({api_version:'1', stored:true, preferences:{theme:'light',density:'compact',analysis_width:71}}))
+      ? new Response(JSON.stringify({api_version:'1', stored:true, preferences:{theme:'dark',density:'compact',analysis_width:71}}))
       : base(url, init));
     render(<App />);
-    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'));
+    // Stored value differs from the light default, so this proves it came from the backend.
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
     expect(document.documentElement.dataset.density).toBe('compact');
     expect(screen.getByRole('slider', {name:'Larghezza relativa del grafico'})).toHaveValue('71');
     expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
@@ -626,7 +627,7 @@ describe("preferenze durevoli del backend", () => {
     await waitFor(()=>expect(writes).toHaveLength(1));
     release(new Response(JSON.stringify({api_version:'1',preferences:writes[0],stored:true})));
     await waitFor(()=>expect(writes).toHaveLength(2));
-    expect(writes[1]).toEqual({theme:'dark',density:'comfortable',analysis_width:72});
+    expect(writes[1]).toEqual({theme:'light',density:'comfortable',analysis_width:72});
     expect(fetcher.mock.calls.filter(([, init])=>init?.method==='POST').every(([url])=>String(url).includes('/preferences'))).toBe(true);
   });
 
@@ -640,5 +641,54 @@ describe("preferenze durevoli del backend", () => {
     expect(await screen.findByText(/Preferenze non salvate/)).toBeInTheDocument();
     expect(screen.getByRole('slider',{name:'Larghezza relativa del grafico'})).toHaveValue('70');
     expect(screen.getAllByText('N/D').length).toBeGreaterThan(0);
+  });
+});
+describe("pagine aggiunte per la dismissione di Streamlit", () => {
+  const withRoutes = (routes: Record<string, unknown>) => {
+    const base = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url: string, init?: RequestInit) => {
+      const hit = Object.keys(routes).find((path) => url.includes(path));
+      return hit ? new Response(JSON.stringify(routes[hit])) : base(url, init);
+    });
+  };
+  it("Stato sistema mostra contesti e invio ordini disabilitato", async () => {
+    withRoutes({"/system": {api_version: "1", status: "ready", service_version: "0.1.0", python: "3.11.18", platform: "Darwin arm64",
+      started_at: "2026-11-24T10:00:00+00:00", uptime_seconds: 12.5, order_submission: "disabled",
+      contexts: {demo: {connection: "local", ledger: "absent", automation: "STOPPED"}, paper: {connection: "busy", ledger: "not_applicable", automation: "N/D"}}}});
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Stato sistema" }));
+    await waitFor(() => expect(screen.getByText(/Occupato \(lettura broker in corso\)/)).toBeInTheDocument());
+    expect(screen.getByText("Invio ordini: disabilitato")).toBeInTheDocument();
+    expect(screen.getByText("Non creato")).toBeInTheDocument();
+  });
+  it("Stato sistema rifiuta una risposta che non dichiara invio disabilitato", async () => {
+    withRoutes({"/system": {api_version: "1", status: "ready", service_version: "0.1.0", python: "3", platform: "x",
+      started_at: "x", uptime_seconds: 1, order_submission: "enabled", contexts: {}}});
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Stato sistema" }));
+    await waitFor(() => expect(screen.getByText(/Risposta del servizio non valida/)).toBeInTheDocument());
+  });
+  it("Watchlist mostra N/D senza dati e non inventa prezzi", async () => {
+    withRoutes({"/watchlist": {api_version: "1", symbols: ["AAPL"], stored: false}});
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Watchlist" }));
+    await waitFor(() => expect(screen.getByText("Feed non disponibile")).toBeInTheDocument());
+    const row = screen.getByRole("row", { name: /AAPL/ });
+    expect(row.textContent).toContain("N/D");
+    expect(screen.getByRole("button", { name: "Rimuovi" })).toBeInTheDocument();
+  });
+  it("walk-forward mostra i fold fuori campione restituiti dal motore", async () => {
+    withRoutes({"/walk-forward": {api_version: "1", source: "synthetic-demo", selection_metric: "training net return", training_bars: 66,
+      test_bars: 33, step_bars: 33, sample: {start: "2026-01-01T00:00:00+00:00", end: "2026-07-01T00:00:00+00:00", bars: 200},
+      folds: [{train_start: "2026-01-01T00:00:00+00:00", train_end: "2026-03-01T00:00:00+00:00", test_start: "2026-03-02T00:00:00+00:00",
+        test_end: "2026-04-01T00:00:00+00:00", parameters: {short_window: 3, long_window: 6}, in_sample_return_pct: 1.5, in_sample_trades: 2,
+        out_of_sample: {return_pct: -0.5, total_trades: 3, max_drawdown_pct: 1.2, sharpe_ratio: null}}],
+      excluded: [{train_start: "x", train_end: "x", test_start: "2026-05-01T00:00:00+00:00", test_end: "2026-06-01T00:00:00+00:00", reason: "Nessun trade nel training"}]}});
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Backtesting" }));
+    await userEvent.click(screen.getByRole("button", { name: "Esegui walk-forward" }));
+    await waitFor(() => expect(screen.getByText("3/6")).toBeInTheDocument());
+    expect(screen.getByText(/Nessun trade nel training/)).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /3\/6/ }).textContent).toContain("N/D");
   });
 });
