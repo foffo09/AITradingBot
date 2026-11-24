@@ -1,37 +1,33 @@
 # QA multipiattaforma — stato al 24 novembre 2026
 
-Branch `agents/claude-complete-modernization-20261124`. "Verificato" significa eseguito davvero;
-CI GitHub usa Windows Server e macOS arm64 ospitati, non Windows 11 o Mac Intel.
+Branch `agents/claude-complete-modernization-20261124`, commit verificato `0f8dac4`, CI run 45417229635
+(5 job su 5 verdi). "Verificato" significa eseguito davvero. La CI usa runner GitHub (Windows Server, macOS
+arm64, macOS Intel), non Windows 11 di un utente.
 
 ## Matrice
 
-| Verifica | macOS arm64 locale (M5, macOS 27.2.1) | CI macos-latest (arm64) | CI windows-latest (Server) | Windows 11 GUI | macOS Intel |
+| Verifica | macOS arm64 locale (M5) | CI macos-latest (arm64) | CI macos-15-intel (x86_64) | CI windows-latest (Server) | Windows 11 reale |
 |---|---|---|---|---|---|
-| Suite Python offline | 890 passed, 1 skipped (venv pulito senza Streamlit) | 890 passed, 1 skipped (run 45401539011) | 889 passed, 2 skipped (run 45401539011) | non eseguito | non eseguito |
-| Ruff (E9 + pyflakes) | PASS | PASS | PASS | — | — |
-| Frontend lint/typecheck/test/build | PASS, 61 test | PASS | PASS | — | — |
-| Rust `cargo test` | 4 passed (incluso kill del process group) | PASS | PASS al rerun; 1 fallimento intermittente (vedi nota) | — | — |
-| Smoke HTTP sorgente e sidecar frozen | PASS | PASS | PASS | — | — |
-| Sidecar lifecycle (`qa_sidecar_lifecycle.py`) | 5/5 PASS | — | — | — | — |
-| Lock broker sotto carico (60 richieste Paper bloccate) | Demo < 2 s (prima: timeout 30 s) | PASS (run 45401539011) | PASS (run 45401539011) | — | — |
-| Launcher PowerShell reale (avvio, duplicato, stop, riavvio) | n/a | n/a | PASS su `fece56b`; 1 fallimento intermittente su `4503e49` (vedi nota) | non eseguito | n/a |
-| Bundle desktop | `.app` + DMG costruiti, DMG verificato, installato in cartella isolata | `--no-bundle` compilato | NSIS costruito, installato, smoke, disinstallato | non eseguito | non eseguito |
-| App reale: sezioni, walk-forward, watchlist, stato sistema | PASS | — | — | non eseguito | non eseguito |
-| Timeout backend (worker sospeso 32 s) e recupero stessa istanza | PASS | — | — | non eseguito | non eseguito |
-| Chiusura (⌘Q / Apple Event quit), worker bloccato + quit | PASS: 0 processi, porta chiusa (≤ 21 s col worker bloccato) | — | — | non eseguito | — |
-| Firma / notarizzazione | ad-hoc, `spctl` rifiuta | — | NSIS non firmato | — | — |
+| Suite Python offline | 893 passed, 1 skipped (venv pulito senza Streamlit) | 893 passed, 1 skipped | — | 892 passed, 2 skipped | non eseguito |
+| Ruff, frontend lint/typecheck/test/build | PASS, 65 test | PASS | PASS | PASS | — |
+| Rust `cargo test` | 4 passed | PASS | 4 passed | 4 passed, incluso Job Object (nipote terminato) | — |
+| Carico broker (60 letture Paper bloccate) | Demo < 2 s | PASS | — | PASS | — |
+| Smoke HTTP sorgente e sidecar frozen | PASS | PASS | PASS | PASS (anche sidecar installato) | — |
+| Launcher PowerShell (avvio, duplicato, stop, riavvio) | n/a | n/a | n/a | PASS | — |
+| App desktop reale avviata | `.app` da DMG, cartella isolata | — | — | **PASS**: app installata con WebView2, sidecar sano | non eseguito |
+| Chiusura finestra / crash della shell | PASS (⌘Q, Apple Event, worker bloccato) | — | — | **PASS**: nessun sidecar e porta chiusa in entrambi i casi | non eseguito |
+| Timeout backend (worker sospeso 32 s) e recupero | PASS | — | — | — | non eseguito |
+| Pacchetto | `.app` + DMG arm64, `hdiutil verify` | DMG arm64, verify, 0 percorsi home | `Mach-O x86_64`, DMG x64, verify, 0 percorsi home | NSIS: installazione, avvio, disinstallazione | — |
+| `cargo audit` | 0 vulnerabilità, 3 avvisi senza correzione | 0 vulnerabilità | — | — | — |
+| Firma / notarizzazione | ad-hoc, `spctl` rifiuta | — | — | NSIS non firmato | — |
 
 ## Note
 
-- **Launcher Windows su `4503e49`:** un tentativo è fallito con `Invalid HTTP request received` scritto da
-  uvicorn su stderr durante l'arresto; nel job PowerShell lo stderr nativo diventa un errore. Nessun file del
-  launcher/runtime è cambiato rispetto a `4e656de`, dove lo stesso passo era PASS; Codex aveva già corretto una
-  corsa simile (`83382c0`). Il rerun dello stesso SHA è PASS: **intermittente**, 1 fallimento su 3 esecuzioni
-Windows osservate. Causa non riprodotta su macOS; ipotesi: richiesta di polling dell'arresto che arriva mentre
-uvicorn chiude il socket. Aperto, nessuna correzione speculativa.
-- **Test Rust Windows `shutdown_allows_bounded_native_cleanup…`** (scritto da Codex, non modificato): nel primo
-  tentativo del run 45401539011 `powershell.exe` non è uscito entro 20 s ed è stato terminato; PASS al rerun.
-  Intermittente, probabilmente avvio lento di PowerShell sul runner.
-- **Windows 11 GUI** e **macOS Intel** restano da provare su macchine reali; la CI non li sostituisce.
-- I test Python saltati su Windows sono: guardia self-pipe Proactor (solo non-Windows), permessi `chmod` e alias
-  symlink (non applicabili alle ACL di Windows senza privilegi).
+- **Intermittenze risolte:** il test Rust di shutdown su Windows usava `powershell.exe` (avvio a freddo oltre
+  20 s); ora usa `cmd.exe`. Il launcher falliva una volta su tre per un warning benigno di uvicorn su stderr
+  durante la chiusura; il servizio ora registra solo errori. In tutte le esecuzioni successive: PASS.
+- Un job `macos-tests` è stato annullato una volta da GitHub per mancanza di runner ("not acquired … capacity
+  constraints"): infrastruttura, non codice; verde nelle altre esecuzioni.
+- Test saltati su Windows: alias symlink e permessi `chmod` (non applicabili alle ACL di Windows); su macOS:
+  guardia self-pipe Proactor (solo Windows).
+- **Windows 11 con utente reale** resta da provare a mano; la CI Windows Server non lo sostituisce.

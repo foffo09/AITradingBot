@@ -52,10 +52,10 @@ Output: `src-tauri/target/release/bundle/macos/AITradingBot.app`,
 |---|---|---|
 | Firma macOS Developer ID + Hardened Runtime | **Aperto**: firma ad-hoc, `spctl` rifiuta l'app | Account Apple Developer, certificato "Developer ID Application" nel portachiavi; `APPLE_SIGNING_IDENTITY` per Tauri; entitlements per il sidecar PyInstaller (eseguibile figlio firmato con hardened runtime) |
 | Notarizzazione + stapling | **Aperto** | `APPLE_ID`, `APPLE_PASSWORD` (app-specific) e `APPLE_TEAM_ID`, oppure chiave API App Store Connect; poi `xcrun stapler staple` sul DMG |
-| macOS Intel / universal | **Non verificato** | Build e prova su Mac Intel o runner `macos-13`; oppure target universal con sidecar x86_64 separato |
+| macOS Intel | **Build verificata in CI** (`macos-15-intel`: binario x86_64, smoke sidecar, DMG x64) | Prova manuale su un Mac Intel reale; un pacchetto universal richiederebbe due sidecar |
 | Firma Windows (Authenticode) | **Aperto** | Certificato di firma codice; senza, SmartScreen avvisa l'utente |
-| Windows 11 GUI reale | **Non verificato** dall'agente | Prova manuale su PC Windows 11 (la CI usa Windows Server) |
-| Licenza e NOTICE del progetto | **Aperto** | Scelta della licenza da parte del proprietario; NOTICE per le dipendenze distribuite |
+| Windows 11 GUI reale | Avvio/chiusura/crash dell'app installata **verificati su Windows Server in CI**; Windows 11 non provato | Prova manuale su PC Windows 11 |
+| Licenza e NOTICE del progetto | **Licenza del progetto aperta**; inventario terze parti pronto (`THIRD_PARTY_NOTICES.md`, 287 componenti, nessun GPL, alcuni MPL-2.0) | Scelta della licenza da parte del proprietario; verifica legale degli obblighi (MPL-2.0, Apache NOTICE) |
 | Aggiornamenti automatici | Non configurati | Decidere se usare il plugin updater di Tauri (richiede chiave di firma degli aggiornamenti) |
 
 Nessuna firma è simulata: senza questi elementi i pacchetti restano per collaudo interno.

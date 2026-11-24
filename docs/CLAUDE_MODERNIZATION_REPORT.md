@@ -10,7 +10,7 @@
   eseguito da Claude. **Correzioni e verifiche sono dello stesso agente: serve una revisione indipendente prima del merge.**
 - Notion: nessun connettore in questa sessione, non letto né aggiornato.
 
-## 2. Commit (15, sopra `8a4d740`)
+## 2. Commit (sopra `8a4d740`; elenco completo: `git log origin/agents/master-consolidation-20261117..HEAD`)
 
 | Commit | Contenuto |
 |---|---|
@@ -49,35 +49,43 @@
 | Build: `CARGO_ENCODED_RUSTFLAGS` sostituiva i rustflags di config | LOW | `cargo --config` (si somma, verificato) | build verbose |
 | Primo avvio vicino al limite di 15 s | LOW | limite 30 s, sempre fail-closed | — |
 
-## 5. Risultati finali
+## 5. Revisione indipendente di Codex (dopo il ripristino della rete)
+
+Codex è tornato raggiungibile e ha revisionato la PR in **sola lettura**, in tre round completi.
+
+| Round | Rilievi | Esito |
+|---|---|---|
+| 1 (PR completa) | #1 MEDIUM conferma persa → doppio trade virtuale; #2 MEDIUM chiave persa con la risposta al PUT; #3 LOW stato MT5 non verificato; #4 MEDIUM (preesistente) verifica Paper sempre rifiutata, monitor Paper mai funzionante; #5 MEDIUM (preesistente) nessun kill dell'albero su Windows | corretti in `7fe04d3`, `f9c207e` |
+| 2 (sulle correzioni) | #1–#4 risolti; #5 parziale (job opzionale, finestra spawn→assegnazione); test flag Paper non discriminante; LOW DELETE di conferma perso | corretti in `6746ede` |
+| 3 | test flag risolto; #5: resta la finestra se la shell muore prima dell'assegnazione; 3 LOW (storage dopo successo, `npm.cmd`, licenza vuota) | corretti in `0f8dac4` |
+| 4 | **non completato**: limite d'uso di Codex raggiunto | le correzioni di `0f8dac4` sono verificate da test RED→GREEN e dalla CI (inclusa l'app desktop reale su Windows), non ancora da Codex |
+
+## 6. Risultati finali (commit `0f8dac4`)
 
 | Suite | Esito |
 |---|---|
-| Python, macOS locale (venv pulito senza Streamlit) | 890 passed, 1 skipped, coverage 88% |
-| Python, CI macOS / Windows (run 45401539011) | 890 passed, 1 skipped / 889 passed, 2 skipped |
-| Frontend lint, typecheck, test, build | PASS, 61 test |
-| Rust | 4 passed (macOS); Windows PASS al rerun, 1 fallimento intermittente (§6) |
-| ruff, pip check, pip-audit, npm audit | PASS, coerente, 0, 0 |
-| Smoke HTTP sorgente e frozen, lifecycle sidecar | PASS, 5/5 |
-| App installata dal DMG: sezioni, walk-forward, watchlist, trade virtuale, timeout e recupero, quit | PASS, 0 processi residui, porta chiusa |
+| Python, macOS locale (venv pulito senza Streamlit) | 893 passed, 1 skipped |
+| Python, CI macOS / Windows (run 45417229635) | 893 passed, 1 skipped / 892 passed, 2 skipped |
+| Frontend lint, typecheck, test, build | PASS, 65 test |
+| Rust (macOS, Intel, Windows con Job Object) | 4 passed ovunque |
+| ruff, pip check, pip-audit, npm audit, cargo audit | PASS, coerente, 0, 0, 0 vulnerabilità (3 avvisi senza correzione disponibile) |
+| macOS Intel (CI `macos-15-intel`) | binario x86_64, smoke sidecar, DMG x64 verificato |
+| App desktop reale su Windows (CI) | installata, avviata con WebView2, chiusura e crash della shell senza processi residui |
+| App installata dal DMG su macOS arm64 | sezioni, walk-forward, watchlist, trade virtuale, timeout e recupero, quit |
 
-Artefatti (build locale arm64, firma ad-hoc, codice di `4503e49`; `fece56b` cambia solo test/docs):
-DMG `11a8e5d0174c215a4289e22ffcfd3af6cddfb2b77b384691e5bf048c17578898` (44.7 MB),
-desktop `68da5fd166529067c7aeefa5bc163e24330a991a0837653c801db794f83031b7`,
-sidecar `590ff9c4161dfc561de7d4019289282583f5c1b88411d78c575dfd362153b6ca`. Nessun artefatto pubblicato.
+Nessun artefatto pubblicato. Inventario delle licenze di terze parti: `THIRD_PARTY_NOTICES.md` (287 componenti).
 
-## 6. Problemi aperti
+## 7. Problemi aperti
 
-- **Intermittenti Windows CI** (codice non modificato da questo lavoro): launcher PowerShell, `Invalid HTTP request`
-  su stderr durante l'arresto (1 su 3 esecuzioni); test Rust `shutdown_allows_bounded_native_cleanup…` con
-  `powershell.exe` oltre i 20 s (1 su 3). Entrambi PASS al rerun. Cause non riprodotte: nessuna correzione speculativa.
-- **Gate di distribuzione**: firma Developer ID e notarizzazione, firma Authenticode, licenza/NOTICE, macOS Intel,
-  Windows 11 GUI reale (`docs/DESKTOP_RELEASE_GUIDE.md` §4).
-- `cargo audit` non eseguito (strumento non installato).
-- Revisione indipendente delle correzioni di Claude.
+- Round 4 della revisione Codex da completare quando torna disponibile (solo sul commit `0f8dac4`).
+- **Gate che richiedono il proprietario**: firma Developer ID + notarizzazione macOS, firma Authenticode Windows,
+  scelta della licenza del progetto e verifica legale degli obblighi (MPL-2.0, NOTICE Apache), prova manuale su
+  Windows 11 e su un Mac Intel reale (`docs/DESKTOP_RELEASE_GUIDE.md` §4).
+- Avvisi `cargo audit` senza correzione: `chrono` e `proc-macro-error` non mantenuti, `glib` (solo Linux, non distribuito).
+- Notion non accessibile da questa sessione.
 
-## 7. Classificazione
+## 8. Classificazione
 
-**CONDITIONALLY READY** — nessun problema funzionale o di sicurezza aperto nelle verifiche eseguite; non
-**READY FOR RELEASE CANDIDATE** perché mancano revisione indipendente, firma/notarizzazione, prove Windows 11 e Intel,
-e due test CI Windows sono intermittenti.
+**CONDITIONALLY READY** — nessun problema funzionale o di sicurezza aperto nelle verifiche eseguite, revisione
+indipendente di Codex sui primi tre round superata. Non **READY FOR RELEASE CANDIDATE** finché mancano firma e
+notarizzazione, licenza, prova su Windows 11 e il round 4 di Codex.
