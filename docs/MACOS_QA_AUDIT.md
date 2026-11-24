@@ -351,3 +351,67 @@ Artefatti (arm64, ad-hoc): desktop `f2f04a7d34dfe6fadaff412a3343bbadf4b5fb823f49
 
 **Esito invariato:** build arm64 locale APPROVATA CON RISERVE (quattro LOW aperti, correzioni
 non revisionate da un secondo agente); distribuzione NON APPROVATA (firma, notarizzazione, Intel, licenza).
+
+---
+
+# Fase 5 — correzione AUDIT-L2, L3, L5, 24 novembre 2026
+
+Commit `94472de` su `agents/claude-macos-m1-fix-20261124`, scritto da Claude (Codex ancora irraggiungibile).
+Stesso limite delle fasi 3–4: serve revisione di un secondo agente.
+
+- **L2** `src/simulation/ledger.py`: busy timeout SQLite 15 s → 5 s (sotto i 12 s del client). DB bloccato:
+  503 senza stato inferito; Simulazione risponde subito grazie ai lock per contesto.
+- **L3** `src-tauri/src/service.rs`: su Unix il sidecar è avviato come leader del proprio process group
+  (`process_group(0)`); ogni kill forzato (timeout di avvio, scadenza di 20 s alla chiusura) invia SIGKILL al
+  gruppo prima di raccogliere il figlio, quindi il PID non può essere stato riutilizzato. Windows invariato.
+- **L5** `scripts/desktop_build.mjs` + `package.json`: `npm run desktop:build` (usato da CI, docs e build locale)
+  aggiunge `--remap-path-prefix=<home>=~` via `CARGO_ENCODED_RUSTFLAGS`. `trim-paths` provato: non stabile su
+  Cargo 1.100 (errore di manifest), quindi scartato. Debug invariato.
+
+| Verifica | Prima | Dopo |
+|---|---|---|
+| Test L2 (DB in `BEGIN EXCLUSIVE`) | FAIL: 15.6 s | PASS: ~5.5 s, Simulazione < 1 s, recupero 200 |
+| Test Rust L3 (figlio che forka un worker) | FAIL: "worker survived" | PASS (4/4 test Rust) |
+| App reale: worker congelato + quit (Apple Event, stesso percorso di ⌘Q) | worker orfano (ppid 1), porta aperta | tutti i processi chiusi dopo 21 s (scadenza 20 s), porta chiusa |
+| Stringhe con la home nel binario release | 343 | **0** |
+| Suite Python | 997 passed | **998 passed, 1 skipped**, guard 0/0, coverage 88% |
+| `tests/test_qa_macos_audit.py` | 8 | **9 passed** |
+| npm lint/typecheck/test/build | 55 passed | 55 passed |
+| cargo test / check | 3 / PASS | **4 passed** / PASS |
+| Smoke HTTP frozen, `qa_sidecar_lifecycle.py` | PASS, 5/5 | PASS, 5/5 |
+| Avvio/quit normale | — | listener pronto, 0 processi residui, porta chiusa |
+
+Nota ⌘Q: la sessione macOS si è bloccata durante il test; il quit è stato inviato con
+`osascript -e 'tell application id "it.aitradingbot.desktop" to quit'` (Apple Event quit = stesso
+`applicationShouldTerminate` di ⌘Q), non con la tastiera.
+
+**Osservazione (preesistente, non introdotta):** il primo avvio dopo ogni ricostruzione è lento: un avvio
+è fallito con l'uscita controllata "Impossibile avviare AITradingBot…" (exit 1, nessun processo residuo),
+un altro ha impiegato 13 s; gli avvii successivi 4.2–5.9 s. Il limite di 15 s per l'handshake resta un rischio
+al primo avvio su macchine lente (già segnalato da Codex come "startup cold 15 s"). Da valutare con Codex.
+
+Artefatti finali (build Claude da `94472de`, arm64, firma ad-hoc), 51 MiB:
+desktop `40a41bb46dbf54c6b4f70702572fc2a6024dce738b4d574cafc328e955648cec`,
+sidecar `68361b1df116a60f3d9bfde946bac0ab9eb14b95941f4d781c2e9c389737ec8a`.
+
+## Stato problemi finale
+
+| ID | Gravità | Stato | Commit |
+|---|---|---|---|
+| M1 lock globale | MEDIUM | RISOLTO | `513a45f` |
+| L1 messaggio timeout WebKit | LOW | RISOLTO | `fc4b2ea` |
+| L4 form conto senza stato | LOW | RISOLTO | `fc4b2ea` |
+| L2 busy timeout SQLite | LOW | RISOLTO | `94472de` |
+| L3 worker orfano | LOW | RISOLTO | `94472de` |
+| L5 home nel binario | LOW | RISOLTO | `94472de` |
+| L6 qualità/CI | LOW | APERTO (12 rilievi ruff F, nessuna config ruff, e2e assente, CI macOS local-app mai completata) | — |
+| Avvio a freddo vicino a 15 s | osservazione | APERTO (preesistente) | — |
+
+## Esito fase 5
+
+**Build arm64 locale: APPROVATO CON RISERVE.** Tutti i problemi MEDIUM e funzionali chiusi e verificati
+con test RED→GREEN e sull'app reale. Riserve: correzioni scritte e verificate dallo stesso agente
+(serve revisione di Codex o umana prima del merge), L6 aperto, primo avvio vicino al limite di 15 s.
+
+**Distribuzione a utenti finali: NON APPROVATA** — gate separati aperti: firma Developer ID, notarizzazione
+e stapling, verifica Intel/x86_64, licenza/notice, CI macOS `local-app` su questo SHA.
