@@ -31,12 +31,12 @@ mod job {
         CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
     };
     use windows_sys::Win32::System::Threading::{
-        OpenThread, ResumeThread, CREATE_SUSPENDED, THREAD_SUSPEND_RESUME,
+        GetCurrentProcess, OpenThread, ResumeThread, CREATE_SUSPENDED, THREAD_SUSPEND_RESUME,
     };
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
         SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
 
     pub struct Job(HANDLE);
@@ -73,6 +73,34 @@ mod job {
                 // Closing the handle (Service drop) still kills the job: KILL_ON_JOB_CLOSE.
                 eprintln!("TerminateJobObject non riuscito; il job verrà chiuso con la shell.");
             }
+        }
+    }
+
+    /// Put the shell itself in a kill-on-close job, so every process it creates is inside a job from
+    /// the instant it exists. If the shell dies between spawning the sidecar and assigning it to the
+    /// sidecar's own job, the OS closes this handle and still kills the (suspended) sidecar.
+    /// BREAKAWAY_OK leaves processes that explicitly ask to break away (e.g. WebView2) free.
+    pub fn contain_current_process() -> bool {
+        unsafe {
+            let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if handle.is_null() {
+                return false;
+            }
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags =
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+            let ok = SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const core::ffi::c_void,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            ) != 0
+                && AssignProcessToJobObject(handle, GetCurrentProcess()) != 0;
+            if !ok {
+                CloseHandle(handle);
+            }
+            // On success the handle is deliberately kept for the life of the process.
+            ok
         }
     }
 
@@ -137,6 +165,10 @@ mod job {
 mod job {
     use std::process::{Child, Command};
     pub struct Job;
+    /// Unix: the sidecar leads its own process group; nothing to do for the shell.
+    pub fn contain_current_process() -> bool {
+        true
+    }
     impl Job {
         #[cfg(test)]
         pub fn assign(_child: &Child) -> Option<Job> {
@@ -237,6 +269,10 @@ impl Service {
     }
 
     pub fn start(binary: &Path, ui: &Path, data: &Path) -> Result<Self, String> {
+        if !job::contain_current_process() {
+            // Rare (old Windows without nested jobs): the sidecar job below is still mandatory.
+            eprintln!("Job della shell non disponibile: protezione ridotta se la shell termina durante l'avvio.");
+        }
         if !ui.join("index.html").is_file() {
             return Err("Asset React mancanti: eseguire la build del frontend.".into());
         }

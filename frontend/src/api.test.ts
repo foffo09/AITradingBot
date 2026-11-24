@@ -328,6 +328,33 @@ it('una conferma DELETE persa viene recapitata prima dell\'operazione successiva
   expect(localStorage.getItem('aitb-confirm-trade-demo')).toBeNull();
 });
 
+it('un errore dello storage dopo il successo non trasforma l\'esito in errore (review Codex)', async () => {
+  const {api} = await import('./api');
+  localStorage.clear();
+  const deletes: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === 'DELETE') deletes.push(url);
+    if (url.includes('/local-trades'))
+      return new Response(JSON.stringify({api_version: '1', context: 'demo', connection: {status: 'local'}, account: null, positions: [], orders: [], trades: [], automation: {state: 'STOPPED'}}));
+    return new Response(JSON.stringify({api_version: '1', context: 'demo', pending: null}));
+  }));
+  const original = Storage.prototype.setItem;
+  let writes = 0;
+  Storage.prototype.setItem = function (this: Storage, k: string, v: string) {
+    writes += 1;
+    if (k.startsWith('aitb-confirm-trade')) throw new DOMException('quota', 'QuotaExceededError');
+    return original.call(this, k, v);
+  };
+  try {
+    await expect(api.trade('demo', 'AAPL', 'buy', 1)).resolves.toMatchObject({context: 'demo'});
+  } finally {
+    Storage.prototype.setItem = original;
+  }
+  expect(writes).toBeGreaterThan(0);
+  expect(deletes).toHaveLength(1); // still confirmed with the in-memory key
+  localStorage.clear();
+});
+
 describe("preferenze dal servizio", () => {
   it.each([
     {theme:"evil", density:"compact", analysis_width:60},

@@ -432,11 +432,17 @@ export const api = {
     // Remember the key before anything leaves the browser: if a response is lost, the retry reuses it.
     localStorage.setItem(storageKey, JSON.stringify(pending));
     const finished = async (resync: boolean) => {
-      localStorage.removeItem(storageKey);
       // The service keeps its record until told the outcome arrived. An undelivered DELETE stays noted
       // and is retried before the next request, so a completed trade is never shown as uncertain.
-      localStorage.setItem(confirmKey(c), key);
-      await deliverConfirmation(c);
+      // Storage errors never turn a received outcome into a failure: the key is still in memory.
+      try {
+        localStorage.setItem(confirmKey(c), key);
+        localStorage.removeItem(storageKey);
+      } catch { /* note not saved: the DELETE below is still attempted */ }
+      try {
+        await request(`/pending-trade?${new URLSearchParams({ context: c, idempotency_key: key })}`, { method: "DELETE" });
+        try { localStorage.removeItem(confirmKey(c)); } catch { /* harmless: delivered */ }
+      } catch { /* stays noted for deliverConfirmation */ }
       if (resync) await restorePendingTrade(c).catch(() => undefined);
     };
     try {

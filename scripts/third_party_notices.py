@@ -10,6 +10,7 @@ import ast
 import importlib.metadata as metadata
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -33,13 +34,16 @@ def python_components():
         meta = metadata.metadata(name)
         license_ = meta.get('License-Expression') or next(
             (c.split('::')[-1].strip() for c in meta.get_all('Classifier') or [] if c.startswith('License ::')), None
-        ) or (meta.get('License') or '').splitlines()[0][:80] or 'UNKNOWN'
+        ) or next(iter((meta.get('License') or '').splitlines()), '')[:80] or 'UNKNOWN'
         rows.append((meta['Name'], meta['Version'], license_))
     return rows
 
 
 def npm_components():
-    tree = json.loads(subprocess.run(['npm', 'ls', '--omit=dev', '--all', '--json'], cwd=ROOT,
+    npm = shutil.which('npm')  # npm.cmd on Windows, which subprocess does not resolve by itself
+    if npm is None:
+        raise SystemExit('npm not found on PATH')
+    tree = json.loads(subprocess.run([npm, 'ls', '--omit=dev', '--all', '--json'], cwd=ROOT,
                                      capture_output=True, text=True, check=True).stdout)
     found = {}
     def walk(deps):
