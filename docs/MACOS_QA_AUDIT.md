@@ -191,3 +191,68 @@ SIGSTOP/SIGCONT descritto in §5 sul bundle ricostruito. Non modificare questo f
 | Installazione | Bundle `.app` locale avviato dalla cartella di build; **nessun artefatto Codex**; non firmato/notarizzato; installazione in /Applications non provata |
 | Ciclo di vita | ⌘Q, chiusura finestra, crash shell: nessun orfano, porta liberata |
 | Release | **NON APPROVATO** per distribuzione: artefatto Codex assente, Intel non verificato, firma/notarizzazione/licenza mancanti (gate già noti), M1 aperto |
+
+---
+
+# Fase 2 — verifica correzioni, 24 novembre 2026
+
+## Stato del coordinamento
+
+- `git fetch` ripetuto due volte: **nessun nuovo commit Codex** dopo `8a4d740`, nessun branch
+  Codex Mac o Windows nuovo, nessuna nuova PR. La CI più recente resta `44113161618` su `e06d29f`.
+- Nessun canale diretto con Codex disponibile in questa sessione; Notion ancora non accessibile.
+- Handoff tecnico dettagliato, con criteri di accettazione per ogni problema:
+  `docs/HANDOFF_CODEX_MACOS_AUDIT.md`. Da inoltrare a Codex dall'utente.
+- Claude non ha modificato codice applicativo (ruolo di verifica).
+
+## Ripetizione delle verifiche sul commit `3c65242`
+
+Il codice applicativo è identico a `8a4d740` (`git diff 8a4d740 3c65242 -- src frontend src-tauri` vuoto).
+
+| Verifica | Prima (fase 1) | Ora (fase 2) |
+|---|---|---|
+| `pytest tests/test_qa_macos_audit.py` | 5 passed, 1 xfail | 5 passed, 1 xfail |
+| M1 con `--runxfail` | FAIL, 2.71 s | **FAIL, 2.70 s** — non risolto |
+| `pytest -q -rs --cov=src` | 989 passed, 1 skipped | 994 passed, 1 skipped, 1 xfail (include i 6 test audit), coverage 88% |
+| compileall / pip check / pip-audit | PASS / PASS / 0 | PASS / PASS / 0 |
+| `ruff --isolated --select F` | — | 12 rilievi (2 in `src`, 4 in `providers`, 6 nei test) |
+| npm lint / typecheck / test / build / audit | PASS / PASS / 51 / PASS / 0 | invariato |
+| cargo test / check | 3 passed / PASS | invariato |
+| `qa_sidecar_lifecycle.py` | 5/5 PASS, limite L3 | 5/5 PASS, limite L3 ancora presente |
+| App: sospensione 32 s + ripresa, stessa istanza | PASS | PASS; L1 e L4 riprodotti di nuovo |
+| ⌘Q (voce di menu) | 0 processi in ≤200 ms, porta chiusa | 0 processi in ≤200 ms, porta 51321 chiusa |
+
+Artefatti (build Claude, non Codex), invariati:
+sidecar `7a91d15438c583d60b64f3a5d2ca918717a31f79ec55341450fbc2bd48c05265`,
+desktop `2ecbb4f7ac77777141c781ee4eef5fffd109081c028bd5293c868bc007042f8b`.
+
+## Firma, notarizzazione, architetture
+
+- `codesign`: `Signature=adhoc`, `TeamIdentifier=not set`.
+- `spctl -a -vv`: rifiutato ("code has no resources but signature indicates they must be present").
+- `stapler validate`: nessun ticket. `security find-identity -p codesigning`: 0 identità.
+- Architetture verificate: solo arm64. Intel/x86_64: **non verificato**.
+- Per distribuire servono: identità Developer ID dell'utente, firma del bundle completo
+  (`--deep`/hardened runtime con entitlements per il sidecar), notarizzazione e stapling,
+  build e prova x86_64 (o universal) su macchina o CI Intel, licenza e notice.
+
+## Problemi — stato aggiornato
+
+| ID | Gravità | Stato |
+|---|---|---|
+| M1 lock globale | MEDIUM | **APERTO**, riprodotto |
+| L1 messaggio WebKit | LOW | APERTO, riprodotto |
+| L2 busy timeout SQLite | LOW | APERTO |
+| L3 worker orfano se bloccato | LOW | APERTO, limitato nel tempo |
+| L4 form conto durante blocco | LOW | APERTO, riprodotto |
+| L5 percorsi home nel binario | LOW | APERTO |
+| L6 qualità/CI | LOW | APERTO (12 rilievi F, CI Mac non completata, e2e assente) |
+
+Nessun CRITICAL o HIGH.
+
+## Esito fase 2
+
+**NON APPROVATO.** M1 non è risolto e il suo test passa solo come `xfail`; non esiste
+alcuna build Codex da verificare. Firma, notarizzazione e Intel restano gate di distribuzione
+separati, tutti aperti. Prossimo passo: correzioni Codex secondo l'handoff, poi riverifica
+completa di Claude sul nuovo SHA e sul nuovo artefatto.
