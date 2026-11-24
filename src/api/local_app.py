@@ -110,7 +110,9 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     token = secrets.token_urlsafe(32)
     origin = f'http://127.0.0.1:{port}'
     host = f'127.0.0.1:{port}'
-    lock = threading.RLock()
+    # One lock per context: a slow Paper/MT5 network read must not block the local Demo/Simulation ledgers.
+    locks = {context: threading.RLock() for context in ('demo', 'simulation', 'paper', 'mt5')}
+    preferences_lock = threading.Lock()
     paper = None
     mt5 = MT5Process()
     controls = {context: OfflineExecutor(root, context) for context in ('demo', 'simulation', 'paper', 'mt5')}
@@ -169,7 +171,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.get('/api/v1/preferences', response_model=PreferencesResponse)
     def get_preferences():
-        with lock:
+        with preferences_lock:
             check_preferences_path()
             stored = preferences_path.exists()
             if not stored:
@@ -187,7 +189,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.post('/api/v1/preferences', response_model=PreferencesResponse)
     def save_preferences(body: Preferences):
-        with lock:
+        with preferences_lock:
             check_preferences_path()
             root.mkdir(parents=True, exist_ok=True)
             descriptor, name = tempfile.mkstemp(dir=root, prefix='ui-preferences-', suffix='.tmp')
@@ -268,7 +270,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.get('/api/v1/state', response_model=StateResponse)
     def get_state(context: Context = 'demo'):
-        with lock:
+        with locks[context]:
             return state(context)
 
     @app.get('/api/v1/instruments', response_model=InstrumentsResponse)
@@ -293,7 +295,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     def market(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
         result = {'api_version': '1', 'context': context, 'symbol': symbol, 'interval': interval, 'status': 'unavailable', 'reason': 'Market data unavailable; no fallback.', 'source': None, 'as_of': None, 'bars': [], 'quote': None, 'metadata': {}, 'indicators': []}
-        with lock:
+        with locks[context]:
             try:
                 data = frame(context, symbol, interval)
                 if context == 'mt5':
@@ -313,7 +315,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.post('/api/v1/local-account', response_model=StateResponse)
     def local_account(body: AccountInput):
-        with lock:
+        with locks[body.context]:
             local = ledger(body.context)
             if local.account() is not None:
                 raise HTTPException(409, 'Local account already initialized; reset is not available.')
@@ -327,7 +329,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     @app.post('/api/v1/local-trades', response_model=TradeResponse)
     def local_trade(body: TradeInput):
         _symbol(body.symbol)
-        with lock:
+        with locks[body.context]:
             if not paths[body.context].exists() or ledger(body.context).account() is None:
                 raise HTTPException(409, 'Initialize the local account explicitly first.', headers={'X-Request-Outcome': 'rejected'})
             local = ledger(body.context)
@@ -349,7 +351,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
         _symbol(body.symbol)
         if body.short_window >= body.long_window:
             raise HTTPException(422, 'Short window must be smaller than long window.')
-        with lock:
+        with locks[body.context]:
             try:
                 data = frame(body.context, body.symbol, '1Day')
                 result = BacktestEngine(settings).run(data, short_window=body.short_window, long_window=body.long_window, periods_per_year=365 if '/' in body.symbol else 252).to_dict()
@@ -363,7 +365,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     def proposal(context: Context = 'demo', symbol: str = 'AAPL', interval: Interval = '1Day'):
         _symbol(symbol)
         fallback = {**SignalProposal(symbol=symbol, reason='Risk snapshot and current market data are not verified for execution.').to_dict(), 'api_version': '1', 'contract_version': '1', 'context': context, 'interval': interval}
-        with lock:
+        with locks[context]:
             try:
                 from src.strategy.service import evaluate_proposal
                 data = frame(context, symbol, interval)
@@ -378,7 +380,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.post('/api/v1/automation', response_model=StateResponse)
     def automation(body: AutomationInput):
-        with lock:
+        with locks[body.context]:
             try:
                 controls[body.context].command(body.command, str(body.request_id),
                     evaluate=lambda: proposal(body.context, 'AAPL', '1Day'))
@@ -389,7 +391,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     @app.post('/api/v1/connections/paper', response_model=StateResponse)
     def connect_paper():
         nonlocal paper
-        with lock:
+        with locks['paper']:
             paper = None
             key, secret = os.getenv('ALPACA_API_KEY'), os.getenv('ALPACA_SECRET_KEY')
             if not key or not secret:
@@ -408,7 +410,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     @app.post('/api/v1/connections/mt5', response_model=StateResponse)
     def connect_mt5():
-        with lock:
+        with locks['mt5']:
             mt5.connect()
             return state('mt5')
 

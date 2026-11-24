@@ -104,8 +104,7 @@ def test_read_only_data_directory_fails_closed(tmp_path):
         data.chmod(stat.S_IRWXU)
 
 
-@pytest.mark.xfail(strict=True, reason='AUDIT-M1: one global RLock serialises every context; a slow Paper read blocks Demo')
-def test_slow_paper_read_does_not_block_demo(tmp_path, monkeypatch):
+def slow_paper(monkeypatch):
     from src.api import local_app
 
     class SlowPaper:
@@ -119,12 +118,39 @@ def test_slow_paper_read_does_not_block_demo(tmp_path, monkeypatch):
     monkeypatch.setattr(local_app, 'AlpacaClient', SlowPaper)
     monkeypatch.setenv('ALPACA_API_KEY', 'fake-key')
     monkeypatch.setenv('ALPACA_SECRET_KEY', 'fake-secret')
+
+
+@pytest.mark.parametrize('context', ['demo', 'simulation'])
+def test_slow_paper_read_does_not_block_local_contexts(tmp_path, monkeypatch, context):
+    """AUDIT-M1: Demo and Simulation must not wait behind a Paper network read."""
+    slow_paper(monkeypatch)
     c = client(tmp_path)
+    account(c, context)
     paper_thread = threading.Thread(target=lambda: c.post('/api/v1/connections/paper', headers=H))
     paper_thread.start()
     time.sleep(0.3)
     started = time.monotonic()
-    assert c.get('/api/v1/state?context=demo').status_code == 200
+    assert c.get(f'/api/v1/state?context={context}').json()['account']['cash'] > 0
     elapsed = time.monotonic() - started
     paper_thread.join()
-    assert elapsed < 1.0, f'Demo state waited {elapsed:.2f}s behind a Paper network read'
+    assert elapsed < 1.0, f'{context} state waited {elapsed:.2f}s behind a Paper network read'
+
+
+def test_concurrent_same_key_writes_fill_once_per_context(tmp_path):
+    """Per-context locks keep ledger writes serialised: parallel retries never duplicate a fill."""
+    c = client(tmp_path)
+    account(c, 'demo')
+    account(c, 'simulation')
+    keys = {'demo': str(uuid4()), 'simulation': str(uuid4())}
+    results = []
+    def send(context):
+        results.append(trade(c, keys[context], context=context).status_code)
+    threads = [threading.Thread(target=send, args=(ctx,)) for ctx in ('demo', 'simulation') * 6]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert results.count(200) == 12
+    for ctx in ('demo', 'simulation'):
+        state = c.get(f'/api/v1/state?context={ctx}').json()
+        assert len(state['positions']) == 1 and len(state['trades']) == 1
