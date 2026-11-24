@@ -222,8 +222,10 @@ mod lifecycle_tests {
     #[test]
     fn shutdown_allows_bounded_native_cleanup_before_killing_child() {
         let mut command = if cfg!(windows) {
-            let mut cmd = Command::new("powershell.exe");
-            cmd.args(["-NoProfile", "-NonInteractive", "-Command", "$null=[Console]::ReadLine(); Start-Sleep -Seconds 3; exit 0"]);
+            // cmd.exe starts in milliseconds; powershell.exe cold starts on CI runners exceeded the
+            // 20 s grace and made this test intermittent. Same contract: read one line, ~3 s cleanup, exit 0.
+            let mut cmd = Command::new("cmd.exe");
+            cmd.args(["/D", "/C", "set /p message= & ping -n 4 127.0.0.1 >nul & exit /b 0"]);
             cmd
         } else {
             let mut cmd = Command::new("sh");

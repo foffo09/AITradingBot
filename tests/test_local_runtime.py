@@ -56,3 +56,24 @@ def test_readiness_reports_actual_pid_and_native_supervisor_only(monkeypatch, ca
     assert readiness['pid'] == 101
     assert readiness['supervisor_pid'] == (99 if frozen or platform_name == 'win32' else None)
     assert readiness['instance_id'] == 'public-instance'
+
+
+def test_service_logs_errors_only_so_benign_protocol_warnings_do_not_reach_stderr(monkeypatch, tmp_path):
+    """CI Windows launcher job failed once on uvicorn's 'Invalid HTTP request received' warning during shutdown."""
+    import uvicorn
+    from src.runtime import local_service
+    seen = {}
+    class Stop(Exception):
+        pass
+    def capture(self, app, **kwargs):
+        seen.update(kwargs)
+        raise Stop
+    monkeypatch.setattr(uvicorn.Config, '__init__', capture)
+    ui = tmp_path / 'ui'
+    ui.mkdir()
+    (ui / 'index.html').write_text('ok')
+    try:
+        local_service.main(['--port', '0', '--ui-dir', str(ui), '--data-dir', str(tmp_path / 'data')])
+    except Stop:
+        pass
+    assert seen['log_level'] == 'error' and seen['access_log'] is False
