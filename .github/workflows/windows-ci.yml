@@ -47,6 +47,12 @@ jobs:
       - name: Ruff (syntax errors and pyflakes)
         run: python -m ruff check .
 
+      - name: MT5 worker bootstrap timing (diagnostic, no MT5 needed)
+        run: |
+          $env:PROBE_HEAVY = '0'; python tests/probes/mt5_bootstrap.py
+          $env:PROBE_HEAVY = '1'; python tests/probes/mt5_bootstrap.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Targeted offline tests
         run: |
           python -m pytest -q tests/test_backend_contract.py tests/test_broker.py tests/test_paper_safety.py tests/test_config.py tests/test_fx_rates.py tests/test_bar_timing.py | Tee-Object -FilePath windows-targeted.log
