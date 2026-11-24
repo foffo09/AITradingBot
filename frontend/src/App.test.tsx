@@ -737,3 +737,11 @@ describe("MetaTrader 5 in sola lettura", () => {
     expect(screen.getByText("initialize")).toBeInTheDocument();
   });
 });
+
+it("guida alla creazione del conto virtuale invece di mostrare solo N/D", async () => {
+  render(<App />);
+  const go = await screen.findByRole("button", { name: /Crea conto virtuale →/ });
+  expect(screen.getByText(/Nessun conto virtuale in Demo/)).toBeInTheDocument();
+  await userEvent.click(go);
+  expect(await screen.findByRole("button", { name: "Crea conto virtuale" })).toBeInTheDocument();
+});

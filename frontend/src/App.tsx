@@ -1348,6 +1348,15 @@ export default function App() {
           </div>
           {page === "Panoramica" && (
             <>
+              {offline && state && !state.account && (
+                <div className="notice first-run">
+                  Nessun conto virtuale in {contexts[context]}: i valori restano N/D finché non lo crei.
+                  <button className="primary" onClick={() => setPage("Portafoglio")}>
+                    Crea conto virtuale →
+                  </button>
+                </div>
+              )}
+              {context === "mt5" ? <Mt5Account state={state} /> : (<>
               <div className="metrics">
                 <Metric
                   label="Equity"
@@ -1383,6 +1392,7 @@ export default function App() {
                 <Metric label="Slippage sostenuto" value={account?.slippage} unit={accountCurrency} />
                 <Metric label="Spread sostenuto" value={account?.spread} unit={accountCurrency} />
               </div>
+              </>)}
               <div className="analysis-layout">
                 <label>
                   Larghezza relativa del grafico
