@@ -28,7 +28,7 @@ git status --short --branch
 git rev-parse HEAD
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -r packaging/backend/requirements.txt
-.\.venv\Scripts\python.exe -m compileall -q app.py config src tests
+.\.venv\Scripts\python.exe -m compileall -q config src scripts tests
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m pip check
 npm.cmd ci
@@ -66,7 +66,8 @@ nessun backup/ripristino di dati personali eseguito dall'agente, nessun reset o
 restore UI introdotto. Controlli dry-run attivi/ambigui restano da riconciliare.
 
 
-Questa interfaccia si aggiunge a Streamlit, che resta disponibile come legacy.
+Dal 24 novembre (issue #9) questa è l'unica interfaccia: Streamlit, il vecchio dashboard e i suoi
+launcher sono stati rimossi (dettagli in `docs/STREAMLIT_RETIREMENT_REPORT.md`).
 Non è una release e non introduce invii di ordini al broker.
 
 ## Primo avvio Windows 11 / PowerShell
@@ -163,6 +164,10 @@ capitale: è una separazione intenzionale, non una sincronizzazione contabile.
 ## Contratti e sicurezza
 
 API v1 in `src/api/local_app.py`; consumatore in `frontend/src/api.ts`.
+Aggiunte con la dismissione di Streamlit: `POST /walk-forward` (griglia 2/4, 3/6, 5/10, selezione solo
+sul training, nessuna scrittura ledger, 409 senza dati), `GET /system` (stato per contesto, mai in attesa
+di un lock occupato, `order_submission: disabled`), `GET/POST /watchlist` (file `local-v1-watchlist.json`,
+simboli noti e unici, massimo 20).
 Gli input POST sono Pydantic con campi extra proibiti e numeri finiti positivi.
 Contesti ammessi: demo, simulation, paper, mt5. Errori input 422, assenza sessione
 401, origine vietata403, operazione locale/rischio/dati indisponibili409.
@@ -219,7 +224,7 @@ Bundle locale non firmato/notarizzato per distribuzione; nessuna release pubblic
 ## Verifica riproducibile senza broker
 
 ```powershell
-.\.venv\Scripts\python.exe -m compileall -q app.py config src tests
+.\.venv\Scripts\python.exe -m compileall -q config src scripts tests
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m pip check
 npm run lint

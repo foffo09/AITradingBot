@@ -105,3 +105,37 @@ def test_watchlist_rejects_aliases(tmp_path):
     (tmp_path / 'local-v1-watchlist.json').symlink_to(tmp_path / 'elsewhere.json')
     assert c.get('/api/v1/watchlist').status_code == 409
     assert c.post('/api/v1/watchlist', json={'symbols': ['AAPL']}, headers=H).status_code == 409
+
+
+def test_paper_refresh_failure_hides_previous_values(tmp_path, monkeypatch):
+    """Port of the retired Streamlit AppTest: a failed Paper refresh must not keep showing stale broker values."""
+    from src.api import local_app
+    fetches = []
+
+    class FlakyPaper:
+        def __init__(self, settings):
+            assert settings.paper_trading_enabled is False
+        def verify_connection(self):
+            return {'connected': True}
+        def get_paper_snapshot(self):
+            fetches.append(None)
+            if len(fetches) > 1:
+                raise RuntimeError('Unable to fetch orders: order endpoint unavailable fake-secret-value')
+            return {'account': {'cash': '987654321', 'equity': '987654322'}, 'positions': [{'symbol': 'STALE_POSITION'}],
+                    'orders': [{'id': 'STALE_ORDER', 'status': 'filled'}], 'updated_at': 'now'}
+        def submit_order(self, *args, **kwargs):
+            pytest.fail('No broker orders are permitted')
+    monkeypatch.setattr(local_app, 'AlpacaClient', FlakyPaper)
+    monkeypatch.setenv('ALPACA_API_KEY', 'fake-key-value')
+    monkeypatch.setenv('ALPACA_SECRET_KEY', 'fake-secret-value')
+    c = client(tmp_path)
+    first = c.post('/api/v1/connections/paper', headers=H).json()
+    assert first['account']['cash'] == '987654321' and first['orders'][0]['id'] == 'STALE_ORDER'
+    failed = c.get('/api/v1/state?context=paper')
+    body = failed.json()
+    assert body['connection']['status'] == 'unavailable'
+    assert body['account'] is None and body['positions'] == [] and body['orders'] == []
+    for stale in ('987654321', '987654322', 'STALE_ORDER', 'STALE_POSITION', 'fake-secret-value'):
+        assert stale not in failed.text
+    assert body['automation']['state'] == 'STOPPED'
+    assert len(fetches) == 2

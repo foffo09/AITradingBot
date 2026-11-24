@@ -1,20 +1,15 @@
-from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 from alpaca.data.historical import StockHistoricalDataClient
-from streamlit.testing.v1 import AppTest
 
 from config.settings import AppSettings
 import src.broker.alpaca_client as broker_module
 from src.broker.alpaca_client import AlpacaClient, BrokerConnectionError
 from src.data.market_data import generate_synthetic_market_data
 from src.trading.paper_coordinator import PaperCoordinationError
-
-
-APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
 
 def test_local_demo_data_is_marked_synthetic():
@@ -199,91 +194,6 @@ def test_paper_order_fetch_failure_raises_clear_broker_error(monkeypatch):
         match="Unable to fetch orders: order endpoint unavailable",
     ):
         client.get_paper_snapshot()
-
-
-def test_paper_dashboard_hides_previous_values_when_refresh_fails(
-    monkeypatch, tmp_path,
-):
-    settings = AppSettings(
-        trading_mode="paper",
-        alpaca_api_key="local-test-key",
-        alpaca_secret_key="local-test-secret",
-        paper_trading_enabled=True,
-    )
-    monkeypatch.setattr(
-        AppSettings,
-        "from_env",
-        classmethod(lambda cls: settings),
-    )
-    paper_path = tmp_path / "paper" / "paper.sqlite3"
-    monkeypatch.setenv("AI_TRADINGBOT_PAPER_DB_PATH", str(paper_path))
-    monkeypatch.delenv("AI_TRADINGBOT_DEMO_DB_PATH", raising=False)
-    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
-    snapshot_fetches = []
-
-    class FakePaperBroker:
-        paper_client_configured = True
-
-        def __init__(self, runtime_settings):
-            self.settings = runtime_settings
-
-        def get_instrument_availability(self, symbol):
-            return {
-                "visible": True,
-                "data_available": "mock",
-                "paper_tradable": False,
-                "message": "Mock test asset.",
-            }
-
-        def get_paper_snapshot(self):
-            snapshot_fetches.append(None)
-            if len(snapshot_fetches) > 1:
-                raise BrokerConnectionError(
-                    "Unable to fetch orders: order endpoint unavailable"
-                )
-            return {
-                "account": {
-                    "status": "ACTIVE",
-                    "cash": "987654321",
-                    "equity": "987654322",
-                    "buying_power": "987654321",
-                    "last_equity": "987654320",
-                },
-                "positions": [{"symbol": "STALE_POSITION"}],
-                "orders": [{"id": "STALE_ORDER", "status": "filled"}],
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-
-    monkeypatch.setattr(broker_module, "AlpacaClient", FakePaperBroker)
-    app = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
-    assert not app.exception
-
-    next(
-        button for button in app.button
-        if button.label == "Verifica e aggiorna conto Alpaca Paper"
-    ).click().run()
-    assert app.session_state["paper_snapshot"]["orders"][0]["id"] == "STALE_ORDER"
-    assert any("987,654,321" in metric.value for metric in app.metric)
-
-    app.run()
-
-    assert not app.exception
-    assert app.session_state["paper_verified"] is False
-    assert any(
-        "Unable to fetch orders: order endpoint unavailable" in item.value
-        for item in app.error
-    )
-    assert app.session_state.get("paper_snapshot") is None
-    assert not any("987,654,321" in metric.value for metric in app.metric), [
-        (metric.label, metric.value) for metric in app.metric
-    ]
-    assert not any("987,654,322" in metric.value for metric in app.metric), [
-        (metric.label, metric.value) for metric in app.metric
-    ]
-    assert any(item.value == "**Errore**" for item in app.markdown)
-    assert app.session_state["paper_automation_active"] is False
-    assert app.session_state.get("_paper_status_sync_rerun") is None
-    assert len(snapshot_fetches) == 2
 
 
 def test_asset_availability_includes_fractional_and_quantity_rules(monkeypatch):
