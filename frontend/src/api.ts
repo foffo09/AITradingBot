@@ -408,21 +408,32 @@ export const api = {
     const pending = saved ? object(JSON.parse(saved)) : { payload, idempotency_key: crypto.randomUUID() };
     if (pending.payload !== payload || typeof pending.idempotency_key !== "string")
       throw new ApiError("Esito incerto: ripeti la stessa operazione prima di modificarla; verifica lo storico.");
-    // The service keeps the record too: browser storage is per port and is lost when the app restarts.
-    // If this fails nothing has been sent, so no uncertain state is created.
-    await request("/pending-trade", {
-      method: "PUT", body: JSON.stringify({context: c, symbol, side, quantity, idempotency_key: pending.idempotency_key}),
-    });
+    const key = pending.idempotency_key;
+    const body = JSON.stringify({ context: c, symbol, side, quantity, idempotency_key: key });
+    // Remember the key before anything leaves the browser: if a response is lost, the retry reuses it.
     localStorage.setItem(storageKey, JSON.stringify(pending));
-    try {
-      const result = parseState(await request("/local-trades", {
-        method: "POST", body: JSON.stringify({context: c, symbol, side, quantity, idempotency_key: pending.idempotency_key}),
-      }));
-      if (result.context !== c) throw new ApiError("Risposta del contesto non coerente.");
+    const finished = async (resync: boolean) => {
       localStorage.removeItem(storageKey);
+      // The service keeps its record until told the outcome arrived; if this fails it is restored later
+      // and the retry returns the already booked duplicate, never a second fill.
+      await request(`/pending-trade?${new URLSearchParams({ context: c, idempotency_key: key })}`, { method: "DELETE" }).catch(() => undefined);
+      if (resync) await restorePendingTrade(c).catch(() => undefined);
+    };
+    try {
+      // The service keeps the record too: browser storage is per port and lost when the app restarts.
+      await request("/pending-trade", { method: "PUT", body });
+    } catch (error) {
+      // Definitively refused (another uncertain request is pending): show that one instead.
+      if (error instanceof ApiError && (error.status === 422 || error.outcome === "rejected")) await finished(true);
+      throw error; // otherwise uncertain: keep the key for the retry
+    }
+    try {
+      const result = parseState(await request("/local-trades", { method: "POST", body }));
+      if (result.context !== c) throw new ApiError("Risposta del contesto non coerente.");
+      await finished(false);
       return result;
     } catch (error) {
-      if (error instanceof ApiError && (error.status === 422 || error.outcome === "rejected")) localStorage.removeItem(storageKey);
+      if (error instanceof ApiError && (error.status === 422 || error.outcome === "rejected")) await finished(true);
       throw error;
     }
   },

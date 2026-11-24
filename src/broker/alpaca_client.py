@@ -168,10 +168,11 @@ class AlpacaClient:
         return self._paper_client_is_paper and self.settings.trading_mode == "paper"
 
     def verify_connection(self) -> dict[str, Any]:
+        # Verification is a read. paper_trading_enabled gates submission only (submit_order and the
+        # automation re-check it); requiring it here made the read-only desktop monitor always fail.
         if (
             self.client is None
             or self.settings.trading_mode != "paper"
-            or not self.settings.paper_trading_enabled
             or not self._paper_client_is_paper
         ):
             self._paper_connection_verified = False

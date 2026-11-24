@@ -402,6 +402,8 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
 
     # An uncertain virtual trade is remembered by the service, not only by the browser: localStorage is
     # per-origin and the dynamic port changes it on every launch, which allowed a duplicate after restart.
+    # The record is removed only by the client (DELETE) after it has *received* a definitive outcome:
+    # clearing it server-side on commit lost it whenever that response never reached the UI.
     def pending_path(context):
         return root / f'local-v1-{context}-pending-trade.json'
 
@@ -437,6 +439,12 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             write_json_atomically(pending_path(body.context), record, f'{body.context}-pending-', lambda: check_pending_path(body.context))
             return {'api_version': '1', 'context': body.context, 'pending': record}
 
+    @app.delete('/api/v1/pending-trade', response_model=PendingTradeResponse)
+    def delete_pending_trade(context: LocalContext, idempotency_key: UUID):
+        with context_lock(context):
+            clear_pending(context, str(idempotency_key))  # only the record with this key; idempotent
+            return {'api_version': '1', 'context': context, 'pending': read_pending(context)}
+
     @app.post('/api/v1/local-trades', response_model=TradeResponse)
     def local_trade(body: TradeInput):
         _symbol(body.symbol)
@@ -447,14 +455,8 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 raise HTTPException(409, 'An uncertain virtual trade is pending; retry it with the same request first.', headers={'X-Request-Outcome': 'rejected'})
             if pending is not None and pending != body.model_dump(mode='json'):
                 raise HTTPException(409, 'Request identity already belongs to another operation; verify history.')
-            try:
-                result = execute_local_trade(body)
-            except HTTPException as error:
-                if (error.headers or {}).get('X-Request-Outcome') == 'rejected':
-                    clear_pending(body.context, key)  # definitively not booked
-                raise
-            clear_pending(body.context, key)  # booked (or recognised as the same booked request)
-            return result
+            # The pending record stays until the client confirms it received this outcome (DELETE).
+            return execute_local_trade(body)
 
     def execute_local_trade(body):
         if not paths[body.context].exists() or ledger(body.context).account() is None:

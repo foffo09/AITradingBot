@@ -147,18 +147,52 @@ def test_walk_forward_auto_test_window_below_minimum_is_a_clear_422(tmp_path, bo
     assert 'at least 12 bars each' in r.json()['detail']
 
 
-def test_system_reports_mt5_state_without_talking_to_the_terminal(tmp_path, monkeypatch):
+def test_system_reports_only_a_verified_mt5_state_without_talking_to_the_terminal(tmp_path, monkeypatch):
+    """Codex review #3: a live worker is not a connection; only a verified snapshot is."""
     from src.broker import mt5_process
     c = client(tmp_path)
     expected = 'unsupported' if not mt5_process._SUPPORTED else 'disconnected'
     assert c.get('/api/v1/system').json()['contexts']['mt5']['connection'] == expected
     monkeypatch.setattr(mt5_process, '_SUPPORTED', True)
     process = mt5_process.MT5Process()
-    assert process.state == 'disconnected'
-    process._process = object()  # a live worker after connect()
-    assert process.state == 'connected'
-    process._status = 'unavailable'
+    replies = []
+    def fake_request(operation, *args):
+        reply = replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+    monkeypatch.setattr(process, '_request', fake_request)
+    process._process = object()  # worker alive
+    snapshot = lambda status: {'connection': {'status': status, 'reason': 'x'}, 'account': None, 'positions': [], 'orders': []}
+    assert process.state == 'disconnected', 'alive worker without a verified snapshot'
+    replies.append(snapshot('unavailable'))  # initialisation failed / Demo account rejected
+    process.snapshot()
     assert process.state == 'unavailable'
+    replies.append(snapshot('connected'))
+    process.snapshot()
+    assert process.state == 'connected'
+    replies.append(snapshot('disconnected'))  # terminal dropped later
+    process.snapshot()
+    assert process.state == 'disconnected'
+    replies.append(mt5_process.MT5ReadError('worker failed'))
+    process.snapshot()
+    assert process.state == 'unavailable'
+    calls = []
+    monkeypatch.setattr(process, '_request', lambda operation, *args: calls.append(operation))
+    assert process.state == 'unavailable' and calls == [], 'reading state performs no IPC'
+
+
+def test_mt5_connect_endpoint_reports_the_verified_snapshot_state(tmp_path, monkeypatch):
+    """/connections/mt5 answers with state('mt5'), whose snapshot records the verified outcome."""
+    from src.broker import mt5_process
+    monkeypatch.setattr(mt5_process, '_SUPPORTED', True)
+    monkeypatch.setattr(mt5_process.MT5Process, 'connect', lambda self: setattr(self, '_process', object()))
+    monkeypatch.setattr(mt5_process.MT5Process, '_request', lambda self, operation, *args: {
+        'connection': {'status': 'unavailable', 'reason': 'Demo account not verified.'}, 'account': None, 'positions': [], 'orders': []})
+    c = client(tmp_path)
+    assert c.post('/api/v1/connections/mt5', headers=H).json()['connection']['status'] == 'unavailable'
+    assert c.get('/api/v1/system').json()['contexts']['mt5']['connection'] == 'unavailable'
+
 
 
 def _trade_body(context='demo', quantity=1, key=None, side='buy'):
@@ -167,35 +201,29 @@ def _trade_body(context='demo', quantity=1, key=None, side='buy'):
 
 
 def test_uncertain_trade_survives_restart_and_blocks_duplicates(tmp_path):
-    """Finding 6: response lost after commit, app restarted on a new port (fresh browser storage)."""
+    """Codex review #1: the trade completes, its response never reaches the UI, the app restarts on a new port."""
     c = client(tmp_path)
     assert c.post('/api/v1/local-account', json={'context': 'demo', 'initial_cash': 10000}, headers=H).status_code == 200
     body = _trade_body()
     assert c.put('/api/v1/pending-trade', json=body, headers=H).json()['pending'] == body
-    # The trade is booked, but imagine the response never reached the UI; restart = new service, new origin storage.
-    from src.api import local_app
-    original = local_app.SimulationLedger.buy
-    def booked_then_lost(self, **kwargs):
-        original(self, **kwargs)
-        raise OSError('response lost')
-    local_app.SimulationLedger.buy = booked_then_lost
-    try:
-        assert c.post('/api/v1/local-trades', json=body, headers=H).status_code == 503
-    finally:
-        local_app.SimulationLedger.buy = original
+    booked = c.post('/api/v1/local-trades', json=body, headers=H)
+    assert booked.status_code == 200  # ...but this response is lost; the browser storage is gone after restart
     restarted = client(tmp_path)
-    assert restarted.get('/api/v1/pending-trade?context=demo').json()['pending'] == body, 'service remembers it'
+    assert restarted.get('/api/v1/pending-trade?context=demo').json()['pending'] == body, 'still known after commit'
     fresh = _trade_body()
     blocked = restarted.post('/api/v1/local-trades', json=fresh, headers=H)
     assert blocked.status_code == 409 and blocked.headers['X-Request-Outcome'] == 'rejected'
+    assert restarted.put('/api/v1/pending-trade', json=fresh, headers=H).status_code == 409
     retried = restarted.post('/api/v1/local-trades', json=body, headers=H)
     assert retried.status_code == 200 and retried.json()['fill']['duplicate'] is True
     assert len(retried.json()['positions']) == 1, 'exactly one virtual fill'
-    assert restarted.get('/api/v1/pending-trade?context=demo').json()['pending'] is None
+    assert restarted.get('/api/v1/pending-trade?context=demo').json()['pending'] == body, 'kept until confirmed'
+    confirm = restarted.delete(f"/api/v1/pending-trade?context=demo&idempotency_key={body['idempotency_key']}", headers=H)
+    assert confirm.status_code == 200 and confirm.json()['pending'] is None
     assert restarted.post('/api/v1/local-trades', json=fresh, headers=H).status_code == 200
 
 
-def test_pending_trade_is_cleared_on_definitive_rejection_and_scoped_per_context(tmp_path):
+def test_pending_trade_confirmation_rules_and_context_scope(tmp_path):
     c = client(tmp_path)
     for context in ('demo', 'simulation'):
         c.post('/api/v1/local-account', json={'context': context, 'initial_cash': 10000}, headers=H)
@@ -204,7 +232,13 @@ def test_pending_trade_is_cleared_on_definitive_rejection_and_scoped_per_context
     assert c.post('/api/v1/local-trades', json=_trade_body('simulation'), headers=H).status_code == 200, 'other context unaffected'
     rejected = c.post('/api/v1/local-trades', json=huge, headers=H)
     assert rejected.status_code == 409 and rejected.headers['X-Request-Outcome'] == 'rejected'
-    assert c.get('/api/v1/pending-trade?context=demo').json()['pending'] is None
+    assert c.get('/api/v1/pending-trade?context=demo').json()['pending'] == huge, 'rejection response could be lost too'
+    from uuid import uuid4
+    wrong = c.delete(f'/api/v1/pending-trade?context=demo&idempotency_key={uuid4()}', headers=H)
+    assert wrong.status_code == 200 and wrong.json()['pending'] == huge, 'another key never removes it'
+    assert c.delete(f"/api/v1/pending-trade?context=demo&idempotency_key={huge['idempotency_key']}", headers={'Origin': ORIGIN}).status_code == 403
+    assert c.delete(f"/api/v1/pending-trade?context=demo&idempotency_key={huge['idempotency_key']}", headers=H).json()['pending'] is None
+    assert c.delete(f"/api/v1/pending-trade?context=demo&idempotency_key={huge['idempotency_key']}", headers=H).status_code == 200, 'idempotent'
     other = _trade_body()
     c.put('/api/v1/pending-trade', json=other, headers=H)
     assert c.put('/api/v1/pending-trade', json=_trade_body(), headers=H).status_code == 409, 'one pending per context'
@@ -223,3 +257,48 @@ def test_demo_series_differ_per_symbol_and_stay_deterministic():
     aapl, msft = generate_demo_prices('AAPL'), generate_demo_prices('MSFT')
     assert not aapl['close'].equals(msft['close'])
     assert aapl['close'].equals(generate_demo_prices('AAPL')['close'])
+
+
+def test_paper_monitor_verifies_and_reads_with_the_real_client_logic_but_cannot_submit(tmp_path, monkeypatch):
+    """Codex review #4: API + real AlpacaClient verification; only the SDK transport is faked."""
+    from src.broker import alpaca_client
+    calls = []
+
+    sessions = []
+
+    class FakeTradingClient:
+        def __init__(self, key, secret, paper):
+            assert paper is True
+            from types import SimpleNamespace
+            self._session = SimpleNamespace(read_only=False)  # the SDK's HTTP session
+            sessions.append(self._session)
+        def get_account(self):
+            calls.append('account')
+            return {'id': 'acct', 'status': 'ACTIVE', 'trading_blocked': False, 'account_blocked': False,
+                    'cash': '1000', 'equity': '1010', 'buying_power': '2000', 'last_equity': '1005', 'currency': 'USD'}
+        def get_all_positions(self):
+            calls.append('positions')
+            return []
+        def get_orders(self, *args, **kwargs):
+            calls.append('orders')
+            return []
+        def submit_order(self, *args, **kwargs):
+            pytest.fail('The desktop monitor must never submit')
+    monkeypatch.setattr(alpaca_client, 'TradingClient', FakeTradingClient)
+    monkeypatch.setattr(alpaca_client, 'StockHistoricalDataClient', None)
+    monkeypatch.setattr(alpaca_client, 'CryptoHistoricalDataClient', None)
+    monkeypatch.setenv('ALPACA_API_KEY', 'fake-key-value')
+    monkeypatch.setenv('ALPACA_SECRET_KEY', 'fake-secret-value')
+    c = client(tmp_path)
+    result = c.post('/api/v1/connections/paper', headers=H)
+    body = result.json()
+    assert body['connection']['status'] == 'connected', body
+    assert body['account']['cash'] == '1000' and body['account']['source'] == 'Alpaca Paper'
+    assert 'account' in calls and 'fake-secret-value' not in result.text
+    assert sessions[0].read_only is True, 'desktop service forces the transport read-only'
+    assert c.get('/api/v1/state?context=paper').json()['account']['equity'] == '1010', 'later reads work too'
+    from config.settings import AppSettings
+    broker = alpaca_client.AlpacaClient(AppSettings(trading_mode='paper', alpaca_api_key='k', alpaca_secret_key='s', paper_trading_enabled=False))
+    assert broker.verify_connection()['connected'] is True
+    with pytest.raises(PermissionError):
+        broker.submit_order(symbol='AAPL', side='buy', quantity=1, client_order_id='never-sent')

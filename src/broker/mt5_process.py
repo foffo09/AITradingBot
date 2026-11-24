@@ -54,12 +54,14 @@ class MT5Process:
 
     @property
     def state(self):
-        """Cheap local view for status pages: never talks to the terminal worker."""
+        """Last verified terminal state, for status pages: never talks to the worker.
+
+        A live worker alone proves nothing (initialisation or the Demo check may have failed), so this
+        only reports 'connected' after a snapshot confirmed it.
+        """
         if not _SUPPORTED:
             return 'unsupported'
-        if self._process is not None and self._status != 'unavailable':
-            return 'connected'
-        return 'unavailable' if self._status == 'unavailable' else 'disconnected'
+        return self._status if self._status in {'connected', 'unavailable'} else 'disconnected'
 
     def _dispose(self):
         process, connection = self._process, self._connection
@@ -152,9 +154,13 @@ class MT5Process:
     def snapshot(self):
         if self._process is not None:
             try:
-                return self._request('snapshot')
+                result = self._request('snapshot')
             except MT5ReadError:
-                pass
+                self._status = 'unavailable'
+            else:
+                status = result.get('connection', {}).get('status') if isinstance(result, dict) else None
+                self._status = status if status in {'connected', 'disconnected', 'unavailable'} else 'unavailable'
+                return result
         return {'connection': {'status': self._status, 'reason': self._reason},
                 'account': None, 'positions': [], 'orders': []}
 
