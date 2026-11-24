@@ -237,3 +237,63 @@ class Preferences(Output):
 class PreferencesResponse(Versioned):
     preferences: Preferences
     stored: bool
+
+
+class WalkForwardWindow(Output):
+    train_start: str
+    train_end: str
+    test_start: str
+    test_end: str
+
+
+class WalkForwardFoldOut(WalkForwardWindow):
+    parameters: dict[str, int]
+    in_sample_return_pct: Number
+    in_sample_trades: Annotated[int, Field(ge=0)]
+    out_of_sample: Record
+
+
+class WalkForwardExcluded(WalkForwardWindow):
+    reason: str
+
+
+class WalkForwardResponse(Versioned):
+    context: Context
+    symbol: str
+    source: str
+    strategy: Literal['sma']
+    interval: Literal['1Day']
+    sample: Sample
+    candidates: list[dict[str, int]]
+    selection_metric: str
+    training_bars: Annotated[int, Field(gt=0)]
+    test_bars: Annotated[int, Field(gt=0)]
+    step_bars: Annotated[int, Field(gt=0)]
+    folds: list[WalkForwardFoldOut]
+    excluded: list[WalkForwardExcluded]
+
+
+class ContextStatus(Output):
+    connection: Literal['local', 'connected', 'disconnected', 'unsupported', 'busy']
+    ledger: Literal['present', 'absent', 'not_applicable']
+    automation: str
+
+
+class SystemResponse(Versioned):
+    status: Literal['ready']
+    service_version: str
+    python: str
+    platform: str
+    started_at: str
+    uptime_seconds: Annotated[float, Field(ge=0)]
+    order_submission: Literal['disabled']
+    contexts: dict[str, ContextStatus]
+
+
+class WatchlistBody(Output):
+    symbols: Annotated[list[str], Field(max_length=20)]
+
+
+class WatchlistResponse(Versioned):
+    symbols: list[str]
+    stored: bool

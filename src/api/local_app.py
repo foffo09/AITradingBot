@@ -7,8 +7,11 @@ import tempfile
 import os
 from pathlib import Path
 import secrets
+import platform
 import sqlite3
+import sys
 import threading
+import time
 from uuid import UUID
 from typing import Annotated, Literal
 
@@ -22,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from config.settings import AppSettings
 from src.backtesting.engine import BacktestEngine
+from src.backtesting.walk_forward import walk_forward_evaluate
 from src.broker.alpaca_client import AlpacaClient
 from src.broker.mt5_readonly import MT5ReadError
 from src.broker.mt5_process import MT5Process
@@ -37,6 +41,7 @@ from src.api.schemas import (
     Context, LocalContext, Interval, ErrorResponse, HealthResponse, IdentityResponse,
     ShutdownResponse, StateResponse, InstrumentsResponse, MarketResponse,
     TradeResponse, BacktestResponse, ProposalResponse, Preferences, PreferencesResponse,
+    WalkForwardResponse, SystemResponse, WatchlistBody, WatchlistResponse,
 )
 Positive = Annotated[float, Field(gt=0, le=1e12, strict=True, allow_inf_nan=False)]
 COOKIE = 'aitradingbot_session'
@@ -70,6 +75,21 @@ class BacktestInput(BaseModel):
     symbol: str
     short_window: Annotated[int, Field(ge=1, le=199, strict=True)] = 10
     long_window: Annotated[int, Field(ge=2, le=199, strict=True)] = 30
+
+
+SERVICE_VERSION = '0.1.0'
+# Same candidate grid the retired Streamlit dashboard used; selection happens on training slices only.
+WALK_FORWARD_CANDIDATES = ({'short_window': 2, 'long_window': 4}, {'short_window': 3, 'long_window': 6}, {'short_window': 5, 'long_window': 10})
+WALK_FORWARD_MIN_BARS = max(c['long_window'] for c in WALK_FORWARD_CANDIDATES) + 2
+DEFAULT_WATCHLIST = ['AAPL', 'MSFT', 'SPY']
+
+
+class WalkForwardInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    context: Context
+    symbol: str
+    training_bars: Annotated[int, Field(ge=WALK_FORWARD_MIN_BARS, le=5000, strict=True)] | None = None
+    test_bars: Annotated[int, Field(ge=WALK_FORWARD_MIN_BARS, le=5000, strict=True)] | None = None
 
 
 def _symbol(symbol: str) -> str:
@@ -164,10 +184,36 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
         return JSONResponse({'detail': 'Local storage unavailable; no account state was inferred.'}, status_code=503)
 
     preferences_path = root / 'local-v1-ui-preferences.json'
+    watchlist_path = root / 'local-v1-watchlist.json'
+
+    def check_alias(path, detail):
+        if path.is_symlink() or (path.exists() and path.stat().st_nlink > 1):
+            raise HTTPException(409, detail)
 
     def check_preferences_path():
-        if preferences_path.is_symlink() or (preferences_path.exists() and preferences_path.stat().st_nlink > 1):
-            raise HTTPException(409, 'UI preference aliases are not allowed.')
+        check_alias(preferences_path, 'UI preference aliases are not allowed.')
+
+    def read_small_json(path):
+        with path.open('rb') as file:
+            raw = file.read(4097)
+        if len(raw) > 4096:
+            raise ValueError('Oversized local file')
+        return json.loads(raw.decode('utf-8'))
+
+    def write_json_atomically(path, data, prefix, check):
+        check()
+        root.mkdir(parents=True, exist_ok=True)
+        descriptor, name = tempfile.mkstemp(dir=root, prefix=prefix, suffix='.tmp')
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as file:
+                json.dump(data, file, ensure_ascii=False)
+                file.flush()
+                os.fsync(file.fileno())
+            check()
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     @app.get('/api/v1/preferences', response_model=PreferencesResponse)
     def get_preferences():
@@ -178,11 +224,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
                 values = Preferences(theme='dark', density='comfortable', analysis_width=68)
             else:
                 try:
-                    with preferences_path.open('rb') as file:
-                        raw = file.read(4097)
-                    if len(raw) > 4096:
-                        raise ValueError('Oversized preferences')
-                    values = Preferences.model_validate(json.loads(raw.decode('utf-8')))
+                    values = Preferences.model_validate(read_small_json(preferences_path))
                 except (ValueError, RecursionError):
                     raise HTTPException(503, 'UI preferences unavailable; stored values were not reset.') from None
             return {'api_version': '1', 'preferences': values, 'stored': stored}
@@ -190,20 +232,36 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
     @app.post('/api/v1/preferences', response_model=PreferencesResponse)
     def save_preferences(body: Preferences):
         with preferences_lock:
-            check_preferences_path()
-            root.mkdir(parents=True, exist_ok=True)
-            descriptor, name = tempfile.mkstemp(dir=root, prefix='ui-preferences-', suffix='.tmp')
-            temporary = Path(name)
-            try:
-                with os.fdopen(descriptor, 'w', encoding='utf-8') as file:
-                    json.dump(body.model_dump(), file, ensure_ascii=False)
-                    file.flush()
-                    os.fsync(file.fileno())
-                check_preferences_path()
-                os.replace(temporary, preferences_path)
-            finally:
-                temporary.unlink(missing_ok=True)
+            write_json_atomically(preferences_path, body.model_dump(), 'ui-preferences-', check_preferences_path)
             return {'api_version': '1', 'preferences': body, 'stored': True}
+
+    def check_watchlist_path():
+        check_alias(watchlist_path, 'Watchlist aliases are not allowed.')
+
+    def valid_watchlist(symbols):
+        if len(set(symbols)) != len(symbols) or any(symbol not in INSTRUMENTS for symbol in symbols):
+            raise HTTPException(422, 'Watchlist symbols must be unique known instruments.')
+        return symbols
+
+    @app.get('/api/v1/watchlist', response_model=WatchlistResponse)
+    def get_watchlist():
+        with preferences_lock:
+            check_watchlist_path()
+            if not watchlist_path.exists():
+                return {'api_version': '1', 'symbols': DEFAULT_WATCHLIST, 'stored': False}
+            try:
+                symbols = WatchlistBody.model_validate(read_small_json(watchlist_path)).symbols
+                valid_watchlist(symbols)
+            except (ValueError, RecursionError, HTTPException):
+                raise HTTPException(503, 'Watchlist unavailable; stored values were not reset.') from None
+            return {'api_version': '1', 'symbols': symbols, 'stored': True}
+
+    @app.post('/api/v1/watchlist', response_model=WatchlistResponse)
+    def save_watchlist(body: WatchlistBody):
+        with preferences_lock:
+            symbols = valid_watchlist(body.symbols)
+            write_json_atomically(watchlist_path, {'symbols': symbols}, 'watchlist-', check_watchlist_path)
+            return {'api_version': '1', 'symbols': symbols, 'stored': True}
 
     @app.get('/api/v1/health', response_model=HealthResponse)
     def health():
@@ -387,6 +445,67 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             except OfflineExecutionError:
                 raise HTTPException(409, 'Dry-run ownership or transition could not be verified; no retry was performed.') from None
             return state(body.context)
+
+    started = time.time()
+
+    @app.get('/api/v1/system', response_model=SystemResponse)
+    def system():
+        contexts = {}
+        for context, lock in locks.items():
+            # Never wait behind a slow broker read: a held context lock is reported as busy.
+            if not lock.acquire(blocking=False):
+                contexts[context] = {'connection': 'busy', 'ledger': 'not_applicable', 'automation': 'N/D'}
+                continue
+            try:
+                if context in paths:
+                    connection, ledger_state = 'local', 'present' if paths[context].exists() else 'absent'
+                elif context == 'paper':
+                    connection, ledger_state = 'connected' if paper is not None else 'disconnected', 'not_applicable'
+                else:
+                    connection, ledger_state = 'unsupported' if sys.platform != 'win32' else 'disconnected', 'not_applicable'
+                contexts[context] = {'connection': connection, 'ledger': ledger_state, 'automation': str(controls[context].status().get('state', 'N/D'))}
+            finally:
+                lock.release()
+        return {'api_version': '1', 'status': 'ready', 'service_version': SERVICE_VERSION,
+                'python': platform.python_version(), 'platform': f'{platform.system()} {platform.machine()}',
+                'started_at': pd.Timestamp(started, unit='s', tz='UTC').isoformat(),
+                'uptime_seconds': round(time.time() - started, 1), 'order_submission': 'disabled', 'contexts': contexts}
+
+    @app.post('/api/v1/walk-forward', response_model=WalkForwardResponse)
+    def walk_forward(body: WalkForwardInput):
+        _symbol(body.symbol)
+        with locks[body.context]:
+            try:
+                data = frame(body.context, body.symbol, '1Day').reset_index(drop=True)
+            except Exception:
+                raise HTTPException(409, 'Market data unavailable; walk-forward not run, no fallback.') from None
+        rows = len(data)
+        if rows < WALK_FORWARD_MIN_BARS * 2:
+            raise HTTPException(409, f'Insufficient history: {WALK_FORWARD_MIN_BARS * 2} daily bars required, {rows} available.')
+        training = body.training_bars or min(max(rows // 3, WALK_FORWARD_MIN_BARS), rows - WALK_FORWARD_MIN_BARS)
+        test = body.test_bars or min(max(rows // 6, WALK_FORWARD_MIN_BARS), rows - training)
+        if training + test > rows:
+            raise HTTPException(422, f'Training plus test bars exceed the {rows} available daily bars.')
+        try:
+            result = walk_forward_evaluate(data, engine=BacktestEngine(settings), parameter_candidates=WALK_FORWARD_CANDIDATES,
+                training_bars=training, test_bars=test, data_source=data.attrs['source'],
+                backtest_options={'periods_per_year': 365 if '/' in body.symbol else 252})
+        except Exception:
+            raise HTTPException(409, 'Walk-forward unavailable for the requested data and parameters.') from None
+        stamp = lambda index: pd.Timestamp(data.iloc[index]['timestamp']).isoformat()
+        window = lambda item: {'train_start': stamp(item.train_start), 'train_end': stamp(item.train_end - 1),
+                               'test_start': stamp(item.test_start), 'test_end': stamp(item.test_end - 1)}
+        def metrics(backtest):
+            values = backtest.to_dict()
+            values.pop('trade_history'); values.pop('equity_curve')
+            return {key: None if isinstance(value, float) and not math.isfinite(value) else value for key, value in values.items()}
+        return {'api_version': '1', 'context': body.context, 'symbol': body.symbol, 'source': result.data_source, 'strategy': 'sma',
+                'interval': '1Day', 'sample': {'start': stamp(0), 'end': stamp(rows - 1), 'bars': rows},
+                'candidates': list(WALK_FORWARD_CANDIDATES), 'selection_metric': result.selection_metric,
+                'training_bars': result.training_bars, 'test_bars': result.test_bars, 'step_bars': result.step_bars,
+                'folds': [{**window(fold), 'parameters': fold.selected_parameters, 'in_sample_return_pct': fold.in_sample_return_pct,
+                           'in_sample_trades': fold.in_sample_trades, 'out_of_sample': metrics(fold.out_of_sample)} for fold in result.folds],
+                'excluded': [{**window(item), 'reason': item.reason} for item in result.excluded_folds]}
 
     @app.post('/api/v1/connections/paper', response_model=StateResponse)
     def connect_paper():
