@@ -317,3 +317,37 @@ durante un blocco del backend), correzione M1 non revisionata da un secondo agen
 
 **Distribuzione a utenti finali: NON APPROVATA** — gate separati ancora aperti: firma Developer ID,
 notarizzazione e stapling, verifica Intel/x86_64, licenza/notice, CI macOS `local-app` completata.
+
+---
+
+# Fase 4 — correzione AUDIT-L1 e AUDIT-L4, 24 novembre 2026
+
+Commit `fc4b2ea` sullo stesso branch `agents/claude-macos-m1-fix-20261124`, scritto da Claude
+(Codex ancora irraggiungibile per il TLS intercettato). Stesso limite: serve revisione di un secondo agente.
+
+- **L1** `frontend/src/api.ts`: si rilancia l'errore originale solo se `options.signal?.aborted`
+  (annullamento del chiamante); `AbortError`/`TimeoutError` interni diventano
+  "Il servizio locale non ha risposto entro 12 secondi. Nuovo tentativo al prossimo aggiornamento."
+- **L4** `frontend/src/App.tsx` (`LocalLedger`): con `state === null` niente form "Crea conto virtuale",
+  ma "Stato del conto non disponibile…"; la nota dell'ultima azione è nascosta finché lo stato manca.
+
+| Verifica | Risultato |
+|---|---|
+| 4 nuovi test Vitest sul codice precedente | 3 falliti (comportamento), 1 passato (guardia annullamento) — RED atteso |
+| `npm test` dopo la correzione | **55 passed** |
+| lint / typecheck / build / diff --check | PASS |
+| App ricostruita, worker sospeso 32 s | messaggio italiano mostrato, nessun form di creazione, nota nascosta — PASS |
+| Ripresa nella stessa istanza | Demo 10.000 USD, automazione ferma — PASS |
+| ⌘Q | 0 processi in ≤200 ms, porta 52322 chiusa — PASS |
+
+Artefatti (arm64, ad-hoc): desktop `f2f04a7d34dfe6fadaff412a3343bbadf4b5fb823f49c248a8d98160fddc63a4`
+(cambia perché include la nuova UI), sidecar invariato `3f62f5eff0df37f94c6b65cf491c4eb64f7538775dce45a14f5e04ed1cc88b43`.
+
+| ID | Stato |
+|---|---|
+| M1 | RISOLTO (`513a45f`) |
+| L1, L4 | **RISOLTI** (`fc4b2ea`) |
+| L2, L3, L5, L6 | APERTI (LOW, non visibili in uso normale) |
+
+**Esito invariato:** build arm64 locale APPROVATA CON RISERVE (quattro LOW aperti, correzioni
+non revisionate da un secondo agente); distribuzione NON APPROVATA (firma, notarizzazione, Intel, licenza).
