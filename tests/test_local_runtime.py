@@ -77,3 +77,29 @@ def test_service_logs_errors_only_so_benign_protocol_warnings_do_not_reach_stder
     except Stop:
         pass
     assert seen['log_level'] == 'error' and seen['access_log'] is False
+
+
+def test_shutdown_stream_leaves_stdin_alone_outside_windows():
+    import sys
+    from src.runtime.local_service import shutdown_stream
+    if sys.platform != 'win32':
+        assert shutdown_stream() is sys.stdin
+
+
+def test_mt5_worker_starts_while_the_service_waits_on_its_control_pipe():
+    """Regression (Windows): the blocked stdin reader used to keep the spawned MT5 worker from starting."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+    import pytest
+    if sys.platform != 'win32':
+        pytest.skip('Windows pipe semantics')
+    probe = Path(__file__).parent / 'probes' / 'stdin_spawn.py'
+    proc = subprocess.Popen([sys.executable, str(probe), 'fixed'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        result = json.loads(proc.stdout.readline())
+    finally:
+        proc.stdin.close()
+        proc.wait(30)
+    assert result['phase'] != 'startup', result

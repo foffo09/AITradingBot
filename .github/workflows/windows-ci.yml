@@ -53,6 +53,11 @@ jobs:
           $env:PROBE_HEAVY = '1'; python tests/probes/mt5_bootstrap.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: MT5 worker start while the service waits on stdin (A/B diagnostic)
+        run: |
+          python tests/probes/stdin_spawn.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: MT5 through the real API service (no terminal in CI, worker must start)
         run: |
           python -m scripts.check_mt5_api --expect-phase import

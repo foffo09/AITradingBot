@@ -38,6 +38,32 @@ def watch_stdin(server, stream):
     server.should_exit = True
 
 
+def shutdown_stream():
+    """The parent's control pipe, kept off the standard input that child processes receive.
+
+    Windows serializes synchronous I/O per file object: while ``watch_stdin`` waits in ReadFile on the pipe,
+    a spawned child (the MT5 worker) that gets the same pipe as its stdin blocks in interpreter start-up until
+    a line arrives, so the worker never answers. The pipe moves to a private, non-inheritable descriptor and
+    descriptor 0 / STD_INPUT_HANDLE become NUL. Elsewhere stdin is returned unchanged.
+    """
+    if sys.platform != 'win32' or sys.stdin is None:
+        return sys.stdin
+    try:
+        sys.stdin.fileno()
+    except (OSError, ValueError):
+        return sys.stdin
+    import ctypes
+    import msvcrt
+    control = os.dup(0)  # non-inheritable (PEP 446)
+    null = os.open(os.devnull, os.O_RDONLY)
+    os.dup2(null, 0)
+    os.close(null)
+    # A windowed (frozen) process does not update STD_INPUT_HANDLE in _dup2: set it explicitly.
+    ctypes.windll.kernel32.SetStdHandle(-10, msvcrt.get_osfhandle(0))
+    sys.stdin = open(0, closefd=False, encoding='utf-8')
+    return open(control, encoding='utf-8', errors='replace')
+
+
 class LocalServer(uvicorn.Server):
     async def startup(self, sockets=None):
         await super().startup(sockets=sockets)
@@ -66,7 +92,7 @@ def main(argv=None):
         config = uvicorn.Config(app, host='127.0.0.1', port=sock.getsockname()[1], access_log=False, log_level='error', proxy_headers=False, server_header=False, ws='none')
         server = LocalServer(config)
         app.state.request_shutdown = lambda: setattr(server, 'should_exit', True)
-        threading.Thread(target=watch_stdin, args=(server, sys.stdin), daemon=True).start()
+        threading.Thread(target=watch_stdin, args=(server, shutdown_stream()), daemon=True).start()
         asyncio.run(server.serve(sockets=[sock]))
     finally:
         if app is not None:
