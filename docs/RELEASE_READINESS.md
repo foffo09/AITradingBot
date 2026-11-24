@@ -13,7 +13,7 @@ Nessun merge, nessuna release, nessun artefatto pubblicato.
 - Endpoint di scrittura irraggiungibili per i contesti MT5 e Paper; isolamento dei 4 contesti testato.
 - Dashboard MT5 con campi del conto e N/D; errore di lettura distinto da conto vuoto; conto MT5 anche in Panoramica.
 
-Windows CI run 45455628867: `windows-tests` e `macos-tests` verdi (pytest Windows 907 passati, 2 saltati; `MT5 API CHECK: PASS`).
+Windows CI run 45455628867: tutti i 5 job verdi (windows-tests, macos-tests, app desktop su windows-latest con NSIS e test GUI, macos-latest, macos-15-intel) (pytest Windows 907 passati, 2 saltati; `MT5 API CHECK: PASS`).
 
 ## MIGLIORATO
 - Primo avvio Demo/Simulazione: invito esplicito a creare il conto virtuale invece di sole metriche N/D.
