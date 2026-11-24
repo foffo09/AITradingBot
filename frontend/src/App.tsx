@@ -447,7 +447,11 @@ function LocalLedger({
         conservano conti separati. Dopo un riavvio verifica lo storico prima di creare una nuova richiesta; la memoria delle richieste dipende dall’origine locale (anche dalla porta).
       </p>
       {pending && <p className="notice">Registrazione con esito incerto: {pending.symbol} · {pending.side} · quantità {number(pending.quantity)}. Riprovando si conserva lo stesso identificativo; verifica anche lo storico.</p>}
-      {!state?.account ? (
+      {state === null ? (
+        <p className="notice">
+          Stato del conto non disponibile: nessuna operazione è possibile finché il servizio locale non risponde.
+        </p>
+      ) : !state.account ? (
         <form className="inline-form" onSubmit={(e) => void act(e, "account")}>
           <label>
             Capitale iniziale · USD
@@ -495,7 +499,7 @@ function LocalLedger({
         </form>
       )}
       {error && <ErrorNote>{error}</ErrorNote>}
-      {notice && (
+      {notice && state !== null && (
         <p role="status" className="notice">
           {notice}
         </p>

@@ -225,3 +225,20 @@ describe("preferenze dal servizio", () => {
     await expect(api.preferences()).rejects.toThrow();
   });
 });
+describe("timeout e annullamento (AUDIT-L1)", () => {
+  const abort = (name: string) => vi.fn().mockRejectedValue(new DOMException("Fetch is aborted", name));
+  it("WebKit: timeout interno come AbortError diventa messaggio italiano", async () => {
+    vi.stubGlobal("fetch", abort("AbortError"));
+    await expect(request("/state")).rejects.toThrow("non ha risposto entro 12 secondi");
+  });
+  it("TimeoutError standard diventa lo stesso messaggio", async () => {
+    vi.stubGlobal("fetch", abort("TimeoutError"));
+    await expect(request("/state")).rejects.toThrow("non ha risposto entro 12 secondi");
+  });
+  it("annullamento del chiamante resta AbortError originale", async () => {
+    vi.stubGlobal("fetch", abort("AbortError"));
+    const controller = new AbortController();
+    controller.abort();
+    await expect(request("/state", { signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+  });
+});

@@ -121,8 +121,12 @@ export async function request(
       },
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError")
-      throw error;
+    // Only the caller's own cancellation is rethrown; WebKit reports the 12s timeout as AbortError too.
+    if (options.signal?.aborted) throw error;
+    if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError"))
+      throw new ApiError(
+        "Il servizio locale non ha risposto entro 12 secondi. Nuovo tentativo al prossimo aggiornamento.",
+      );
     throw new ApiError(
       "Servizio locale non raggiungibile. Verifica che il backend sia avviato.",
     );

@@ -83,6 +83,19 @@ describe("terminale senza dati inventati", () => {
       screen.queryByRole("button", { name: /Avvia automazione/ }),
     ).not.toBeInTheDocument();
   });
+  it("stato non disponibile non propone di creare un conto (AUDIT-L4)", async () => {
+    const base = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url: string, init?: RequestInit) =>
+      url.includes("/state")
+        ? new Response(JSON.stringify({ detail: "Servizio occupato" }), { status: 503 })
+        : base(url, init));
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "Portafoglio" }));
+    await waitFor(() =>
+      expect(screen.getByText(/Stato del conto non disponibile/)).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: "Crea conto virtuale" })).not.toBeInTheDocument();
+  });
   it("Paper non espone comandi di ledger locale e conserva errori", async () => {
     render(<App />);
     await userEvent.selectOptions(screen.getByLabelText("Contesto"), "paper");
