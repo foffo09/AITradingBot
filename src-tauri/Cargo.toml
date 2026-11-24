@@ -14,4 +14,4 @@ serde_json = "=1.0.154"
 
 [target.'cfg(windows)'.dependencies]
 # Already in the lockfile via Tauri; used for the sidecar Job Object.
-windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }

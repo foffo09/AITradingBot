@@ -300,5 +300,13 @@ def test_paper_monitor_verifies_and_reads_with_the_real_client_logic_but_cannot_
     from config.settings import AppSettings
     broker = alpaca_client.AlpacaClient(AppSettings(trading_mode='paper', alpaca_api_key='k', alpaca_secret_key='s', paper_trading_enabled=False))
     assert broker.verify_connection()['connected'] is True
-    with pytest.raises(PermissionError):
+    # Every other precondition of the first submit guard holds, so only paper_trading_enabled can stop it.
+    assert broker.client is not None and broker.paper_client_is_paper and broker.is_connected()
+    with pytest.raises(PermissionError, match='Only the dedicated Alpaca Paper client may submit orders'):
         broker.submit_order(symbol='AAPL', side='buy', quantity=1, client_order_id='never-sent')
+    # Control: with the flag on, the same broker passes that guard and is stopped later (no coordinator).
+    enabled = alpaca_client.AlpacaClient(AppSettings(trading_mode='paper', alpaca_api_key='k', alpaca_secret_key='s', paper_trading_enabled=True))
+    assert enabled.verify_connection()['connected'] is True
+    with pytest.raises(PermissionError) as later:
+        enabled.submit_order(symbol='AAPL', side='buy', quantity=1, client_order_id='never-sent')
+    assert 'Only the dedicated Alpaca Paper client' not in str(later.value)

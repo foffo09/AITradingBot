@@ -24,7 +24,15 @@ struct Readiness {
 #[cfg(windows)]
 mod job {
     use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use std::os::windows::process::CommandExt;
+    use std::process::{Child, Command};
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenThread, ResumeThread, CREATE_SUSPENDED, THREAD_SUSPEND_RESUME,
+    };
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
         SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
@@ -61,9 +69,58 @@ mod job {
         }
 
         pub fn terminate(&self) {
-            unsafe {
-                TerminateJobObject(self.0, 1);
+            if unsafe { TerminateJobObject(self.0, 1) } == 0 {
+                // Closing the handle (Service drop) still kills the job: KILL_ON_JOB_CLOSE.
+                eprintln!("TerminateJobObject non riuscito; il job verrà chiuso con la shell.");
             }
+        }
+    }
+
+    /// Start the sidecar suspended, put it in a new job, then let it run: it cannot create any
+    /// process outside the job (std has no stable PROC_THREAD_ATTRIBUTE_JOB_LIST yet).
+    /// A job is mandatory: without it a forced kill could leave the PyInstaller worker alive.
+    pub fn spawn(command: &mut Command) -> Result<(Child, Option<Job>), String> {
+        command.creation_flags(CREATE_SUSPENDED);
+        let mut child = command.spawn().map_err(|_| {
+            "Backend confezionato non disponibile. Preparare il sidecar per questa piattaforma.".to_string()
+        })?;
+        let abort = |child: &mut Child| {
+            let _ = child.kill();
+            let _ = child.wait();
+            "Impossibile isolare il backend locale in un Job Object di Windows.".to_string()
+        };
+        let Some(job) = Job::assign(&child) else {
+            return Err(abort(&mut child));
+        };
+        if !resume_threads(child.id()) {
+            job.terminate();
+            return Err(abort(&mut child));
+        }
+        Ok((child, Some(job)))
+    }
+
+    fn resume_threads(pid: u32) -> bool {
+        unsafe {
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+            if snapshot == INVALID_HANDLE_VALUE {
+                return false;
+            }
+            let mut entry: THREADENTRY32 = std::mem::zeroed();
+            entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
+            let mut resumed = false;
+            let mut more = Thread32First(snapshot, &mut entry) != 0;
+            while more {
+                if entry.th32OwnerProcessID == pid {
+                    let thread = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID);
+                    if !thread.is_null() {
+                        resumed |= ResumeThread(thread) != u32::MAX;
+                        CloseHandle(thread);
+                    }
+                }
+                more = Thread32Next(snapshot, &mut entry) != 0;
+            }
+            CloseHandle(snapshot);
+            resumed
         }
     }
 
@@ -78,12 +135,20 @@ mod job {
 
 #[cfg(not(windows))]
 mod job {
+    use std::process::{Child, Command};
     pub struct Job;
     impl Job {
-        pub fn assign(_child: &std::process::Child) -> Option<Job> {
+        #[cfg(test)]
+        pub fn assign(_child: &Child) -> Option<Job> {
             None
         }
         pub fn terminate(&self) {}
+    }
+    /// Unix uses the process group set on the command instead of a job.
+    pub fn spawn(command: &mut Command) -> Result<(Child, Option<Job>), String> {
+        command.spawn().map(|child| (child, None)).map_err(|_| {
+            "Backend confezionato non disponibile. Preparare il sidecar per questa piattaforma.".to_string()
+        })
     }
 }
 
@@ -179,7 +244,7 @@ impl Service {
         let mut command = Command::new(binary);
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut command, 0);
-        let mut child = command
+        command
             .arg("--port")
             .arg("0")
             .arg("--ui-dir")
@@ -188,13 +253,8 @@ impl Service {
             .arg(data)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|_| {
-                "Backend confezionato non disponibile. Preparare il sidecar per questa piattaforma."
-            })?;
-        // Assigned before the handshake: PyInstaller's worker is created after extraction and inherits it.
-        let job = job::Job::assign(&child);
+            .stderr(Stdio::null());
+        let (mut child, job) = job::spawn(&mut command)?;
         let pid = child.id();
         let stdout = match child.stdout.take() {
             Some(stdout) => stdout,
@@ -356,8 +416,10 @@ mod lifecycle_tests {
         let mut command = Command::new("cmd.exe");
         command.args(["/D", "/C", "start /B waitfor /T 120 aitbjobprobe & ping -n 120 127.0.0.1 >nul"]);
         command.stdin(Stdio::piped());
-        let mut service = Service::from_child(command.spawn().unwrap(), "fixture".into());
-        assert!(service.job.is_some(), "sidecar must be inside a job object");
+        // Same path as Service::start: created suspended, put in the job, then resumed.
+        let (child, job) = job::spawn(&mut command).unwrap();
+        assert!(job.is_some(), "sidecar must be inside a job object");
+        let mut service = Service::with_job(child, "fixture".into(), job);
         let deadline = Instant::now() + Duration::from_secs(10);
         while !waitfor_running() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(100));

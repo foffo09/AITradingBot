@@ -333,11 +333,28 @@ export function pendingTrade(c: Context): {symbol: string; side: string; quantit
     return {symbol:payload.symbol, side:String(payload.side),quantity:payload.quantity};
   } catch { return null; }
 }
+const confirmKey = (c: Context) => `aitb-confirm-trade-${c}`;
+// A received outcome whose DELETE never reached the service: deliver it before anything else.
+async function deliverConfirmation(c: Context): Promise<boolean> {
+  let key: string | null;
+  try { key = localStorage.getItem(confirmKey(c)); } catch { return true; }
+  if (!key) return true;
+  try {
+    await request(`/pending-trade?${new URLSearchParams({ context: c, idempotency_key: key })}`, { method: "DELETE" });
+    localStorage.removeItem(confirmKey(c));
+    return true;
+  } catch {
+    return false;
+  }
+}
 export async function restorePendingTrade(c: Context, signal?: AbortSignal): Promise<void> {
+  await deliverConfirmation(c);
   const d = version(await request(`/pending-trade?${query(c)}`, { signal }));
   if (d.context !== c) invalid();
   if (d.pending === null) return;
   const p = object(d.pending);
+  // Already received by this browser: not uncertain, only its confirmation is still undelivered.
+  try { if (localStorage.getItem(confirmKey(c)) === string(p.idempotency_key)) return; } catch { /* no storage */ }
   if (string(p.context) !== c || typeof p.quantity !== "number") invalid();
   const payload = JSON.stringify({ context: c, symbol: string(p.symbol), side: string(p.side), quantity: p.quantity });
   try {
@@ -408,15 +425,18 @@ export const api = {
     const pending = saved ? object(JSON.parse(saved)) : { payload, idempotency_key: crypto.randomUUID() };
     if (pending.payload !== payload || typeof pending.idempotency_key !== "string")
       throw new ApiError("Esito incerto: ripeti la stessa operazione prima di modificarla; verifica lo storico.");
+    if (!(await deliverConfirmation(c)))
+      throw new ApiError("Il servizio non ha ancora ricevuto la conferma dell'operazione precedente; riprova tra poco.");
     const key = pending.idempotency_key;
     const body = JSON.stringify({ context: c, symbol, side, quantity, idempotency_key: key });
     // Remember the key before anything leaves the browser: if a response is lost, the retry reuses it.
     localStorage.setItem(storageKey, JSON.stringify(pending));
     const finished = async (resync: boolean) => {
       localStorage.removeItem(storageKey);
-      // The service keeps its record until told the outcome arrived; if this fails it is restored later
-      // and the retry returns the already booked duplicate, never a second fill.
-      await request(`/pending-trade?${new URLSearchParams({ context: c, idempotency_key: key })}`, { method: "DELETE" }).catch(() => undefined);
+      // The service keeps its record until told the outcome arrived. An undelivered DELETE stays noted
+      // and is retried before the next request, so a completed trade is never shown as uncertain.
+      localStorage.setItem(confirmKey(c), key);
+      await deliverConfirmation(c);
       if (resync) await restorePendingTrade(c).catch(() => undefined);
     };
     try {

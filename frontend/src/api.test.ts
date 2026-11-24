@@ -294,6 +294,40 @@ it('conferma al servizio solo dopo aver ricevuto l\'esito (review Codex #1)', as
   expect(localStorage.getItem('aitb-pending-trade-demo')).toBeNull();
 });
 
+it('una conferma DELETE persa viene recapitata prima dell\'operazione successiva (review Codex)', async () => {
+  const {api, restorePendingTrade, pendingTrade} = await import('./api');
+  localStorage.clear();
+  const calls: string[] = [];
+  let serverPending: Record<string, unknown> | null = null;
+  let deleteFails = true;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET';
+    calls.push(`${method} ${url.split('?')[0]}`);
+    if (url.startsWith('/api/v1/pending-trade') && method === 'PUT') {
+      if (serverPending && (serverPending as {idempotency_key: string}).idempotency_key !== JSON.parse(String(init?.body)).idempotency_key)
+        return new Response(JSON.stringify({detail: 'pending'}), {status: 409, headers: {'X-Request-Outcome': 'rejected'}});
+      serverPending = JSON.parse(String(init?.body));
+    }
+    if (url.startsWith('/api/v1/pending-trade') && method === 'DELETE') {
+      if (deleteFails) { deleteFails = false; throw new TypeError('lost'); }
+      serverPending = null;
+    }
+    if (url.includes('/local-trades'))
+      return new Response(JSON.stringify({api_version: '1', context: 'demo', connection: {status: 'local'}, account: null, positions: [], orders: [], trades: [], automation: {state: 'STOPPED'}}));
+    return new Response(JSON.stringify({api_version: '1', context: 'demo', pending: serverPending}));
+  }));
+  await api.trade('demo', 'AAPL', 'buy', 1);          // booked; its DELETE is lost
+  expect(serverPending).not.toBeNull();
+  await restorePendingTrade('demo');                   // e.g. Portafoglio reopened
+  expect(pendingTrade('demo')).toBeNull();             // never shown as uncertain
+  await api.trade('demo', 'AAPL', 'buy', 2);           // new trade goes through
+  const firstDelete = calls.indexOf('DELETE /api/v1/pending-trade', calls.indexOf('POST /api/v1/local-trades') + 1);
+  expect(firstDelete).toBeGreaterThan(-1);
+  expect(calls.filter((call) => call === 'POST /api/v1/local-trades')).toHaveLength(2);
+  expect(serverPending).toBeNull();
+  expect(localStorage.getItem('aitb-confirm-trade-demo')).toBeNull();
+});
+
 describe("preferenze dal servizio", () => {
   it.each([
     {theme:"evil", density:"compact", analysis_width:60},
