@@ -1,6 +1,6 @@
 # MT5 via servizio — report di correzione (24 novembre 2026)
 
-Branch `agents/claude-macos-complete-fix-20261124`. Ambiente dell'agente: macOS (MT5 non disponibile),
+Branch `agents/claude-emergency-delivery-20261124` (prosegue `agents/claude-macos-complete-fix-20261124`). Ambiente dell'agente: macOS (MT5 non disponibile),
 più runner Windows di GitHub Actions **senza** terminale MT5. La connessione reale va verificata sul PC
 Windows con la procedura in fondo: questo report non la dichiara verificata.
 
@@ -10,34 +10,37 @@ Su Windows, con terminale MT5 aperto e conto Demo: `MetaTrader5.initialize()` di
 multiprocessing spawn con un piccolo script funziona, ma `POST /api/v1/connections/mt5` restituisce
 `unavailable` con *"Terminal worker failed or exceeded its deadline; reconnect explicitly."*
 
-## Causa
+## Causa (dimostrata su Windows, CI run 45454479694)
 
-Quel messaggio nasceva **solo** da `MT5Process._request`, quando il worker non rispondeva entro la deadline o
-la pipe si interrompeva: non era mai un errore di MT5. Nel percorso API la prima richiesta `connect` aveva
-5 s complessivi per:
+**Causa principale.** Il servizio legge `shutdown` dalla propria stdin (pipe aperta da Tauri, dal launcher e da
+`check_mt5_api`) con un thread fermo in `ReadFile` sincrono (`watch_stdin`). Windows serializza l'I/O sincrono
+per *file object*: il worker MT5 avviato con `multiprocessing` spawn riceve la stessa pipe come stdin e, durante
+l'avvio dell'interprete, resta bloccato su quel file object finché non arriva una riga. Il worker non risponde mai:
+il servizio scade e riporta *"Terminal worker failed or exceeded its deadline"*. Uno script autonomo non ha il
+thread su stdin, per questo la connessione diretta e il test multiprocessing dell'utente funzionavano.
 
-1. avviare un nuovo interprete. Con un venv su Windows `multiprocessing` avvia apposta il Python *base*
-   (`Python311\python.exe`) con `__PYVENV_LAUNCHER__` che punta al venv: è l'alternanza
-   `.venv\Scripts\python.exe` → `Python311\python.exe` osservata, **normale** e non causa di per sé;
-2. re-importare il `__main__` del padre come `__mp_main__`: nel servizio è `src.runtime.local_service`, che
-   importava a livello di modulo FastAPI, `local_app`, pandas, alpaca-py e strategie; inoltre
-   `src/broker/__init__.py` importava `AlpacaClient` (alpaca + pandas) a ogni import di `mt5_process`;
-3. importare `MetaTrader5` ed eseguire `initialize(timeout=5000)`, `terminal_info()`, `account_info()`.
+Prova A/B sul runner Windows (`tests/probes/stdin_spawn.py`, stessa pipe aperta, nessun MT5 installato):
 
-Il budget esterno (5 s) non superava neanche il timeout interno di `initialize` (5 s). Uno script autonomo ha un
-`__main__` leggero e rientra nel budget; il servizio no.
+| Modalità | Esito | Tempo |
+|---|---|---|
+| nessuno legge stdin (script autonomo) | worker avviato, fase `import` | 0,08 s |
+| thread su `sys.stdin` (servizio prima della correzione) | **worker mai avviato**, fase `startup` | timeout 10 s |
+| thread su `shutdown_stream()` (correzione) | worker avviato, fase `import` | 0,08 s |
 
-Prove:
-- **Riproduzione:** `test_slow_worker_startup_is_not_charged_to_the_mt5_deadline` simula un avvio lento del
-  worker; sul codice precedente fallisce con *esattamente* il messaggio dell'utente, sul nuovo passa.
-- **Misura Windows** (runner CI, run 45450273480, codice prima della correzione, senza MT5): risposta del worker
-  in 0,8 s con `__main__` leggero e 1,2 s con quello del servizio, su una macchina pulita senza venv e con
-  disco caldo. Sul PC dell'utente il tempo reale sarà visibile nella diagnostica (`worker.startup_ms`).
-- Limite: non è dimostrato che sul PC dell'utente il totale superi sempre 5 s; è dimostrato che il disegno
-  rendeva il fallimento dipendente dalla velocità della macchina.
+E sul servizio reale (`scripts/check_mt5_api`): prima della correzione (run 45452590605) nessun `ready` in 30 s;
+dopo (run 45454479694) `MT5 API CHECK: PASS`, worker avviato in 125 ms.
 
-Altra incoerenza segnalata, `worker.state = disconnected` con snapshot `connected`: lo stato si aggiornava solo
-chiamando `snapshot()` di `MT5Process`, mai all'esito di `connect`.
+**Cause concorrenti, corrette nello stesso branch.**
+- Budget unico di 5 s per avvio interprete + import + `initialize(timeout=5000)`: anche senza il blocco, il
+  successo dipendeva dalla velocità della macchina (`test_slow_worker_startup_is_not_charged_to_the_mt5_deadline`
+  riproduce esattamente il messaggio sul codice precedente).
+- Il figlio spawn re-importava FastAPI, pandas e alpaca dal `__main__` del servizio (0,8 s → 1,2 s misurati).
+- Stato `disconnected` con snapshot `connected`: lo stato si aggiornava solo da `snapshot()`, mai all'esito di
+  `connect`.
+- Crash del worker riportato come timeout su Windows: l'exit code veniva letto prima che il processo fosse raccolto.
+
+L'alternanza `.venv\Scripts\python.exe` → `Python311\python.exe` è il comportamento normale di
+`multiprocessing` in un venv Windows e non è una causa.
 
 ## Correzione
 
@@ -46,7 +49,7 @@ chiamando `snapshot()` di `MT5Process`, mai all'esito di `connect`.
 | `src/broker/mt5_process.py` | Macchina a stati `disconnected → starting → connecting → connected / unavailable`, un worker al massimo, tutto sotto lock. Il worker invia `ready` (pid, interprete, versione) appena parte; avvio con limite proprio (30 s), `connect` con budget `initialize + 5 s` (10 s), letture 5 s. Esito negativo → worker terminato e motivo preciso conservato. Uscita del worker riportata con exit code, timeout distinto da risposta non valida. Diagnostica (fase, tipo errore, codice MT5, worker, tempi, id richiesta) e log senza segreti. `close` silenzioso su worker già uscito. |
 | `src/broker/mt5_readonly.py` | `connect` restituisce l'esito per fase: `import` (SDK assente nell'interprete del servizio), `terminal_not_running`, `initialize` (con `last_error()` di MT5), `terminal_info`, `account` (solo Demo). Non avvia mai il terminale. pandas/numpy importati solo dove servono. Snapshot con balance, equity, profit, margin, margin_free, margin_level, server, valuta (login escluso). |
 | `src/broker/__init__.py` | `AlpacaClient` caricato in modo pigro (PEP 562). |
-| `src/runtime/local_service.py` | `create_local_app` importato dentro `main()`. |
+| `src/runtime/local_service.py` | **`shutdown_stream()`**: su Windows la pipe di controllo passa a un descrittore privato non ereditabile; fd 0 e `STD_INPUT_HANDLE` diventano NUL, quindi i figli non toccano più la pipe. `create_local_app` importato dentro `main()`. |
 | `src/api/local_app.py`, `schemas.py` | `GET /api/v1/diagnostics/mt5` (sessione locale richiesta). |
 | `frontend/src/App.tsx`, `api.ts`, `styles.css` | Pannello conto MT5 in Portafoglio (N/D; errore di lettura dichiarato, mai "conto vuoto"); diagnostica dopo "Verifica MetaTrader 5". |
 | `scripts/check_mt5_api.py` | Verifica sul servizio reale (sorgente o sidecar) con report senza credenziali, numero di conto o saldi. |
@@ -68,6 +71,8 @@ Job Object dell'app desktop; alla chiusura dell'app Windows lo terminerebbe insi
 | `…::test_state_and_diagnostics_follow_the_verified_connect_outcome` | stato coerente con l'esito; diagnostica senza saldi |
 | `…::test_worker_crash_is_reported_with_its_exit_code` | crash del worker, exit code, riconnessione |
 | `…::test_spawn_child_does_not_reimport_the_heavy_api_stack` | il figlio non carica fastapi/pandas/numpy/alpaca |
+| `test_local_runtime.py::test_mt5_worker_starts_while_the_service_waits_on_its_control_pipe` | regressione Windows del blocco su stdin (esegue la sonda in modalità `fixed`) |
+| `…::test_worker_crash_is_reported_with_its_exit_code` (Windows) | exit code letto dopo la raccolta del processo |
 | `test_mt5_readonly.py::test_connect_reports_every_phase_with_a_precise_reason` | import, terminale assente, initialize con codice, terminal_info, conto reale, errore nativo, successo |
 | `…::test_reader_and_worker_expose_no_write_operation` | nessuna API di scrittura MT5 nel codice |
 | `test_local_modernization.py` (diagnostica, endpoint di scrittura, isolamento 4 contesti) | API protetta, nessun segreto, contesti separati |
@@ -83,7 +88,7 @@ Usare una cartella separata, così il checkout personale e le sue modifiche rest
 
 ```powershell
 git fetch origin
-git worktree add ..\AITradingBot-mt5-check origin/agents/claude-macos-complete-fix-20261124
+git worktree add ..\AITradingBot-mt5-check origin/agents/claude-emergency-delivery-20261124
 Set-Location ..\AITradingBot-mt5-check
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt -r packaging/backend/requirements.txt -r packaging/backend/requirements-mt5.txt
