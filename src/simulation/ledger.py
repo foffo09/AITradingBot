@@ -83,7 +83,7 @@ class SimulationLedger:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.database_path, timeout=15)
+        connection = sqlite3.connect(self.database_path, timeout=5)  # below the 12 s UI request timeout; locked DB still fails closed (AUDIT-L2)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         try:

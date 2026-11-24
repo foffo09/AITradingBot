@@ -19,6 +19,25 @@ struct Readiness {
     instance_id: String,
 }
 
+/// Kill the owned sidecar. On Unix it leads its own process group, so the PyInstaller
+/// worker it forked dies with it instead of being orphaned while blocked (AUDIT-L3).
+fn kill_owned(child: &mut Child) {
+    #[cfg(unix)]
+    {
+        extern "C" {
+            fn kill(pid: i32, sig: i32) -> i32;
+        }
+        // Still unreaped here, so the pid (= pgid) cannot have been reused.
+        if let Ok(pgid) = i32::try_from(child.id()) {
+            unsafe {
+                kill(-pgid, 9);
+            }
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn ready_url(line: &str, owned_pid: u32) -> Result<String, String> {
     let ready: Readiness =
         serde_json::from_str(line).map_err(|_| "Handshake del servizio non valido.")?;
@@ -78,7 +97,10 @@ impl Service {
             return Err("Asset React mancanti: eseguire la build del frontend.".into());
         }
         std::fs::create_dir_all(data).map_err(|_| "Directory dati dell'app non disponibile.")?;
-        let mut child = Command::new(binary)
+        let mut command = Command::new(binary);
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        let mut child = command
             .arg("--port")
             .arg("0")
             .arg("--ui-dir")
@@ -96,8 +118,7 @@ impl Service {
         let stdout = match child.stdout.take() {
             Some(stdout) => stdout,
             None => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_owned(&mut child);
                 return Err("Stdout del servizio non disponibile.".into());
             }
         };
@@ -123,8 +144,7 @@ impl Service {
         match receive.recv_timeout(Duration::from_secs(15)) {
             Ok(Ok(url)) => Ok(Self::from_child(child, url)),
             result => {
-                let _ = child.kill();
-                let _ = child.wait();
+                kill_owned(&mut child);
                 Err(match result {
                     Ok(Err(error)) => error,
                     _ => "Timeout nell'avvio del servizio locale.".into(),
@@ -134,6 +154,11 @@ impl Service {
     }
 
     pub fn shutdown(&mut self) {
+        // Two bounded 5s native reads plus a 5s close and cleanup need up to 18s.
+        self.shutdown_within(Duration::from_secs(20));
+    }
+
+    fn shutdown_within(&mut self, grace: Duration) {
         self.stopping.store(true, Ordering::SeqCst);
         let Ok(mut child) = self.child.lock() else {
             return;
@@ -142,16 +167,14 @@ impl Service {
             let _ = input.write_all(b"shutdown\n");
             let _ = input.flush();
         }
-        // Two bounded 5s native reads plus a 5s close and cleanup need up to 18s.
-        let deadline = Instant::now() + Duration::from_secs(20);
+        let deadline = Instant::now() + grace;
         while Instant::now() < deadline {
             if matches!(child.try_wait(), Ok(Some(_))) {
                 return;
             }
             thread::sleep(Duration::from_millis(30));
         }
-        let _ = child.kill();
-        let _ = child.wait();
+        kill_owned(&mut child);
     }
 }
 impl Drop for Service {
@@ -209,6 +232,28 @@ mod lifecycle_tests {
         let mut service = Service::from_child(command.spawn().unwrap(), "fixture".into());
         service.shutdown();
         assert!(service.child.lock().unwrap().try_wait().unwrap().unwrap().success());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn forced_shutdown_kills_the_whole_owned_process_group() {
+        let marker = std::env::temp_dir().join(format!("aitb-l3-{}", std::process::id()));
+        let mut command = Command::new("sh");
+        // Like the PyInstaller bootloader: a forked worker that ignores TERM and keeps running.
+        command.args(["-c", &format!("(trap '' TERM; exec sleep 60) & echo $! > '{}'; wait", marker.display())]);
+        command.stdin(Stdio::piped());
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
+        let mut service = Service::from_child(command.spawn().unwrap(), "fixture".into());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !marker.is_file() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        let worker = std::fs::read_to_string(&marker).unwrap().trim().to_string();
+        let _ = std::fs::remove_file(&marker);
+        service.shutdown_within(Duration::from_millis(300));
+        thread::sleep(Duration::from_millis(200));
+        let alive = Command::new("kill").args(["-0", &worker]).status().unwrap().success();
+        assert!(!alive, "worker {worker} survived the forced shutdown");
     }
 
     #[test]

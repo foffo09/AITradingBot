@@ -154,3 +154,29 @@ def test_concurrent_same_key_writes_fill_once_per_context(tmp_path):
     for ctx in ('demo', 'simulation'):
         state = c.get(f'/api/v1/state?context={ctx}').json()
         assert len(state['positions']) == 1 and len(state['trades']) == 1
+
+
+def test_locked_database_fails_closed_before_ui_timeout_and_only_for_its_context(tmp_path):
+    """AUDIT-L2: a locked ledger answers 503 well before the 12 s UI timeout and does not stall Simulation."""
+    c = client(tmp_path)
+    account(c, 'demo')
+    account(c, 'simulation', 5000)
+    holder = sqlite3.connect(tmp_path / 'local-v1-demo.sqlite3', isolation_level=None)
+    holder.execute('BEGIN EXCLUSIVE')
+    results = {}
+    def locked_demo():
+        started = time.monotonic()
+        results['demo'] = (c.get('/api/v1/state?context=demo'), time.monotonic() - started)
+    t = threading.Thread(target=locked_demo)
+    t.start()
+    time.sleep(0.3)
+    started = time.monotonic()
+    assert c.get('/api/v1/state?context=simulation').json()['account']['cash'] == 5000
+    assert time.monotonic() - started < 1.0
+    t.join()
+    holder.execute('ROLLBACK')
+    holder.close()
+    response, elapsed = results['demo']
+    assert response.status_code == 503 and 'account' not in response.json()
+    assert elapsed < 10.0, f'locked ledger waited {elapsed:.1f}s, UI gives up at 12s'
+    assert c.get('/api/v1/state?context=demo').json()['account']['cash'] == 10000
