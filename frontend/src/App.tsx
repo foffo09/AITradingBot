@@ -10,6 +10,7 @@ import {
 import {
   api,
   pendingTrade,
+  restorePendingTrade,
   type Context,
   type State,
   type Market,
@@ -415,6 +416,14 @@ function LocalLedger({
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [pending, setPending] = useState(() => pendingTrade(context));
+  useEffect(() => {
+    if (context !== "demo" && context !== "simulation") return;
+    const controller = new AbortController();
+    restorePendingTrade(context, controller.signal)
+      .then(() => setPending(pendingTrade(context)))
+      .catch(() => { /* Unreachable service: the existing error banner already reports it. */ });
+    return () => controller.abort();
+  }, [context]);
   if (context === "paper" || context === "mt5")
     return (
       <p className="notice">
@@ -837,6 +846,7 @@ function Watchlist({
 const connectionLabels: Record<string, string> = {
   local: "Ledger locale", connected: "Collegato (sola lettura)", disconnected: "Non collegato",
   unsupported: "Non supportato su questa piattaforma", busy: "Occupato (lettura broker in corso)",
+  unavailable: "Non disponibile (riconnettere)",
 };
 function SystemPanel({ revision }: { revision: number }) {
   const [status, setStatus] = useState<SystemStatus | null>(null),

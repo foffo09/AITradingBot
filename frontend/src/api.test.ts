@@ -174,7 +174,9 @@ it('conserva la stessa chiave dopo esito incerto e blocca payload diversi fino a
   localStorage.clear();
   const bodies: Record<string, unknown>[] = [];
   let fail = true;
-  vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+    // The service-side pending record is stored first; only the trade request itself is uncertain here.
+    if (url.includes('/pending-trade')) return new Response(JSON.stringify({api_version: '1', context: 'demo', pending: null}));
     bodies.push(JSON.parse(init.body as string));
     if (fail) throw new TypeError('network');
     return new Response(JSON.stringify({ api_version: '1', context: 'demo', connection: {status:'local'}, account: null, positions: [], orders: [], trades: [], automation: {state:'STOPPED'} }));
@@ -203,15 +205,48 @@ it('conserva serie Python e rifiuta indicatori con punti non finiti o fuori dall
 it('libera una richiesta dopo rifiuto definitivo, conserva 409 ambiguo', async () => {
   const {api} = await import('./api');
   localStorage.clear();
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', {status:409, headers:{'X-Request-Outcome':'rejected'}})));
+  const pendingOk = () => new Response(JSON.stringify({api_version: '1', context: 'demo', pending: null}));
+  const trades = (response: () => Response) => vi.fn(async (url: string) => url.includes('/pending-trade') ? pendingOk() : response());
+  vi.stubGlobal('fetch', trades(() => new Response('{}', {status:409, headers:{'X-Request-Outcome':'rejected'}})));
   await expect(api.trade('demo','AAPL','buy',10000)).rejects.toThrow();
   expect(localStorage.getItem('aitb-pending-trade-demo')).toBeNull();
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', {status:409})));
+  vi.stubGlobal('fetch', trades(() => new Response('{}', {status:409})));
   await expect(api.trade('demo','AAPL','buy',1)).rejects.toThrow();
   expect(localStorage.getItem('aitb-pending-trade-demo')).not.toBeNull();
   localStorage.clear();
 });
 
+
+it('non invia l\'operazione se il servizio non registra la richiesta in sospeso', async () => {
+  const {api} = await import('./api');
+  localStorage.clear();
+  const urls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    urls.push(url);
+    return new Response(JSON.stringify({detail: 'Another uncertain virtual trade is pending; retry it first.'}), {status: 409, headers: {'X-Request-Outcome': 'rejected'}});
+  }));
+  await expect(api.trade('demo', 'AAPL', 'buy', 1)).rejects.toThrow('retry it first');
+  expect(urls).toEqual(['/api/v1/pending-trade']);
+  expect(localStorage.getItem('aitb-pending-trade-demo')).toBeNull();
+});
+
+it('ripristina dal servizio la richiesta incerta dopo un riavvio su nuova porta', async () => {
+  const {api, restorePendingTrade, pendingTrade} = await import('./api');
+  localStorage.clear();
+  const record = {context: 'demo', symbol: 'AAPL', side: 'buy', quantity: 1, idempotency_key: '0b6c2d5e-6a52-4c58-9a4b-8d2b1d6f1e11'};
+  const sent: Record<string, unknown>[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/pending-trade') && !init?.method) return new Response(JSON.stringify({api_version: '1', context: 'demo', pending: record}));
+    if (url.includes('/local-trades')) sent.push(JSON.parse(String(init?.body)));
+    return new Response(JSON.stringify({api_version: '1', context: 'demo', connection: {status: 'local'}, account: null, positions: [], orders: [], trades: [], automation: {state: 'STOPPED'}}));
+  }));
+  await restorePendingTrade('demo');
+  expect(pendingTrade('demo')).toEqual({symbol: 'AAPL', side: 'buy', quantity: 1});
+  await expect(api.trade('demo', 'AAPL', 'buy', 2)).rejects.toThrow('incerto');
+  await api.trade('demo', 'AAPL', 'buy', 1);
+  expect(sent).toEqual([record]);
+  expect(localStorage.getItem('aitb-pending-trade-demo')).toBeNull();
+});
 
 describe("preferenze dal servizio", () => {
   it.each([

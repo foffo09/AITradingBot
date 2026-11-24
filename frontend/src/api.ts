@@ -333,6 +333,19 @@ export function pendingTrade(c: Context): {symbol: string; side: string; quantit
     return {symbol:payload.symbol, side:String(payload.side),quantity:payload.quantity};
   } catch { return null; }
 }
+export async function restorePendingTrade(c: Context, signal?: AbortSignal): Promise<void> {
+  const d = version(await request(`/pending-trade?${query(c)}`, { signal }));
+  if (d.context !== c) invalid();
+  if (d.pending === null) return;
+  const p = object(d.pending);
+  if (string(p.context) !== c || typeof p.quantity !== "number") invalid();
+  const payload = JSON.stringify({ context: c, symbol: string(p.symbol), side: string(p.side), quantity: p.quantity });
+  try {
+    localStorage.setItem(`aitb-pending-trade-${c}`, JSON.stringify({ payload, idempotency_key: string(p.idempotency_key) }));
+  } catch {
+    /* Without storage the retry cannot reuse the key; the service still blocks a different request. */
+  }
+}
 export const api = {
   preferences: async (signal?: AbortSignal) => {
     const result = parsePreferences(await request("/preferences", {signal}));
@@ -395,6 +408,11 @@ export const api = {
     const pending = saved ? object(JSON.parse(saved)) : { payload, idempotency_key: crypto.randomUUID() };
     if (pending.payload !== payload || typeof pending.idempotency_key !== "string")
       throw new ApiError("Esito incerto: ripeti la stessa operazione prima di modificarla; verifica lo storico.");
+    // The service keeps the record too: browser storage is per port and is lost when the app restarts.
+    // If this fails nothing has been sent, so no uncertain state is created.
+    await request("/pending-trade", {
+      method: "PUT", body: JSON.stringify({context: c, symbol, side, quantity, idempotency_key: pending.idempotency_key}),
+    });
     localStorage.setItem(storageKey, JSON.stringify(pending));
     try {
       const result = parseState(await request("/local-trades", {

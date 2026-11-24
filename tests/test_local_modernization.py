@@ -138,3 +138,81 @@ def test_paper_refresh_failure_hides_previous_values(tmp_path, monkeypatch):
         assert stale not in failed.text
     assert body['automation']['state'] == 'STOPPED'
     assert len(fetches) == 2
+
+
+@pytest.mark.parametrize('body', [{'training_bars': 190}, {'training_bars': 195}, {'training_bars': 200}])
+def test_walk_forward_auto_test_window_below_minimum_is_a_clear_422(tmp_path, body):
+    r = client(tmp_path).post('/api/v1/walk-forward', json={'context': 'demo', 'symbol': 'AAPL', **body}, headers=H)
+    assert r.status_code == 422
+    assert 'at least 12 bars each' in r.json()['detail']
+
+
+def test_system_reports_mt5_state_without_talking_to_the_terminal(tmp_path, monkeypatch):
+    from src.broker import mt5_process
+    c = client(tmp_path)
+    expected = 'unsupported' if not mt5_process._SUPPORTED else 'disconnected'
+    assert c.get('/api/v1/system').json()['contexts']['mt5']['connection'] == expected
+    monkeypatch.setattr(mt5_process, '_SUPPORTED', True)
+    process = mt5_process.MT5Process()
+    assert process.state == 'disconnected'
+    process._process = object()  # a live worker after connect()
+    assert process.state == 'connected'
+    process._status = 'unavailable'
+    assert process.state == 'unavailable'
+
+
+def _trade_body(context='demo', quantity=1, key=None, side='buy'):
+    from uuid import uuid4
+    return {'context': context, 'symbol': 'AAPL', 'side': side, 'quantity': quantity, 'idempotency_key': key or str(uuid4())}
+
+
+def test_uncertain_trade_survives_restart_and_blocks_duplicates(tmp_path):
+    """Finding 6: response lost after commit, app restarted on a new port (fresh browser storage)."""
+    c = client(tmp_path)
+    assert c.post('/api/v1/local-account', json={'context': 'demo', 'initial_cash': 10000}, headers=H).status_code == 200
+    body = _trade_body()
+    assert c.put('/api/v1/pending-trade', json=body, headers=H).json()['pending'] == body
+    # The trade is booked, but imagine the response never reached the UI; restart = new service, new origin storage.
+    from src.api import local_app
+    original = local_app.SimulationLedger.buy
+    def booked_then_lost(self, **kwargs):
+        original(self, **kwargs)
+        raise OSError('response lost')
+    local_app.SimulationLedger.buy = booked_then_lost
+    try:
+        assert c.post('/api/v1/local-trades', json=body, headers=H).status_code == 503
+    finally:
+        local_app.SimulationLedger.buy = original
+    restarted = client(tmp_path)
+    assert restarted.get('/api/v1/pending-trade?context=demo').json()['pending'] == body, 'service remembers it'
+    fresh = _trade_body()
+    blocked = restarted.post('/api/v1/local-trades', json=fresh, headers=H)
+    assert blocked.status_code == 409 and blocked.headers['X-Request-Outcome'] == 'rejected'
+    retried = restarted.post('/api/v1/local-trades', json=body, headers=H)
+    assert retried.status_code == 200 and retried.json()['fill']['duplicate'] is True
+    assert len(retried.json()['positions']) == 1, 'exactly one virtual fill'
+    assert restarted.get('/api/v1/pending-trade?context=demo').json()['pending'] is None
+    assert restarted.post('/api/v1/local-trades', json=fresh, headers=H).status_code == 200
+
+
+def test_pending_trade_is_cleared_on_definitive_rejection_and_scoped_per_context(tmp_path):
+    c = client(tmp_path)
+    for context in ('demo', 'simulation'):
+        c.post('/api/v1/local-account', json={'context': context, 'initial_cash': 10000}, headers=H)
+    huge = _trade_body(quantity=10000)
+    c.put('/api/v1/pending-trade', json=huge, headers=H)
+    assert c.post('/api/v1/local-trades', json=_trade_body('simulation'), headers=H).status_code == 200, 'other context unaffected'
+    rejected = c.post('/api/v1/local-trades', json=huge, headers=H)
+    assert rejected.status_code == 409 and rejected.headers['X-Request-Outcome'] == 'rejected'
+    assert c.get('/api/v1/pending-trade?context=demo').json()['pending'] is None
+    other = _trade_body()
+    c.put('/api/v1/pending-trade', json=other, headers=H)
+    assert c.put('/api/v1/pending-trade', json=_trade_body(), headers=H).status_code == 409, 'one pending per context'
+    assert c.put('/api/v1/pending-trade', json=other, headers=H).status_code == 200, 'same record is idempotent'
+    changed = {**other, 'quantity': 2}
+    assert c.post('/api/v1/local-trades', json=changed, headers=H).headers.get('X-Request-Outcome') != 'rejected'
+    assert c.put('/api/v1/pending-trade', json={**other, 'symbol': 'NOPE'}, headers=H).status_code == 422
+    assert c.put('/api/v1/pending-trade', json=other, headers={'Origin': ORIGIN}).status_code == 403
+    (tmp_path / 'local-v1-demo-pending-trade.json').write_text('{bad')
+    assert c.get('/api/v1/pending-trade?context=demo').status_code == 503
+    assert c.post('/api/v1/local-trades', json=other, headers=H).status_code == 503, 'unreadable record blocks, never guesses'

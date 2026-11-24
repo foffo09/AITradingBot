@@ -274,7 +274,7 @@ class WalkForwardResponse(Versioned):
 
 
 class ContextStatus(Output):
-    connection: Literal['local', 'connected', 'disconnected', 'unsupported', 'busy']
+    connection: Literal['local', 'connected', 'disconnected', 'unsupported', 'unavailable', 'busy']
     ledger: Literal['present', 'absent', 'not_applicable']
     automation: str
 
@@ -297,3 +297,8 @@ class WatchlistBody(Output):
 class WatchlistResponse(Versioned):
     symbols: list[str]
     stored: bool
+
+
+class PendingTradeResponse(Versioned):
+    context: LocalContext
+    pending: Record | None

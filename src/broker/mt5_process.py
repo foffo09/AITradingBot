@@ -52,6 +52,15 @@ class MT5Process:
         self._status = 'disconnected'
         self._reason = 'Explicit terminal connection required.'
 
+    @property
+    def state(self):
+        """Cheap local view for status pages: never talks to the terminal worker."""
+        if not _SUPPORTED:
+            return 'unsupported'
+        if self._process is not None and self._status != 'unavailable':
+            return 'connected'
+        return 'unavailable' if self._status == 'unavailable' else 'disconnected'
+
     def _dispose(self):
         process, connection = self._process, self._connection
         self._connection = None

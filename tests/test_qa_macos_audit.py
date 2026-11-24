@@ -90,7 +90,7 @@ def test_corrupt_database_reports_unavailable_and_recovers_without_restart(tmp_p
     assert c.get('/api/v1/state?context=demo').json()['account']['cash'] == 10000
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason='root ignores directory permissions')
+@pytest.mark.skipif(os.name == 'nt' or os.geteuid() == 0, reason='chmod does not restrict Windows ACLs; root ignores permissions')
 def test_read_only_data_directory_fails_closed(tmp_path):
     data = tmp_path / 'ro'
     data.mkdir()
@@ -180,3 +180,38 @@ def test_locked_database_fails_closed_before_ui_timeout_and_only_for_its_context
     assert response.status_code == 503 and 'account' not in response.json()
     assert elapsed < 10.0, f'locked ledger waited {elapsed:.1f}s, UI gives up at 12s'
     assert c.get('/api/v1/state?context=demo').json()['account']['cash'] == 10000
+
+
+def test_slow_broker_read_answers_busy_instead_of_queueing(tmp_path, monkeypatch):
+    """AUDIT-M1b: a second Paper request waits at most ~2 s, then 503 busy; Demo is unaffected."""
+    slow_paper(monkeypatch)
+    c = client(tmp_path)
+    account(c, 'demo')
+    t = threading.Thread(target=lambda: c.post('/api/v1/connections/paper', headers=H))
+    t.start()
+    time.sleep(0.3)
+    started = time.monotonic()
+    busy = c.get('/api/v1/state?context=paper')
+    waited = time.monotonic() - started
+    assert busy.status_code == 503 and 'no cached or fallback' in busy.json()['detail'].lower()
+    assert 1.5 < waited < 3.0
+    assert c.get('/api/v1/state?context=demo').status_code == 200
+    t.join()
+
+
+def test_hung_paper_cannot_exhaust_the_worker_pool_of_the_real_server():
+    """AUDIT-M1b on the real uvicorn sidecar: 60 queued Paper polls (minutes of UI polling) must not stall Demo."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    if not (root / 'frontend' / 'dist' / 'index.html').is_file():
+        pytest.skip('React build required (npm run build)')
+    probe = root / 'tests' / 'probes' / 'broker_contention.py'
+    result = subprocess.run([sys.executable, str(probe), str(root), '20', '60'], capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr[-2000:]
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report['demo_status'] == 200 and report['demo_cash'] == 1000
+    assert report['demo_seconds'] < 2.0, report
+    assert set(report['paper_codes']) <= {'200', '503'}, report
