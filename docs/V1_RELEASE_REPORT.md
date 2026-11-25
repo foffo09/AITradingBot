@@ -4,7 +4,9 @@
 condizioni che nessun agente può soddisfare da solo:
 1. la prova MT5 reale su Windows 11;
 2. la revisione di Codex sulle modifiche di Claude;
-3. la decisione del proprietario sulla redistribuzione dell'SDK MetaTrader5 e sulla licenza.
+3. la licenza del progetto, la firma e l'approvazione del merge da parte del proprietario.
+
+L'SDK MetaTrader5 viene incluso nell'installer Windows (decisione del proprietario, 25/11/2026).
 
 Nessun merge su `main`, nessuna release. Trading reale disattivato, MT5 solo lettura,
 `order_submission = disabled`, automazione `STOPPED`.
@@ -20,7 +22,9 @@ Nessun merge su `main`, nessuna release. Trading reale disattivato, MT5 solo let
   - `47f91d0`: test diagnostica;
   - `a404e82`: script di verifica MT5 in 9 passi;
   - `f54279d`: versione di schema e backup del ledger;
-  - `9e0898d`: NOTICE con MetaTrader5.
+  - `9e0898d`: NOTICE con MetaTrader5;
+  - `1aeba37`: chiusura del servizio su Windows senza traceback;
+  - build Windows che rifiuta di produrre l'installer senza l'SDK MetaTrader5.
 - **Non integrati**, perché non pubblicati sul remote e quindi non revisionabili: branch Codex
   `agents/codex-v1-integration-20261124`, commit `11696c1` (handshake versionato UI/sidecar) e `b7eb4b3`
   (migrazioni SQLite Codex).
@@ -40,7 +44,7 @@ Correzioni precedenti (R1–R7: worker MT5 su Windows, SDK nel `.venv` e nel sid
 `EMERGENCY_DELIVERY_REPORT.md`.
 
 ## Test sull'albero candidato (macOS ARM, 25/11/2026)
-- **Python:** pytest 924 passati / 2 saltati (solo Windows) · Ruff ok.
+- **Python:** pytest 926 passati / 2 saltati (solo Windows) · Ruff ok.
 - **Frontend:** Vitest 82 · `tsc` ok · `npm run lint` ok · `npm run build` ok.
 - **CI Windows/macOS:** sullo SHA finale della PR #11, risultato nell'issue #9. Non si usano risultati di
   commit precedenti.
@@ -68,8 +72,6 @@ Correzioni precedenti (R1–R7: worker MT5 su Windows, SDK nel `.venv` e nel sid
    correzione dell'ora del server su quella prova.
 2. **Codex:** revisione del branch di stabilizzazione e di R1–R8; pubblicazione di `11696c1`/`b7eb4b3` se
    ancora utili.
-3. **Proprietario:** licenza del progetto; via libera alla redistribuzione di MetaTrader5 nell'installer
-   Windows (in alternativa: installer senza SDK, installato dall'utente con `pip`); firma; approvazione del
-   merge.
+3. **Proprietario:** licenza del progetto; firma; approvazione del merge.
 
 Installazione, aggiornamento e backup: `INSTALLATION_WINDOWS.md`, `INSTALLATION_MACOS.md`.

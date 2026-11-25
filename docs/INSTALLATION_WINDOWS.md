@@ -37,7 +37,8 @@ npm run build
 npm run desktop:build -- --bundles nsis
 ```
 
-Installer: `src-tauri\target\release\bundle\nsis\*.exe`. Senza firma Authenticode SmartScreen mostra un
+L'installer include l'SDK MetaTrader5: se manca nel `.venv`, `build_backend.py` si ferma con un messaggio
+invece di produrre un installer senza MT5. Installer: `src-tauri\target\release\bundle\nsis\*.exe`. Senza firma Authenticode SmartScreen mostra un
 avviso: normale per una build di collaudo. Dati: `%APPDATA%\it.aitradingbot.desktop\local-service`.
 Dettagli e verifica pacchetto: `DESKTOP_RELEASE_GUIDE.md`.
 

@@ -39,3 +39,18 @@ def test_frozen_diagnostics_publish_module_names_only():
     diagnostic = startup_failure("secret-key-value\nModuleNotFoundError: No module named 'backports'\nprivate traceback")
     assert diagnostic == 'Frozen startup failed: missing module backports.'
     assert startup_failure('sensitive unknown error') == 'Frozen startup failed; detailed diagnostics withheld.'
+
+
+def test_windows_build_refuses_to_ship_without_the_mt5_sdk(monkeypatch):
+    path = Path(__file__).parents[1] / 'scripts' / 'build_backend.py'
+    spec = importlib.util.spec_from_file_location('backend_build', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module.importlib.util, 'find_spec', lambda name: None)
+    monkeypatch.setattr(module, 'native_target', lambda: 'x86_64-pc-windows-msvc')
+    assert module.mt5_sdk_missing()
+    monkeypatch.setattr(module, 'native_target', lambda: 'aarch64-apple-darwin')
+    assert not module.mt5_sdk_missing()
+    monkeypatch.setattr(module, 'native_target', lambda: 'x86_64-pc-windows-msvc')
+    monkeypatch.setattr(module.importlib.util, 'find_spec', lambda name: object())
+    assert not module.mt5_sdk_missing()

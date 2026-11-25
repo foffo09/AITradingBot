@@ -65,7 +65,7 @@ def rust_components():
                   if p['id'] in used and p['source'] is not None)
 
 
-WINDOWS_NOTE = "Inventario della piattaforma di build. Il sidecar Windows x64 include anche `MetaTrader5` 5.0.6231 (MetaQuotes Ltd.; licenza dichiarata MIT nei metadati PyPI; contiene un modulo binario nativo; testo della licenza non verificato nel pacchetto): rigenerare questo file su Windows e far verificare al proprietario il diritto di redistribuirlo prima di pubblicare l'installer."
+WINDOWS_NOTE = "Inventario della piattaforma di build. Il sidecar Windows x64 include anche `MetaTrader5` 5.0.6231 (MetaQuotes Ltd.; licenza dichiarata MIT nei metadati PyPI; contiene un modulo binario nativo; testo della licenza non verificato nel pacchetto). Il proprietario ha deciso di includerlo nell'installer (25/11/2026); rigenerare questo file su Windows prima di pubblicare l'installer."
 
 
 def table(title, rows):

@@ -2,7 +2,7 @@
 
 Inventario generato da `scripts/third_party_notices.py` dai metadati dei pacchetti. **Non è una verifica legale**: licenze, NOTICE e obblighi di redistribuzione vanno controllati prima della distribuzione. Componenti con licenza non dichiarata nei metadati: nessuno.
 
-Inventario della piattaforma di build. Il sidecar Windows x64 include anche `MetaTrader5` 5.0.6231 (MetaQuotes Ltd.; licenza dichiarata MIT nei metadati PyPI; contiene un modulo binario nativo; testo della licenza non verificato nel pacchetto): rigenerare questo file su Windows e far verificare al proprietario il diritto di redistribuirlo prima di pubblicare l'installer.
+Inventario della piattaforma di build. Il sidecar Windows x64 include anche `MetaTrader5` 5.0.6231 (MetaQuotes Ltd.; licenza dichiarata MIT nei metadati PyPI; contiene un modulo binario nativo; testo della licenza non verificato nel pacchetto). Il proprietario ha deciso di includerlo nell'installer (25/11/2026); rigenerare questo file su Windows prima di pubblicare l'installer.
 
 ## Interfaccia (npm, produzione) (5)
 

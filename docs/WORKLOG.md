@@ -1,5 +1,10 @@
 # Registro del lavoro
 
+## 25 novembre (sera) — Claude: SDK MetaTrader5 nell'installer Windows
+
+Decisione del proprietario: l'installer Windows include l'SDK MetaTrader5. `build_backend.py` ora si ferma su
+Windows x64 se l'SDK manca, così non esce un installer senza MT5. NOTICE, guida Windows e report aggiornati.
+
 ## 25 novembre (pomeriggio) — Claude: stabilizzazione v1 (issue #9)
 
 Codex senza risposta né branch pubblicati: presi in carico (annunciato nell'issue) formatter, test Windows

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 from pathlib import Path
 import platform
 import subprocess
@@ -40,6 +41,11 @@ def build_command(output: Path) -> list[str]:
             str(ROOT / 'packaging/backend/entrypoint.py')]
 
 
+def mt5_sdk_missing() -> bool:
+    """The Windows x64 installer must bundle the MT5 SDK (owner decision, 25 Nov 2026)."""
+    return native_target() == 'x86_64-pc-windows-msvc' and importlib.util.find_spec('MetaTrader5') is None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'dist' / 'backend')
@@ -50,6 +56,8 @@ def main():
         import shlex
         print(shlex.join(command))
         return
+    if mt5_sdk_missing():
+        sys.exit('MetaTrader5 SDK not installed: run pip install -r packaging/backend/requirements-mt5.txt, then rebuild.')
     subprocess.run(command, cwd=ROOT, check=True)
 
 

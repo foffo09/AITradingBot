@@ -30,12 +30,13 @@ with X-Local-Request:1. Mutations require exact Origin plus X-Local-Request:1 an
 an HttpOnly SameSite=strict cookie. No token in argv, JSON, URL or frontend storage.
 
 The executable is unsigned. macOS signing/notarization and Windows signing are
-separate release steps. MetaTrader5 is optional and Windows-only; this bundle
+separate release steps. MetaTrader5 is Windows-only. The Windows x64 bundle must
+include it: `scripts/build_backend.py` refuses to build there without the SDK. The bundle
 never installs a terminal and has no MT5 trading method. On Windows an explicit
 POST connection invokes SDK initialize(timeout=5000), which may launch the
-installed terminal and use its last configured account. Install optional
-`packaging/backend/requirements-mt5.txt` before the native Windows build to enable
-terminal reads. macOS never imports that module. The SDK documents the initialization
+installed terminal and use its last configured account. Install
+`packaging/backend/requirements-mt5.txt` (already part of `requirements-dev.txt`) before the
+native Windows build. macOS never imports that module. The SDK documents the initialization
 timeout but exposes no per-call timeout for account/positions/orders/bars/ticks;
 a hard deadline for native reads or shutdown is not guaranteed. Process isolation
 would be needed before promising that deadline. No terminal or genuine account
