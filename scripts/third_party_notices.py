@@ -65,6 +65,9 @@ def rust_components():
                   if p['id'] in used and p['source'] is not None)
 
 
+WINDOWS_NOTE = "Inventario della piattaforma di build. Il sidecar Windows x64 include anche `MetaTrader5` 5.0.6231 (MetaQuotes Ltd.; licenza dichiarata MIT nei metadati PyPI; contiene un modulo binario nativo; testo della licenza non verificato nel pacchetto): rigenerare questo file su Windows e far verificare al proprietario il diritto di redistribuirlo prima di pubblicare l'installer."
+
+
 def table(title, rows):
     lines = [f'## {title} ({len(rows)})', '', '| Componente | Versione | Licenza dichiarata |', '|---|---|---|']
     lines += [f'| {name} | {version} | {license_} |' for name, version, license_ in rows]
@@ -80,6 +83,7 @@ def main():
     print('Inventario generato da `scripts/third_party_notices.py` dai metadati dei pacchetti. **Non è una verifica legale**: '
           'licenze, NOTICE e obblighi di redistribuzione vanno controllati prima della distribuzione. '
           f'Componenti con licenza non dichiarata nei metadati: {", ".join(unknown) or "nessuno"}.\n')
+    print(WINDOWS_NOTE + '\n')
     print('\n'.join(table(title, group) for title, group in rows.items()), end='')
     return 0
 
