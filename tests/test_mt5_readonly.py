@@ -16,7 +16,7 @@ def terminal(monkeypatch):
         account=SimpleNamespace(trade_mode=0, login=123, server='Offline broker', balance=1000., equity=1001., currency='USD'),
         connected=True, positions=(), orders=(),
         tick=SimpleNamespace(bid=100., ask=101., time_msc=int(now.timestamp() * 1000)),
-        rows=rows, initializations=[], shutdowns=[],
+        rows=rows, initializations=[], shutdowns=[], symbol=SimpleNamespace(digits=5),
     )
     module = SimpleNamespace(
         initialize=lambda **kwargs: state.initializations.append(kwargs) or True,
@@ -27,6 +27,7 @@ def terminal(monkeypatch):
         orders_get=lambda: state.orders,
         symbol_info_tick=lambda symbol: state.tick,
         copy_rates_from_pos=lambda *args: state.rows,
+        symbol_info=lambda symbol: state.symbol,
         TIMEFRAME_D1=1440, ACCOUNT_TRADE_MODE_DEMO=0,
     )
     monkeypatch.setattr(mt5_readonly, 'sys', SimpleNamespace(platform='win32'))
@@ -102,6 +103,19 @@ def test_server_time_ahead_of_utc_is_reported_not_converted(terminal):
     state.rows['time'][0] = int(ahead.timestamp())
     with pytest.raises(mt5_readonly.MT5ReadError, match=r'\+7\d{3} s ahead of UTC'):
         reader.market_data('AAPL', '1Day')
+
+
+@pytest.mark.parametrize('digits,expected', [(5, 5), (3, 3), (0, 0), (None, None), (True, None), (11, None), (-1, None)])
+def test_bars_carry_only_broker_declared_price_digits(terminal, digits, expected):
+    reader, state = terminal
+    state.symbol = SimpleNamespace(digits=digits)
+    assert reader.market_data('AAPL', '1Day').attrs['price_digits'] == expected
+
+
+def test_missing_symbol_info_leaves_precision_unknown(terminal):
+    reader, state = terminal
+    state.symbol = None
+    assert reader.market_data('AAPL', '1Day').attrs['price_digits'] is None
 
 
 def test_missing_quote_is_not_synthetic(terminal):

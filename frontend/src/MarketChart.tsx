@@ -9,13 +9,20 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import type { Bar, Indicator } from "./api";
-import { instant, number } from "./format";
+import { instant, number, price, priceDigits } from "./format";
+
+// shortcut: exponent notation (e.g. 1.5e-7) counts only mantissa decimals; fine while MT5/demo declare digits.
+const decimals = (value: number) => {
+  const [, fraction = ""] = String(value).split("e")[0].split(".");
+  return Number.isFinite(value) ? fraction.length : 0;
+};
 const EMPTY_INDICATORS: Indicator[] = [];
 export default function MarketChart({
   bars,
   identity,
   theme,
   priceUnit = "USD",
+  priceDigits: declaredDigits = null,
   volumeUnit = "unità",
   indicators = EMPTY_INDICATORS,
 }: {
@@ -24,6 +31,7 @@ export default function MarketChart({
   identity: string;
   theme: string;
   priceUnit?: string;
+  priceDigits?: unknown;
   volumeUnit?: string;
 }) {
   const host = useRef<HTMLDivElement>(null),
@@ -33,6 +41,8 @@ export default function MarketChart({
     null,
   );
   const [enabled, setEnabled] = useState<string[]>([]);
+  // Declared instrument precision; otherwise the decimals actually present in the closes (max 8).
+  const digits = priceDigits(declaredDigits) ?? Math.min(8, Math.max(0, ...bars.map((b) => decimals(b.close))));
   useEffect(() => {
     if (!host.current || !bars.length) return;
     const light = theme === "light";
@@ -57,6 +67,7 @@ export default function MarketChart({
     });
     chart.current = c;
     const candle = c.addSeries(CandlestickSeries, {
+      priceFormat: { type: "price", precision: digits, minMove: 10 ** -digits },
       upColor: "#35c6a4",
       downColor: "#f3778d",
       wickUpColor: "#35c6a4",
@@ -102,7 +113,7 @@ export default function MarketChart({
       c.remove();
       chart.current = null;
     };
-  }, [bars, identity, theme, indicators, enabled]);
+  }, [bars, identity, theme, indicators, enabled, digits]);
   const current =
     (hover?.identity === identity
       ? bars.find((bar) => bar.time === hover.time)
@@ -128,16 +139,16 @@ export default function MarketChart({
       <div className="chart-toolbar">
         <div className="ohlc" aria-live="off">
           <span>
-            O <b>{number(current?.open)}</b>
+            O <b>{price(current?.open, digits)}</b>
           </span>
           <span>
-            H <b>{number(current?.high)}</b>
+            H <b>{price(current?.high, digits)}</b>
           </span>
           <span>
-            L <b>{number(current?.low)}</b>
+            L <b>{price(current?.low, digits)}</b>
           </span>
           <span>
-            C <b>{number(current?.close)}</b>
+            C <b>{price(current?.close, digits)}</b>
           </span>
           <span>
             Vol <b>{number(current?.volume)}</b>

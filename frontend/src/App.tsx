@@ -23,7 +23,7 @@ import {
   type SystemStatus,
   type Mt5Diagnostics,
 } from "./api";
-import { instant, number, text } from "./format";
+import { instant, number, text, price } from "./format";
 import MarketChart from "./MarketChart";
 const contexts: Record<Context, string> = {
   demo: "Demo",
@@ -1213,13 +1213,13 @@ export default function App() {
         {selectMarket}
       </div>
       <div className="quote-row">
-        <strong>{number(market?.bars.at(-1)?.close, priceCurrency)}</strong>
+        <strong>{price(market?.bars.at(-1)?.close, market?.metadata?.price_digits, priceCurrency)}</strong>
         <span>Ultimo close storico</span>
         <span className="badge muted">{market?.source ?? "Fonte N/D"}</span>
       </div>
       <div className="quote-detail">
-        <span>Bid {number(market?.quote?.bid, priceCurrency)}</span>
-        <span>Ask {number(market?.quote?.ask, priceCurrency)}</span>
+        <span>Bid {price(market?.quote?.bid, market?.metadata?.price_digits, priceCurrency)}</span>
+        <span>Ask {price(market?.quote?.ask, market?.metadata?.price_digits, priceCurrency)}</span>
         <span>Quota: {instant(market?.quote?.timestamp)}</span>
         <span>Fonte quota: {text(market?.quote?.source)}</span>
       </div>
@@ -1231,6 +1231,7 @@ export default function App() {
         identity={`${context}/${symbol}/${interval}`}
         theme={theme}
         priceUnit={priceCurrency}
+        priceDigits={market?.metadata?.price_digits}
         volumeUnit={volumeUnit}
       />
       <p className="metadata">

@@ -217,7 +217,13 @@ class MT5ReadOnly:
             ):
                 raise MT5ReadError('Terminal bars contain invalid OHLCV or timestamps.')
             data['is_synthetic'] = False
-            data.attrs.update(source=f'{SOURCE} (broker bars; tick volume)', quality='real', volume_unit='ticks', interval=interval, fetched_at=pd.Timestamp.now(tz='UTC').isoformat())
+            try:
+                digits = terminal.symbol_info(symbol).digits
+            except Exception:
+                digits = None
+            # Broker-declared quote precision (EURUSD 5, USDJPY 3); absent or odd values stay unknown.
+            price_digits = digits if isinstance(digits, Integral) and not isinstance(digits, bool) and 0 <= digits <= 10 else None
+            data.attrs.update(source=f'{SOURCE} (broker bars; tick volume)', quality='real', volume_unit='ticks', interval=interval, fetched_at=pd.Timestamp.now(tz='UTC').isoformat(), price_digits=price_digits)
             return data
         except MT5ReadError:
             raise

@@ -358,7 +358,7 @@ def create_local_app(*, data_dir: Path, port: int, ui_dir: Path | None = None) -
             # Demo timestamps follow the requested interval; values remain explicitly fictitious.
             frequency = {'1Min': 'min', '5Min': '5min', '15Min': '15min', '1Hour': 'h', '1Day': 'D', '1Week': '7D'}[interval]
             data['timestamp'] = pd.date_range(end=pd.Timestamp.now(tz='UTC').floor('s'), periods=len(data), freq=frequency)
-            data.attrs.update(source='synthetic-demo', quality='synthetic', interval=interval)
+            data.attrs.update(source='synthetic-demo', quality='synthetic', interval=interval, price_digits=2)
             return data
         if context == 'paper' and paper is not None:
             return paper.get_market_data(symbol, timeframe=interval, limit=1000)
