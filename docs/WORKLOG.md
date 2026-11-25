@@ -1,5 +1,13 @@
 # Registro del lavoro
 
+## 25 novembre — Claude: review del formatter Codex, rischio ora server MT5, documenti v1 (issue #9)
+
+Revisione del diff formatter pubblicato da Codex nell'issue #9 (branch Codex non sul remote): timestamp ok
+(sonda su tutte le risposte API, nessun orario senza offset), precisione insufficiente per forex a 5 decimali.
+R8: ora del server MT5 trattata come UTC; errori con scarto misurato, `check_mt5_api --symbol` legge quota e
+barre. Nuovi `V1_RELEASE_REPORT.md`, `INSTALLATION_WINDOWS.md`, `INSTALLATION_MACOS.md`. Decisione: v1.0 non
+ancora approvata (MT5 reale, revisione Codex, formato prezzi, schema SQLite). Branch `agents/claude-v1-review-20261124`.
+
 ## 24 novembre — Claude: audit macOS, correzioni M1/L1–L6, dismissione Streamlit (issue #9)
 
 Codex irraggiungibile (TLS verso chatgpt.com intercettato dalla rete); lavoro eseguito da Claude su

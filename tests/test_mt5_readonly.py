@@ -93,6 +93,17 @@ def test_stale_and_future_quote_are_rejected(terminal, age):
         reader.latest_quote('AAPL')
 
 
+def test_server_time_ahead_of_utc_is_reported_not_converted(terminal):
+    reader, state = terminal
+    ahead = pd.Timestamp.now(tz='UTC') + pd.Timedelta(hours=2)
+    state.tick.time_msc = int(ahead.timestamp() * 1000)
+    with pytest.raises(mt5_readonly.MT5ReadError, match=r'\+7\d{3} s vs UTC'):
+        reader.latest_quote('AAPL')
+    state.rows['time'][0] = int(ahead.timestamp())
+    with pytest.raises(mt5_readonly.MT5ReadError, match=r'\+7\d{3} s ahead of UTC'):
+        reader.market_data('AAPL', '1Day')
+
+
 def test_missing_quote_is_not_synthetic(terminal):
     reader, state = terminal
     state.tick = None

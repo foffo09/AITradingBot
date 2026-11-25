@@ -31,6 +31,7 @@ SAFE_ACCOUNT_FIELDS = ('currency', 'server', 'source', 'updated_at')
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--binary', type=Path, help='frozen sidecar instead of the source service')
+    parser.add_argument('--symbol', default='EURUSD', help='symbol in Market Watch for the quote/bars read (default EURUSD)')
     parser.add_argument('--expect-phase', help='CI without a terminal: succeed if the worker started and stopped at this phase')
     args = parser.parse_args(argv)
     data = Path(tempfile.mkdtemp(prefix='aitb-mt5-check-'))
@@ -71,6 +72,13 @@ def main(argv=None):
         report['automation'] = state['automation']['state']
         report['diagnostics'] = call('/api/v1/diagnostics/mt5')
         report['order_submission'] = call('/api/v1/system')['order_submission']
+        if report['connection'].get('status') == 'connected':
+            from urllib.parse import quote as escape
+            market = call(f'/api/v1/market?context=mt5&interval=1Hour&symbol={escape(args.symbol)}')
+            bars = market.get('bars') or []
+            report['market'] = {'symbol': args.symbol, 'status': market.get('status'), 'reason': market.get('reason'),
+                                'quote_timestamp': (market.get('quote') or {}).get('timestamp'), 'bars': len(bars),
+                                'last_bar_age_s': round(time.time() - bars[-1]['time']) if bars else None}
     finally:
         try:
             service.stdin.write('shutdown\n')
@@ -86,6 +94,9 @@ def main(argv=None):
               else f'FAIL (expected phase {args.expect_phase} with a started worker)')
         return 0 if ok else 1
     connected = report.get('connection', {}).get('status') == 'connected'
+    market = report.get('market') or {}
+    if connected:
+        print('MT5 MARKET READ:', 'OK' if market.get('status') == 'ready' else f"NOT READY ({market.get('reason')})")
     print('MT5 API CHECK:', 'PASS (verified read-only connection through the service)' if connected
           else 'NOT CONNECTED (see connection.reason and diagnostics.phase)')
     return 0 if connected else 1

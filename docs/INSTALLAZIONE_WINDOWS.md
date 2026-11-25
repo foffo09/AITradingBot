@@ -1,5 +1,7 @@
 # Installazione e verifica Windows
 
+> **Superata:** per la v1.0 usare [INSTALLATION_WINDOWS.md](INSTALLATION_WINDOWS.md). Questo file resta come storico.
+
 Questa guida raccoglie la procedura e le evidenze di portabilità. La suite
 completa è stata eseguita su Windows/Python 3.11.9 nel checkout corrente:
 436 test passati, guard rete/credenziali 0/0. I risultati macOS non sostituiscono

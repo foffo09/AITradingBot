@@ -109,3 +109,18 @@ Se non è connesso, `diagnostics.phase` dice dove si ferma:
 
 Prova completa con l'interfaccia: `.\avvia_web.ps1 -Build`, poi Connessioni → **Verifica MetaTrader 5** (mostra
 la diagnostica) e Contesto **MetaTrader 5** → Portafoglio.
+
+## Rischio aperto: ora del server MT5 (25/11/2026, non verificato)
+
+Il terminale restituisce `tick.time_msc` e `rates.time` come secondi "epoch"; molti broker li riempiono con
+l'**ora del server** (spesso UTC+2/UTC+3), non con UTC. Il codice li tratta come UTC, quindi con un server
+UTC+2 la quota risulterebbe "nel futuro" (rifiutata, stato `stale`) e le barre "invalid timestamps": il grafico
+MT5 resterebbe vuoto anche con connessione riuscita. Non è dimostrato perché nessun runner ha un terminale.
+
+Cosa è cambiato: nessuna conversione (sarebbe arbitraria). Gli errori ora riportano lo scarto misurato
+(`… +7200 s vs UTC; MT5 server time may not be UTC`) e `scripts.check_mt5_api` legge anche quota e barre
+(`--symbol`, default EURUSD) stampando `MT5 MARKET READ`. Test: `test_server_time_ahead_of_utc_is_reported_not_converted`.
+
+Prossimo passo con prova: se il report sul PC Windows mostra uno scarto multiplo di 15 min, la correzione è
+gestire il fuso del server come dato dichiarato (orari mostrati come "ora server, fuso non verificato") invece
+di rifiutare i dati. Se lo scarto è ~0, il rischio è chiuso.

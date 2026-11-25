@@ -179,7 +179,9 @@ class MT5ReadOnly:
             timestamp = pd.Timestamp(milliseconds, unit='ms', tz='UTC')
             age = (pd.Timestamp.now(tz='UTC') - timestamp).total_seconds()
             if not 0 <= age <= 120:
-                raise MT5ReadError('Terminal quote is stale or in the future.', status='stale')
+                # Many brokers stamp ticks in server time (e.g. UTC+2): report the gap instead of guessing a zone.
+                raise MT5ReadError(f'Terminal quote is stale or in the future ({-age:+.0f} s vs UTC; '
+                                   'MT5 server time may not be UTC).', status='stale')
             return {'bid': bid, 'ask': ask, 'price': bid + (ask - bid) / 2, 'timestamp': timestamp.isoformat(), 'source': f'{SOURCE} tick'}
         except MT5ReadError:
             raise
@@ -201,10 +203,12 @@ class MT5ReadOnly:
             values = data[['open', 'high', 'low', 'close', 'volume']]
             if any(pd.api.types.is_bool_dtype(dtype) for dtype in values.dtypes):
                 raise MT5ReadError('Terminal bar prices and volume cannot be boolean.')
+            ahead = (timestamps.max() - pd.Timestamp.now(tz='UTC')).total_seconds()
+            if ahead > 0:
+                raise MT5ReadError(f'Terminal bars are {ahead:+.0f} s ahead of UTC; MT5 server time may not be UTC.')
             if (
                 timestamps.isna().any() or timestamps.duplicated().any()
                 or not timestamps.is_monotonic_increasing
-                or (timestamps > pd.Timestamp.now(tz='UTC')).any()
                 or not np.isfinite(values.to_numpy(dtype=float)).all()
                 or (data[['open', 'high', 'low', 'close']] <= 0).any().any()
                 or (data['volume'] < 0).any()
