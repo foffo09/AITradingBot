@@ -103,3 +103,14 @@ def test_mt5_worker_starts_while_the_service_waits_on_its_control_pipe():
         proc.stdin.close()
         proc.wait(30)
     assert result['phase'] != 'startup', result
+
+
+def test_connection_reset_is_silenced_but_other_loop_errors_are_logged():
+    from src.runtime import local_service
+    logged = []
+    loop = Mock(default_exception_handler=logged.append)
+    local_service.quiet_connection_reset(loop, {'message': 'reset', 'exception': ConnectionResetError(10054)})
+    assert logged == []
+    other = {'message': 'boom', 'exception': ValueError('x')}
+    local_service.quiet_connection_reset(loop, other)
+    assert logged == [other]

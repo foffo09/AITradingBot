@@ -38,6 +38,18 @@ def watch_stdin(server, stream):
     server.should_exit = True
 
 
+def quiet_connection_reset(loop, context):
+    """A client dropping its socket (ConnectionResetError) is routine on Windows Proactor; anything else is logged."""
+    if isinstance(context.get('exception'), ConnectionResetError):
+        return
+    loop.default_exception_handler(context)
+
+
+async def serve(server, sock):
+    asyncio.get_running_loop().set_exception_handler(quiet_connection_reset)
+    await server.serve(sockets=[sock])
+
+
 def shutdown_stream():
     """The parent's control pipe, kept off the standard input that child processes receive.
 
@@ -93,7 +105,7 @@ def main(argv=None):
         server = LocalServer(config)
         app.state.request_shutdown = lambda: setattr(server, 'should_exit', True)
         threading.Thread(target=watch_stdin, args=(server, shutdown_stream()), daemon=True).start()
-        asyncio.run(server.serve(sockets=[sock]))
+        asyncio.run(serve(server, sock))
     finally:
         if app is not None:
             app.state.close()
