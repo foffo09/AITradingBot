@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import sqlite3
 import uuid
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -73,6 +73,9 @@ def _validate_fresh_data(timestamp: str, max_age_seconds: float) -> None:
         raise ValueError("Market data is stale or has a future timestamp; simulated order blocked.")
 
 
+SCHEMA_VERSION = 1  # PRAGMA user_version; bump with every schema change below.
+
+
 class SimulationLedger:
     """SQLite ledger for local simulated trades; it never calls a broker."""
 
@@ -93,7 +96,17 @@ class SimulationLedger:
             connection.close()
 
     def _initialize(self) -> None:
+        existed = self.database_path.exists() and self.database_path.stat().st_size > 0
         with self._connect() as db:
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            if version > SCHEMA_VERSION:
+                raise RuntimeError(f"Ledger schema v{version} is newer than this app (v{SCHEMA_VERSION}); not opened, data untouched.")
+            if existed and version < SCHEMA_VERSION:
+                if db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                    raise RuntimeError("Ledger integrity check failed; no migration applied, data untouched.")
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                with closing(sqlite3.connect(self.database_path.with_name(f"{self.database_path.name}.v{version}-{stamp}.bak"))) as backup:
+                    db.backup(backup)
             db.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS account (
@@ -164,6 +177,7 @@ class SimulationLedger:
                 db.execute("ALTER TABLE closes ADD COLUMN data_source TEXT NOT NULL DEFAULT ''")
             if "source_timestamp" not in close_columns:
                 db.execute("ALTER TABLE closes ADD COLUMN source_timestamp TEXT NOT NULL DEFAULT ''")
+            db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def account(self) -> dict[str, Any] | None:
         with self._connect() as db:
