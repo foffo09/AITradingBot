@@ -332,6 +332,28 @@ def outcome_worker(connection):
     connection.send(('ok', None))
 
 
+def _leaves(value, path=()):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield from _leaves(item, path + (key,))
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            yield from _leaves(item, path + (index,))
+    else:
+        yield path, value
+
+
+def _leaked(diagnostics, cash):
+    """Account fields or the account's cash value anywhere except the worker pid."""
+    return [(p, v) for p, v in _leaves(diagnostics) if p[-1] in {'cash', 'balance', 'equity', 'login', 'account'} or (p[-1] != 'pid' and v == cash)]
+
+
+def test_leak_check_flags_account_values_but_not_a_pid_containing_the_same_digits():
+    cash = 100
+    diagnostics = {'worker': {'pid': 10044}, 'phase': 'connected', 'extra': {'balance': 5}, 'note': cash}
+    assert _leaked(diagnostics, cash) == [(('extra', 'balance'), 5), (('note',), 100)]
+
+
 def test_state_and_diagnostics_follow_the_verified_connect_outcome(module, monkeypatch):
     """No more 'state disconnected while the worker reports connected' (or the reverse)."""
     monkeypatch.setattr(module, '_worker', outcome_worker)
@@ -352,7 +374,10 @@ def test_state_and_diagnostics_follow_the_verified_connect_outcome(module, monke
         reader.connect()
         snapshot = reader.snapshot()
         assert snapshot['connection']['status'] == 'connected' and reader.state == 'connected'
-        assert '100' not in str(reader.diagnostics), 'no balances in diagnostics'
+        cash = snapshot['account']['cash']
+        leaked = _leaked(reader.diagnostics, cash)
+        assert not leaked, f'account data in diagnostics: {leaked}'
+        assert reader.diagnostics['worker']['pid'] > 0, 'legitimate worker metadata stays visible'
     finally:
         reader.close()
     assert reader.state == 'disconnected' and reader.diagnostics['worker'] is None
