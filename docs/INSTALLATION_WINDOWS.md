@@ -43,20 +43,32 @@ Dettagli e verifica pacchetto: `DESKTOP_RELEASE_GUIDE.md`.
 
 ## Verifica MT5 (terminale aperto, conto Demo)
 
+1. Apri MetaTrader 5, accedi al conto **Demo** e lascia il terminale aperto. In Market Watch deve essere visibile EURUSD (o un altro simbolo da passare con `--symbol`).
+2. In PowerShell, nella cartella del progetto:
+
 ```powershell
+git pull
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m scripts.check_mt5_api --symbol EURUSD
 ```
 
-Atteso: `MT5 API CHECK: PASS` e `MT5 MARKET READ: OK`. Il report non contiene numero di conto né
-credenziali e mostra il profilo utente come `~`: si può incollare nell'issue #9. Se `MT5 MARKET READ`
-riporta "… s ahead of UTC" o "… s vs UTC", il broker usa l'ora del server: incollare il report, serve per
-la correzione (vedi `MT5_CONNECTION_FIX_REPORT.md`). `--symbol` deve essere un simbolo visibile in
-Market Watch.
+3. In fondo al report ci sono 9 righe `PASS`/`FAIL`: SDK, terminale, worker, connessione, conto, quotazione, candele, orari, chiusura. Atteso: tutte `PASS` e `MT5 API CHECK: PASS`.
+4. Copia **tutto l'output** in un commento dell'issue #9. Non contiene password, numero di conto né saldi; il percorso del profilo appare come `~`. Il nome del server del broker è visibile: se preferisci, cancellalo prima di incollare.
+
+Lo script è solo lettura: non invia ordini, non tocca posizioni e non attiva automazioni.
+
+Come leggere i `FAIL` più probabili:
+- `1 SDK` → manca il pacchetto: ripeti il `pip install`.
+- `2 terminale` → MT5 non è aperto, o è un'installazione diversa da quella predefinita.
+- `4 connessione` → leggi `connection.reason` (per esempio, il conto non è Demo o il login è scaduto).
+- `6 quotazione` / `8 orari` con "… s vs UTC" o "… s ahead of UTC" → il broker usa l'ora del server. Il dato viene scartato e **non** corretto con un offset inventato. Serve il report per decidere la correzione.
+- `7 candele` → simbolo non presente in Market Watch.
 
 ## Aggiornamento
 Chiudere l'app, fare il backup (sotto), poi `git pull` (o installare il nuovo installer) e ripetere
-`pip install -r requirements-dev.txt` e `npm ci`. Le tabelle SQLite si aggiornano solo aggiungendo colonne;
-non c'è ancora una versione di schema né un backup automatico.
+`pip install -r requirements-dev.txt` e `npm ci`. Il ledger SQLite ha una versione di schema: prima di
+aggiornarlo l'app ne controlla l'integrità e salva una copia accanto al file (`*.v<versione>-<data>.bak`).
+Un ledger creato da una versione più recente dell'app non viene aperto, così i dati restano intatti.
 
 ## Backup e ripristino
 Con l'app **chiusa**, copiare l'intera cartella dati:

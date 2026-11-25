@@ -40,5 +40,5 @@ invia ordini.
 ## Aggiornamento, backup, ripristino
 App chiusa: `cp -R ~/Library/Application\ Support/AITradingBot/local-service ~/AITradingBot-backup-$(date +%Y%m%d)`,
 poi `git pull`, `pip install -r requirements-dev.txt`, `npm ci && npm run build`. Ripristino: app chiusa,
-rimettere la cartella copiata. Schema SQLite: solo colonne aggiunte, nessuna versione di schema né backup
-automatico per ora.
+rimettere la cartella copiata. Prima di aggiornare il ledger SQLite l'app ne controlla l'integrità e salva
+una copia `*.v<versione>-<data>.bak`; un ledger di una versione più recente non viene aperto.

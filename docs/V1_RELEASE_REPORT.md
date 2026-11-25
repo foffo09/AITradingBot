@@ -1,67 +1,75 @@
-# AITradingBot v1.0 — report di release (25 novembre 2026)
+# AITradingBot v1.0 — report di release (aggiornato al 25 novembre 2026)
 
-**Decisione: V1.0 NON ANCORA APPROVATA.** La candidata è pronta per il collaudo del proprietario su Windows.
-Mancano prove che solo il PC del proprietario o la pubblicazione del lavoro Codex possono dare (tabella sotto).
+**Decisione: V1.0 NON APPROVATA.** Il software è pronto per il collaudo del proprietario. Mancano tre
+condizioni che nessun agente può soddisfare da solo:
+1. la prova MT5 reale su Windows 11;
+2. la revisione di Codex sulle modifiche di Claude;
+3. la decisione del proprietario sulla redistribuzione dell'SDK MetaTrader5 e sulla licenza.
+
 Nessun merge su `main`, nessuna release. Trading reale disattivato, MT5 solo lettura,
 `order_submission = disabled`, automazione `STOPPED`.
 
 ## Candidata
-- Branch `agents/claude-v1-review-20261124`, PR draft #11 verso `main` (contiene #7, #8, #10; storia conservata,
-  nessun force-push). Coordinamento: issue #9.
-- Catena: `integration/local-web-desktop-20261116` (#7) → `agents/codex-completion-20261116` (#8, Codex) →
-  `agents/claude-complete-modernization-20261124` (#10) → `agents/claude-macos-complete-fix-20261124` →
-  `agents/claude-emergency-delivery-20261124` (`e2ccaca`) → `agents/claude-v1-review-20261124`.
-- Non integrati (non pubblicati sul remote, quindi non revisionabili): branch Codex
-  `agents/codex-v1-integration-20261124`, formatter numeri/date, commit locali Codex `11696c1` (handshake
-  versionato UI/sidecar) e `b7eb4b3` (migrazioni/backup SQLite).
+- **Branch:** `agents/claude-v1-review-20261124` (PR draft #11 verso `main`, contiene #7, #8 e #10). La
+  storia è conservata, senza force-push. Coordinamento nell'issue #9.
+- **Stabilizzazione del 25/11:** branch `agents/claude-v1-stabilization-20261125`, integrato nella PR #11 con
+  fast-forward. Commit:
+  - `b288890`: formatter di Codex (numeri piccoli, orari senza offset), applicato invariato dal suo diff
+    pubblicato nell'issue;
+  - `9db868d`: precisione dei prezzi dello strumento;
+  - `47f91d0`: test diagnostica;
+  - `a404e82`: script di verifica MT5 in 9 passi;
+  - `f54279d`: versione di schema e backup del ledger;
+  - `9e0898d`: NOTICE con MetaTrader5.
+- **Non integrati**, perché non pubblicati sul remote e quindi non revisionabili: branch Codex
+  `agents/codex-v1-integration-20261124`, commit `11696c1` (handshake versionato UI/sidecar) e `b7eb4b3`
+  (migrazioni SQLite Codex).
 
-## Funzionalità
-| Area | Stato |
-|---|---|
-| Servizio FastAPI + UI React stessa origine, sessione locale (cookie HttpOnly SameSite=Strict, Host/Origin esatti) | funziona, testato |
-| App desktop Tauri 2 + sidecar PyInstaller (avvio, handshake, chiusura, crash) | funziona su macOS ARM/Intel e Windows Server in CI; Windows 11 non provato |
-| Demo / Simulazione: conto virtuale, ledger SQLite separati, registrazioni virtuali | funziona |
-| Grafici Lightweight Charts (candele, volume, indicatori), watchlist, storico, backtest, walk-forward | funziona |
-| Proposte: con `risk_snapshot=None` restano `NO_TRADE`, nessun ordine | verificato |
-| Alpaca Paper | sola lettura, credenziali solo da ambiente; non provato con chiavi reali |
-| MT5 | percorso React → FastAPI → MT5Process → worker → MT5ReadOnly → SDK provato fino al terminale (CI senza terminale); connessione reale **da provare** |
-| Notifiche | solo avvisi in pagina |
+## Correzioni del 25/11
+| Problema | Correzione | Prova |
+|---|---|---|
+| Prezzi arrotondati a 4 decimali: EURUSD 1,08345 e 1,08347 entrambi "1,0835"; 0,00015 → "0,0002" | MT5 dichiara `symbol_info.digits` per strumento (EURUSD 5, USDJPY 3), Demo/Simulazione dichiarano 2; `price()` usa quei decimali, zeri finali compresi. Se la precisione è ignota usa 10 cifre significative. La scala del grafico usa la stessa precisione. | `format.test.ts` (forex, JPY, valori nulli, precisione non valida), `test_bars_carry_only_broker_declared_price_digits` |
+| Test Windows instabile: `'100'` cercato nell'intera diagnostica (corrispondeva al PID 10044) | controllo strutturato: nessun campo conto e nessun valore del saldo nella diagnostica, PID escluso; controllo provato da un test dedicato | `test_leak_check_flags_account_values_but_not_a_pid_containing_the_same_digits` |
+| Ora del server MT5 diversa da UTC (R8) | nessun offset inventato: tick e candele "nel futuro" sono scartati, con lo scarto misurato nel messaggio. Senza dati verificati la proposta resta `NO_TRADE`. | `test_server_time_ahead_of_utc_is_reported_not_converted` |
+| Verifica Windows senza quotazioni né orari | `check_mt5_api`: 9 passi read-only con PASS/FAIL, età della quota e della candela rispetto a UTC, codice di uscita del servizio | `tests/test_check_mt5_api.py`; su macOS si ferma alla fase `platform` |
+| Ledger SQLite senza versione né backup | `PRAGMA user_version = 1`, `quick_check` e backup SQLite prima di migrare; un ledger più recente viene rifiutato senza toccarlo | `tests/test_ledger_schema.py` |
+| MetaTrader5 assente dai NOTICE | nota nel generatore e nel file: licenza dichiarata MIT su PyPI, modulo binario nativo, redistribuzione da confermare | `THIRD_PARTY_NOTICES.md` |
 
-## Bug corretti (dettagli in `MT5_CONNECTION_FIX_REPORT.md`, `EMERGENCY_DELIVERY_REPORT.md`, issue #9)
-- R1 worker MT5 bloccato dalla pipe stdin su Windows (causa dimostrata con sonda A/B).
-- R2 SDK `MetaTrader5` assente da `.venv` Windows e dal sidecar desktop.
-- R3 crash del worker riportato come timeout. R4 `tasklist` su Windows non inglese.
-- R5 percorso del profilo utente nella diagnostica (ora `~`). R6 test MT5 falliti solo su Windows reale.
-- R8 (25/11) ora del server MT5 trattata come UTC: ora l'errore riporta lo scarto misurato e lo script di
-  verifica legge quota e barre; correzione definitiva in attesa della prova reale.
-- Primo avvio Demo, pannello conto MT5 in Panoramica, selettore indicatori.
+Correzioni precedenti (R1–R7: worker MT5 su Windows, SDK nel `.venv` e nel sidecar, crash/timeout,
+`tasklist` localizzato, profilo utente nella diagnostica): in `MT5_CONNECTION_FIX_REPORT.md` e
+`EMERGENCY_DELIVERY_REPORT.md`.
 
-## Test (macOS ARM, 25/11/2026, albero di questo commit)
-pytest 909 passati / 2 saltati (solo Windows) · Ruff ok · Vitest 69 · `tsc` ok · `npm run lint` ok ·
-`npm run build` ok. CI Windows/macOS: vedi commento finale nell'issue #9 (il run va sull'ultimo SHA, non su
-commit precedenti). Ultimo run completo verde: 45489597831 su `9caedc6` (5/5).
+## Test sull'albero candidato (macOS ARM, 25/11/2026)
+- **Python:** pytest 924 passati / 2 saltati (solo Windows) · Ruff ok.
+- **Frontend:** Vitest 82 · `tsc` ok · `npm run lint` ok · `npm run build` ok.
+- **CI Windows/macOS:** sullo SHA finale della PR #11, risultato nell'issue #9. Non si usano risultati di
+  commit precedenti.
 
 ## Criteri di accettazione
 | # | Criterio | Stato |
 |---|---|---|
-| 1 | Frontend e backend insieme | ✅ test API + prova nel browser |
-| 2 | Desktop si avvia | ✅ CI macOS ARM/Intel, Windows Server; ⏳ Windows 11 |
-| 3 | Sidecar | ✅ smoke frozen in CI, incluso controllo MT5 |
+| 1 | Frontend e backend insieme | ✅ test API, prova nel browser |
+| 2 | Desktop si avvia | ✅ CI su macOS ARM e Intel e su Windows Server; ⏳ Windows 11 |
+| 3 | Sidecar | ✅ smoke frozen in CI, incluso il controllo MT5 |
 | 4 | Dati coerenti | ✅ ledger per contesto, idempotenza |
-| 5 | Prezzi frazionari | ⚠️ formato a 4 decimali: 1,08345 → "1,0835", bid/ask forex indistinguibili. Correzione Codex non pubblicata e ancora insufficiente (vedi #9) |
-| 6 | Timezone | ✅ API: tutti i timestamp con offset (sonda su tutte le risposte); ⚠️ MT5 ora server (R8) |
-| 7 | SQLite aggiornabile | ⚠️ migrazioni solo additive e idempotenti; nessuna versione di schema, nessun backup automatico (procedura manuale nelle guide) |
+| 5 | Prezzi frazionari | ✅ precisione dello strumento (test); ⏳ resa grafica con dati MT5 reali |
+| 6 | Timezone | ✅ API: tutti gli orari con offset; ✅ MT5: nessuna conversione, scarto visibile; ⏳ ora reale del broker del proprietario |
+| 7 | SQLite aggiornabile | ✅ versione, integrità, backup e rifiuto delle versioni future per il ledger. Gli altri database (controller dry-run, preferenze) restano con creazione idempotente. |
 | 8 | Contesti isolati | ✅ test parametrizzati |
-| 9 | MT5 read-only su Windows | ⏳ solo il proprietario può provarlo |
-| 10 | Sicurezza | ✅ pip-audit/npm audit 0, nessun segreto, nessun endpoint di scrittura broker |
+| 9 | MT5 read-only su Windows | ⏳ solo il proprietario può provarlo (`INSTALLATION_WINDOWS.md`) |
+| 10 | Sicurezza | ✅ nessun segreto, nessun endpoint di scrittura broker, diagnostica senza dati del conto |
 | 11 | CI verde sul candidato finale | vedi issue #9 |
-| 12 | Revisione reciproca | ⏳ Claude ha revisionato il diff Codex pubblicato nell'issue; Codex non ha ancora revisionato R1–R8 |
+| 12 | Revisione reciproca | ⏳ Claude ha revisionato e integrato il diff Codex pubblicato; Codex non ha ancora revisionato R1–R8 né le correzioni del 25/11 |
 | 13 | Documentazione | ✅ questo report, `ARCHITECTURE.md`, `INSTALLATION_WINDOWS.md`, `INSTALLATION_MACOS.md`, `MT5_CONNECTION_FIX_REPORT.md`, `WORKLOG.md` |
 
 ## Cosa serve per approvare
-1. Proprietario, Windows 11 con MT5 Demo aperto: `.\.venv\Scripts\python.exe -m scripts.check_mt5_api --symbol EURUSD`
-   → `PASS` e `MT5 MARKET READ: OK` (o il report con lo scarto, per chiudere R8).
-2. Codex: pubblicare il branch con formatter e `b7eb4b3`/`11696c1`; revisionare R1–R8.
-3. Proprietario: licenza del progetto e redistribuzione dell'SDK `MetaTrader5`; firma; approvazione del merge.
+1. **Proprietario, su Windows 11 con MT5 Demo aperto:** `.\.venv\Scripts\python.exe -m scripts.check_mt5_api --symbol EURUSD`,
+   poi l'output incollato nell'issue #9. Se il passo 8 mostra uno scarto (es. +7200 s), si decide la
+   correzione dell'ora del server su quella prova.
+2. **Codex:** revisione del branch di stabilizzazione e di R1–R8; pubblicazione di `11696c1`/`b7eb4b3` se
+   ancora utili.
+3. **Proprietario:** licenza del progetto; via libera alla redistribuzione di MetaTrader5 nell'installer
+   Windows (in alternativa: installer senza SDK, installato dall'utente con `pip`); firma; approvazione del
+   merge.
 
 Installazione, aggiornamento e backup: `INSTALLATION_WINDOWS.md`, `INSTALLATION_MACOS.md`.

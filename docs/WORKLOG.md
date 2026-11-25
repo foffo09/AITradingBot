@@ -1,5 +1,13 @@
 # Registro del lavoro
 
+## 25 novembre (pomeriggio) — Claude: stabilizzazione v1 (issue #9)
+
+Codex senza risposta né branch pubblicati: presi in carico (annunciato nell'issue) formatter, test Windows
+instabile, script MT5, schema SQLite e NOTICE, su `agents/claude-v1-stabilization-20261125`. Integrato il
+diff formatter di Codex invariato, poi precisione dei prezzi dello strumento (MT5 `digits`), controllo
+strutturato dei dati del conto nella diagnostica, `check_mt5_api` in 9 passi, versione/backup del ledger.
+pytest 924/2 saltati, Vitest 82. Decisione: v1.0 non approvata (prova MT5 reale, review Codex, licenze).
+
 ## 25 novembre — Claude: review del formatter Codex, rischio ora server MT5, documenti v1 (issue #9)
 
 Revisione del diff formatter pubblicato da Codex nell'issue #9 (branch Codex non sul remote): timestamp ok
