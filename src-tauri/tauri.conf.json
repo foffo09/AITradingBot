@@ -21,7 +21,8 @@
     "targets": "all",
     "externalBin": ["binaries/aitradingbot-service"],
     "resources": {
-      "../frontend/dist/": "ui/"
+      "../frontend/dist/": "ui/",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
     },
     "category": "Finance",
     "shortDescription": "Terminale analitico locale AITradingBot",

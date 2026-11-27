@@ -54,3 +54,19 @@ def test_windows_build_refuses_to_ship_without_the_mt5_sdk(monkeypatch):
     monkeypatch.setattr(module, 'native_target', lambda: 'x86_64-pc-windows-msvc')
     monkeypatch.setattr(module.importlib.util, 'find_spec', lambda name: object())
     assert not module.mt5_sdk_missing()
+
+
+def test_installer_ships_third_party_notices_and_the_metaquotes_license(monkeypatch):
+    import json
+    root = Path(__file__).parents[1]
+    resources = json.loads((root / 'src-tauri/tauri.conf.json').read_text())['bundle']['resources']
+    assert resources.get('../THIRD_PARTY_NOTICES.md') == 'THIRD_PARTY_NOTICES.md'
+    assert 'Copyright 2000-2025 MetaQuotes Ltd.' in (root / 'THIRD_PARTY_NOTICES.md').read_text()
+    spec = importlib.util.spec_from_file_location('backend_build', root / 'scripts' / 'build_backend.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'native_target', lambda: 'x86_64-pc-windows-msvc')
+    command = module.build_command(Path('/tmp/backend-output'))
+    assert command[command.index('--copy-metadata') + 1] == 'MetaTrader5'
+    monkeypatch.setattr(module, 'native_target', lambda: 'aarch64-apple-darwin')
+    assert '--copy-metadata' not in module.build_command(Path('/tmp/backend-output'))

@@ -38,6 +38,8 @@ def build_command(output: Path) -> list[str]:
             '--exclude-module', 'torch', '--exclude-module', 'tensorflow',
             # Test framework reached only through pandas' optional test helpers; never used at runtime.
             '--exclude-module', 'pytest', '--exclude-module', '_pytest',
+            # MIT requires MetaQuotes' notice in every copy: ship the wheel's own LICENSE.txt.
+            *(['--copy-metadata', 'MetaTrader5'] if native_target() == 'x86_64-pc-windows-msvc' else []),
             str(ROOT / 'packaging/backend/entrypoint.py')]
 
 

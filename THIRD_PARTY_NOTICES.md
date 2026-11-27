@@ -2,7 +2,15 @@
 
 Inventario generato da `scripts/third_party_notices.py` dai metadati dei pacchetti. **Non è una verifica legale**: licenze, NOTICE e obblighi di redistribuzione vanno controllati prima della distribuzione. Componenti con licenza non dichiarata nei metadati: nessuno.
 
-Inventario della piattaforma di build. Il sidecar Windows x64 include anche `MetaTrader5` 5.0.6231 (MetaQuotes Ltd.; licenza dichiarata MIT nei metadati PyPI; contiene un modulo binario nativo; testo della licenza non verificato nel pacchetto). Il proprietario ha deciso di includerlo nell'installer (25/11/2026); rigenerare questo file su Windows prima di pubblicare l'installer.
+Inventario della piattaforma di build. Il sidecar Windows x64 include anche `MetaTrader5` 5.0.6231 (MetaQuotes Ltd., modulo binario nativo `_core.cp311-win_amd64.pyd`). Licenza MIT: testo verificato il 27/11/2026 nel wheel `metatrader5-5.0.6231-cp311-cp311-win_amd64.whl` (sha256 1e0fb5e4…918f918d), riportato sotto e copiato anche nel sidecar (`--copy-metadata`). Il proprietario ha deciso di includerlo nell'installer (25/11/2026); rigenerare questo file su Windows prima di pubblicare l'installer.
+
+> Copyright 2000-2025 MetaQuotes Ltd.
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Interfaccia (npm, produzione) (5)
 
