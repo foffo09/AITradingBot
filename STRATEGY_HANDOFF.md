@@ -1,5 +1,28 @@
 # Persona 3 — Strategy engine e integrazione
 
+## Contratto trasporto verificato — missione master 17 novembre
+
+Il motore, RiskManager, limiti e branch P3 sono invariati. Il DTO API ora
+rifiuta BUY/SELL incompleti (503 sanificato), senza ricalcolare livelli, sizing
+o autorizzazione. ID, timestamp con fuso, durata e valori completi sono requisiti
+di forma; freschezza/provenienza restano compito del gate originale e consumer.
+Due fixture complete BUY/SELL verificano la compatibilità della serializzazione,
+non la loro idoneità operativa. Nessun RiskSnapshot Paper verificato viene
+inventato: nuova UI rimane NO_TRADE con i dati attuali. Backtest singolo campione
+rimane esplicito, nessuna nuova performance o validazione OOS dichiarata.
+
+
+## Riesame contratti — 17 novembre 2026
+
+P3 `37afa86` già integrato nel candidato `a6d3f60` (PR #8 sopra #7); nessun nuovo
+motore, task o modifica al rischio. Il servizio puro e i test precedenti restano
+la fonte del contratto. Le richieste output OpenAPI/UI nei due handoff non
+autorizzano a cambiare `SignalProposal`, il gate o i limiti per semplificarli.
+API/nuova UI non attestano un RiskSnapshot Paper completo: restano NO_TRADE;
+nessun ordine deve essere derivato da un'etichetta BUY/SELL. Il backtest UI
+rimane singolo campione; le tranche OOS esistenti non sono collegate né dichiarate
+eseguite da questa revisione. Non è richiesta una nuova consegna duplicata P3.
+
 ## Base e ambito
 
 Worktree `AITradingBot-strategy`, branch `feature/strategy-engine`.
@@ -262,3 +285,82 @@ Esito finale osservato su macOS/Python3.12.14: **747 passati, 1 saltato,
 con1 skip. Compilazione, pip check e diff-check riusciti. Guard rete/credenziali
 zero;146 casi nuovi senza modificare test preesistenti. Skip Windows Proactor,
 warning preesistente websockets.legacy. Windows e broker autentico non provati.
+
+## 2026-11-16 — Boundary applicativo puro, contratto 1
+
+Worktree `p3-december-strategy-20261116`, branch
+`agents/p3-december-strategy-20261116`, base `fe98839`. Nuovo punto d'ingresso:
+
+```python
+from src.strategy.service import evaluate_proposal
+
+view = evaluate_proposal(
+    settings=settings, bars=bars, quote=quote,
+    source=bars.attrs['source'], as_of=decision_time,
+    symbol=symbol, interval=interval, risk_snapshot=verified_risk_snapshot,
+    context='paper', config=strategy_config,
+    prior_signal_ids=consumed_signal_ids,
+)
+```
+
+Tutti gli input sono espliciti; `config` e `prior_signal_ids` hanno gli stessi
+valori predefiniti del motore. Nessun accesso a env, filesystem, database,
+broker, API, UI o orologio durante la valutazione. Il risultato è il dizionario
+JSON-safe del motore con il solo campo aggiuntivo `contract_version='1'`.
+`StrategyEngine.evaluate` e `SignalProposal.to_dict` conservano il contratto
+precedente; non occorre cambiare i loro chiamanti. Import diretto dal modulo
+service, senza cambiare gli export storici del package strategy.
+
+`context` deve essere esattamente `paper`: demo, sim, simulation e contesti
+sconosciuti restituiscono WAIT/NO_TRADE con motivo esplicito, anche se il
+chiamante fornisce dati dall'aspetto operativo. `source` è obbligatoria e deve
+coincidere con la fonte originale in `bars.attrs`; non sostituisce mai i
+metadati. Il gate del motore verifica poi fonte attesa, autenticità dichiarata,
+chiusura barre, quote, freschezza e rischio. Il servizio non autentica un feed:
+il consumer deve attestare realmente la provenienza e mantenere il contesto
+della richiesta associato a simbolo e intervallo.
+
+Passare il DataFrame con attrs intatti e RiskSnapshot completo e verificato.
+Se contabilità/peak equity/contatori non sono dimostrabili, passare
+`risk_snapshot=None`: con gli altri input validi il risultato spiega che manca
+lo snapshot Paper verificato; livelli, entry, quantità e rischio restano None.
+Nessuna sostituzione con dati demo o valori zero. BUY/SELL validi restano
+proposte analitiche Paper; SELL riduce soltanto il long, nessuna autorizzazione
+operativa viene introdotta. Scadenza e ID consumati restano invariati; il
+servizio non persiste nulla né rinnova un evento scaduto/consumato.
+
+Audit rischio: riprodotto e corretto un limite BUY mancante. Con capitale
+iniziale 10.000 USD, equity 9.500 USD e stop stretto il vecchio dimensionamento
+poteva proporre 2.000 USD, oltre il cap del 20% della base prudenziale
+(1.900 USD). Ora applica anche quel minimo, oltre ai controlli già presenti.
+Nessuna soglia aumentata, formula strategica o configurazione modificata.
+Audit backtest in sola lettura: conservati fill next-bar, stop prudenziale
+nelle barre ambigue, costi e tranche disgiunte; nessun ulteriore difetto
+riprodotto in questo intervento. Il backtest continua a non replicare lo
+snapshot multi-asset del motore; non dimostra performance operative.
+
+Test dedicati: `tests/test_strategy_service.py` (28 casi) verifica import
+senza dipendenze broker/storage/trasporto, nessuna lettura from_env, BUY/SELL,
+WAIT/NO_TRADE, contesto, fonte, snapshot incompleto, timestamp stale/future,
+barre duplicate, expiry/ID consumati, JSON nonfinito e input invariati.
+`tests/test_strategy_risk.py` aggiunge il caso equity ridotta con stop stretto.
+Gruppo strategia/rischio/backtest: 255 passati, 0 falliti, guard rete e
+credenziali 0/0; compilazione completa riuscita. Prova macOS/Python 3.11,
+nessun feed/broker/server/ordine autentico; Windows e redditività non verificati.
+
+Verifica finale dello stesso worktree: suite completa **776 passati, 1 saltato,
+0 falliti, 1 warning in 33,10 s**. Guard rete=0, credenziali=0. Skip Windows
+Proactor sul Mac; warning preesistente `websockets.legacy`. `compileall`,
+`pip check` e `git diff --check` riusciti. WORKLOG condiviso, API, frontend e
+altri worktree non modificati; nessun push o merge.
+
+
+## Integrazione completion
+
+Motore e RiskManager invariati. API espone SMA10/30, EMA9/21/50 e RSI14 ricavati
+esclusivamente dalle implementazioni esistenti; nessun indicatore autorizza ordini.
+I cicli dry-run richiamano evaluate_proposal senza inventare risk_snapshot:
+Demo/Simulazione restano NO_TRADE. Nessuno snapshot rischio Paper completo è
+attestato da questa UI, quindi nessuna proposta è dichiarata eseguibile.
+Il backtest API resta SMA giornaliera su singolo campione; metadata espliciti,
+nessun risultato training/validation/OOS o profitto di mercato inventato.

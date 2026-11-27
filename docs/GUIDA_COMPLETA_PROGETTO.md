@@ -2,14 +2,24 @@
 
 Questa guida descrive il codice locale revisionato, non un servizio già validato su un conto autentico. Per i passi pratici leggere [Come usare la dashboard](COME_USARE_LA_DASHBOARD.md); per prove e lacune leggere [Matrice test](MATRICE_TEST.md) e [Revisione e roadmap](REVIEW_QUALITA_E_ROADMAP.md).
 
+## Nuova interfaccia locale (16 novembre 2026)
+
+React/FastAPI/Tauri si aggiunge ai percorsi legacy descritti sotto.
+[Avvio e contratto applicazione locale](LOCAL_APPLICATION.md): Windows
+`./avvia_web.ps1 -Build`, stop `./arresta_web.ps1`; stessa UI nel bundleMac.
+Demo/Simulazione separati, Paper/MT5 sola lettura e nessun fallback silenzioso.
+MT5 accetta soltanto conti Demo verificati; automazione nuovaUI sempre ferma.
+[Audit e risultati](MASTER_AUDIT.md) distingue mock, browser, native e prove mancanti.
+
 ## Che cosa fa
 
 AITradingBot permette di osservare prezzi, calcolare incroci tra medie mobili semplici, simulare operazioni e confrontare risultati storici. Può monitorare Alpaca Paper e dispone di un percorso di automazione separato, arrestato all'avvio. Non è una previsione di mercato e non dimostra redditività.
 
-I tre entry point non sono intercambiabili:
+Gli entry point non sono intercambiabili:
 
 | Percorso | Compito | Capitale/stato |
 | --- | --- | --- |
+| `scripts/start_local.py` | React + FastAPI locale; anche sidecar Tauri | Ledger nuovi Demo/Sim separati, Paper/MT5 read-only |
 | `app.py` | Dashboard Streamlit, analisi SMA, ledger, backtest, monitor/anteprima Alpaca | Database isolato della modalità; account broker separato |
 | `main.py` | Console aggiuntiva di ricerca con provider pubblici | Paper locale proprio, non il conto mostrato dalla dashboard |
 | `src/hyperliquid_testnet_cli.py` | Motore nativo Hyperliquid testnet | Journal dedicato; non controllato dai pulsanti Streamlit |
@@ -20,7 +30,7 @@ Gli stop del motore Hyperliquid non sono regole della strategia SMA Streamlit. N
 
 1. `config/settings.py` valida modalità, finestre SMA e limiti; assenza di credenziali comporta fallback Demo. Live trading è rifiutato.
 2. `src/data/instruments.py` è un catalogo, non una conferma di negoziabilità.
-3. `src/broker/alpaca_client.py` fornisce dati OHLCV/quote, verifica Paper e legge account/posizioni/ordini. La risposta ordini satura a 500 viene rifiutata prudenzialmente.
+3. `src/broker/alpaca_client.py` fornisce dati OHLCV/quote, verifica Paper e legge account/posizioni/ordini. Le pagine ordini vengono confrontate con overlap/deduplica; gruppi da500 con timestamp non separabili o paginazione non verificabile sono rifiutati senza restituire liste parziali.
 4. `src/data/market_data.py` produce prezzi deterministici per prove Demo, marcati sintetici. Il tempo della serie è generato al caricamento; non è un feed.
 5. `src/strategy/moving_average.py` produce medie, incroci e motivazione. Non accede al broker.
 6. `src/risk/risk_manager.py` verifica quantità, cash, esposizione e perdita. Non garantisce il prezzo di esecuzione.

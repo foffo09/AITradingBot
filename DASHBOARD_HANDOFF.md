@@ -1,5 +1,60 @@
 # Dashboard — contratti di integrazione Persona 2
 
+## Preferenze indipendenti dalla porta — follow-up 17 novembre
+
+localStorage da solo era insufficiente: cambia origine quando il servizio
+riparte su una porta diversa. Tema, densità e larghezza ora sono caricati da
+`/api/v1/preferences` dopo sessione, senza scrivere all'avvio. I tre controlli
+restano disabilitati fino all'esito iniziale: la review ha riprodotto la perdita
+di preferenze non modificate con GET ritardata; test RED→GREEN ora copre il caso.
+POST espliciti serializzati, ultima modifica accorpata; nessun retry automatico.
+Errore visibile e modifica locale conservata; nessuna richiesta finanziaria.
+LocalStorage resta cache non autorevole se esiste il file validato dal servizio.
+Suite frontend51PASS. Browser reale:68→69, tema light/densità compact, servizio
+chiuso0 e nuova porta; tutti e tre i valori ripristinati, console errori vuota,
+nessun conto creato o automazione avviata. Entrambi i servizi temporanei chiusi0.
+
+
+## Pannelli completati — missione master 17 novembre
+
+La lacuna pannelli della fotografia precedente è corretta nel branch dedicato
+`agents/master-consolidation-20261117`, senza modificare il branch P1.
+Panoramica espone un range HTML nativo per la larghezza relativa grafico/segnale
+(50–75%, default68). Usa CSS variables nel layout esistente e la preferenza
+locale aitb-analysis-width; valori corrotti vengono ignorati, storage negato
+non blocca il controllo. Sotto1200px il controllo è nascosto e i pannelli sono
+in colonna. Nessuna nuova libreria, formula o richiesta finanziaria.
+
+Otto casi aggiunti: persistenza, sei valori invalidi e storage negato. Suite
+frontend42PASS. Browser reale: click68→62, ArrowRight→63, reload mantiene63;
+colonne CSS effettive cambiano; a390px scrollWidth390, colonna358px, nessun
+controllo inapplicabile visibile e console errori vuota. Servizio privato di
+prova chiuso con exit0. È ripartizione dei due pannelli di analisi, non docking
+arbitrario di ogni scheda. La grafica/tema approvati sono conservati.
+
+
+## Riesame della nuova UI — 17 novembre 2026
+
+Ownership corrente: **P1 frontend**, P2 backend; il titolo originale sotto è
+storico. React/Tauri P1 `0598b57` è già integrato, candidato `a6d3f60`/PR #8
+sopra #7. Non ripetere bootstrap/migrazione o assegnare un secondo incarico.
+
+Requisito ancora incompleto individuato nella lettura: `App.tsx` espone tema
+chiaro/scuro e densità, `styles.css` usa colonne grid e breakpoint, ma non è
+stato individuato un controllo per ridimensionare manualmente i pannelli.
+Questo non è provato dal solo resize della finestra o dallo zoom del grafico.
+Annotazione per la missione P1 esistente, senza nuova assegnazione automatica:
+verificare e completare il requisito pannelli con controllo accessibile da
+tastiera/puntatore, limiti dimensionali e fallback responsive, riusando il layout
+esistente senza nuove librerie non necessarie. Testare preferenze/storage
+indisponibile e assenza di overflow; nessun cambiamento alle formule/API/rischio.
+È una lacuna di requisito, non un errore finanziario o un fallimento test inventato.
+
+Contratto API output ancora parzialmente descritto in OpenAPI: richiesta P2 nel
+BACKEND_HANDOFF, nessuna duplicazione della logica Python in TypeScript.
+GUI Windows 11, temi e pannelli devono essere verbalizzati nel piano QA; Mac
+e CI non sostituiscono quel collaudo. Nessun file frontend modificato qui.
+
 Branch: `feature/dashboard-ui`. Backend integrato con fast-forward al commit
 `1a68d5bbc25f3e1b6eceb0235f9ea2fdfa033240`, senza modificare i suoi moduli.
 Contratti di riferimento: [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md).
@@ -14,6 +69,13 @@ Contratti di riferimento: [BACKEND_HANDOFF.md](BACKEND_HANDOFF.md).
 - `src/ui/dashboard_panels.py` e `dashboard_style.py`: schede e tema.
 - `src/ui/charts.py`: figure Plotly, volume, SMA/RSI, marker e navigazione.
 - Backend, strategie, rischio e motore preesistenti restano invariati.
+
+## Presentazione compatta
+
+Il tema usa una palette scura ardesia con accenti viola, spaziature ridotte e
+grafico OHLC più compatto (420 px, 500 px con RSI). Gli avvisi restano visibili
+e i valori assenti restano N/D: la UI non li trasforma in zeri. Non vengono
+aggiunti bot, profili o azioni di creazione non supportati dal backend.
 
 ## Contesti e persistenza
 
@@ -78,8 +140,21 @@ contabile completo: non presentare questi elenchi come riconciliazione esaustiva
 ## Verifica e limiti
 
 La scheda segnale rilegge frame e calendario ogni 15 secondi, anche senza
-un rerun completo. Una regressione invoca ripetutamente il corpo reale del
-fragment; non verifica il timer nel browser.
+un rerun completo. Quando cambia lo stato/verifica o il contenuto Paper
+(account, posizioni, ordini), oppure quote/storico modificano i dati visibili,
+viene richiesto un singolo rerun dell'app per riallineare le superfici esterne
+ai fragment. Un aggiornamento del solo timestamp Paper non provoca un rerun:
+il fragment mostra comunque il nuovo timestamp. Flag monouso fanno saltare la
+lettura del fragment durante il rerun e impediscono richieste duplicate; i flag
+sono limitati ai fragment attivi e rimossi al cambio contesto. La frequenza
+dichiarata resta 15 secondi.
+
+Il rerun non rende atomiche le fonti: account, storico e quote sono acquisiti
+separatamente e possono avere timestamp diversi. Ogni pannello continua a
+mostrare la propria fonte/freschezza; dopo errori o dati scaduti/futuri i valori
+non verificati vengono invalidati, non ri-etichettati come correnti. Una
+regressione invoca ripetutamente i corpi reali dei fragment; non verifica il
+timer nel browser.
 
 I test UI usano Streamlit AppTest, broker finti e DB temporanei; i grafici
 verificano oggetti Plotly e configurazione di navigazione. I risultati puntuali
@@ -155,3 +230,197 @@ Verifica di questa revisione (macOS, Python 3.12.14): suite completa 601 passati
 gruppi con guard rete/credenziali a zero; un warning websockets.legacy.
 Lo skip riguarda Windows Proactor sul Mac. Windows e broker autentico non
 verificati; nessun ordine, server o automazione attivati.
+
+# Migrazione React / Tauri 2 — 16 novembre 2026
+
+Branch `agents/p1-react-tauri-migration-20261116`, base `e1bd306`.
+Questa aggiunta conserva integralmente dashboard e refresh Streamlit storici:
+nessuna modifica ad `app.py`, backend Python o strategie.
+
+## Frontend effettivo
+
+Un'unica applicazione React/TypeScript/Vite in `frontend/`, usata dal browser
+e dal WebView Tauri. Pagine: panoramica, mercati, proposte analitiche, portafoglio,
+storico, backtesting, connessioni e impostazioni. Sidebar responsive, palette
+scura/chiara e densità salvate localmente; nessuna credenziale nello storage.
+Non ci sono fixture, conti o grafici di fallback nel codice applicativo.
+Demo/Simulazione dichiarano dati sintetici e capitale virtuale; Paper e MT5
+richiedono dati reali o mostrano indisponibilità. I numeri assenti restano N/D.
+L'automazione è ferma e la UI non espone endpoint di avvio o submit broker.
+
+Lightweight Charts 5.3.0 (Apache 2.0) mostra candlestick e volume in due pannelli,
+crosshair, intervalli, zoom, trascinamento e adattamento. Il range viene conservato
+per contesto/strumento/intervallo durante il polling. Fonte, acquisizione, ultimo
+close storico e quota bid/ask restano distinti. Licenza e NOTICE della release
+sono in `frontend/public/`; il logo/link TradingView e l'attribuzione sono visibili.
+Fonte licenza: https://github.com/tradingview/lightweight-charts/tree/v5.3.0.
+
+## Contratto HTTP concordato con P2
+
+Base relativa `/api/v1`; fetch `credentials: include` e `X-Local-Request: 1`
+su tutte le richieste, inclusa GET `/session`. Sessione solo tramite cookie
+HttpOnly: il frontend non riceve, legge o conserva token. Ogni POST JSON usa
+Content-Type application/json; errori `{detail: string}` sono mostrati senza
+trasformarli in successo. Risposte/versioni non riconosciute sono rifiutate.
+
+- GET `/session`, `/state?context=...`, `/instruments`.
+  Instruments: `{api_version:'1', instruments:[{symbol,name}]}`.
+- GET `/market?context=...&symbol=...&interval=...`: barre epoch seconds,
+  fonte, as_of e quota nullable. Contesto/simbolo/intervallo discordanti,
+  barre duplicate/non ordinate o OHLCV incoerenti sono rifiutati.
+- GET `/proposal?...`: contratto P3 direction BUY/SELL/WAIT e validation_state
+  PAPER_PROPOSAL/NO_TRADE; livelli, rischio/rendimento, quantità, ID, fonte,
+  istanti ed expiry sono solo proposta. La scadenza viene rivalutata ogni secondo.
+- POST `/local-account` `{context, initial_cash}` crea solo il ledger fittizio,
+  senza reset; POST `/local-trades` `{context,symbol,side,quantity}` è esposto
+  solo in Demo/Simulazione. Nessun ledger locale viene inizializzato implicitamente.
+- POST `/backtest` `{context,symbol,short_window,long_window}` usa il motore;
+  risultato `{api_version,context,symbol,source,metrics,trades,equity:[{time,value}]}`.
+  Metriche `return_pct`, `max_drawdown_pct`, `total_trades`,
+  `total_transaction_costs` e curva equity arrivano dal backend.
+- POST `/connections/paper` e `/connections/mt5`, senza body: sola verifica
+  del connettore configurato esternamente. Nessun modulo password/chiavi.
+
+Le tabelle accettano campi SDK e ledger concordati: posizioni qty/quantity,
+avg_entry_price/average_entry, current_price/market_price. Il ledger non fornisce
+P/L di posizione o valore di mercato: restano N/D. Fee ingresso/uscita sono
+colonne distinte `entry_fee_alloc`, `exit_fee`; non viene inventato un totale.
+
+Refresh ogni 15 secondi, timeout HTTP 12 secondi. Cambio contesto, strumento o
+intervallo invalida subito i pannelli precedenti e annulla le richieste in volo.
+Errori di snapshot, mercato, proposta e bootstrap sessione rimuovono i rispettivi
+valori precedenti. L'ora dell'ultimo tentativo UI non viene presentata come ora
+di acquisizione del mercato o del conto.
+
+## Browser e sviluppo
+
+Node >=22.12, npm >=10. Dipendenze dirette fissate e lockfile versionato.
+`npm ci`; `npm run dev` espone solo `127.0.0.1:5173`; backend locale di sviluppo
+su `127.0.0.1:8765`. Il proxy cambia Host e riscrive Origin solo se corrisponde
+esattamente all'origine Vite locale, mantenendo gli altri Origin per il rifiuto
+backend. Per produzione `npm run build` genera `frontend/dist`, servita dal
+backend con `--ui-dir <percorso assoluto frontend/dist>`: API e cookie sono
+sullo stesso origin. Non usare un server statico separato per la produzione.
+
+## Shell desktop e pacchetto
+
+`src-tauri/` contiene Tauri 2.12.6/tauri-build 2.7.5, Cargo.lock e icone generate
+dalla CLI ufficiale da SVG locale. Rust minimo dichiarato 1.90, coerente con le
+dipendenze risolte. Non è necessario JavaScript Tauri o un plugin shell.
+Capabilities vuote, nessun comando IPC e navigazione limitata al solo origin
+loopback del backend posseduto. Non sono concessi shell arbitraria, filesystem
+o comandi esterni alla UI.
+
+Il bundler attende `src-tauri/binaries/aitradingbot-service-<target-triple>`
+(`.exe` Windows), prodotto reale P2 e ignorato da Git. Il binario installato viene
+risolto accanto all'eseguibile dell'app; in sviluppo dalla directory binaries.
+Avvio con `--port 0 --ui-dir <resources/ui> --data-dir <app_data_dir>/local-service`.
+Il bundle mappa `frontend/dist/` in `resources/ui/`; in debug usa frontend/dist.
+
+Prima riga stdout JSON `{port,pid,instance_id}` entro 15 secondi e massimo 4 KiB:
+porta non zero, PID uguale al processo figlio e instance_id non vuoto obbligatori.
+Solo dopo questo handshake viene aperto il WebView su http://127.0.0.1:porta.
+Errore/timeout interrompe solo il figlio posseduto; nessun tentativo di riusare
+processi esistenti. Chiusura finestra/uscita app scrive `shutdown\n` su stdin,
+attende fino a 2 secondi e, se necessario, termina esclusivamente il child handle.
+Lo stdout successivo viene drenato; stderr non viene esposto nella UI.
+
+`npm run desktop` e `npm run desktop:build` richiedono il sidecar reale per il
+target e i prerequisiti OS Tauri. Non sono launcher Python alternativi. Il parent
+rigenera il sidecar dopo l'integrazione finale P2/P3 prima del bundle distribuibile.
+
+## Verifiche e limiti di questa consegna
+
+I test client/componenti usano fetch controllato e fixture esclusivamente nei
+test. Coprono cookie/header, errori, HTML/versioni sconosciute, N/D, barre,
+isolamento contesti, backtest reale via API, assenza invio broker e invalidazione
+valori dopo errori di refresh/sessione. I test del canvas sono sostituiti da un
+componente di test: interazione reale candlestick e resa visuale richiedono la
+prova browser integrata del coordinatore. Nessun broker, ordine, automazione o
+credenziale reale è stato usato qui.
+
+Rust viene verificato su macOS arm64 con toolchain ufficiale isolata del parent,
+non installata globalmente. Il sidecar reale P2 è copiato solo nell'output ignorato
+per compilare la shell; cargo test non avvia backend o conto. Il test Rust verifica
+il rifiuto di PID diversi, porta zero/fuori range e handshake malformati.
+Il primo pin Tauri precedente ha mostrato incompatibilità interna con i transitive:
+risolta fissando Tauri/build correnti e Cargo.lock. Il primo check del progetto ha
+inoltre rilevato sidecar/icona mancanti: ora forniti reali senza stub applicativi.
+
+Per riprodurre: `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`,
+`npm run build`, `cargo fmt --manifest-path src-tauri/Cargo.toml --check`,
+`cargo test --manifest-path src-tauri/Cargo.toml`,
+`cargo check --manifest-path src-tauri/Cargo.toml`, `git diff --check`.
+L'override minimatch 11.0.1 riguarda solo la dipendenza di lint e rimuove
+l'advisory npm transitive senza alterare il runtime. Risultati puntuali finali
+sono nella consegna del commit al coordinatore. Windows/WebView2, installazione
+firmata, bundle distribuibile e avvio desktop richiedono le prove del parent;
+non sono attestati da unit test o cargo check.
+
+Esito osservato macOS arm64, Node 22.23.3/npm 10.9.9, Rust 1.100.0:
+`npm ci`, lint, typecheck e build riusciti; Vitest **13 passati, 0 falliti**;
+`npm audit` e audit runtime **0 vulnerabilità**; cargo test **1 passato, 0 falliti**;
+cargo check, rustfmt check e diff-check riusciti. Rustfmt è stato aggiunto solo
+alla toolchain temporanea isolata dopo il primo tentativo che lo segnalava assente.
+Nessun test Python rieseguito in questa worktree: il perimetro non tocca Python;
+la suite integrale resta al coordinatore nell'integrazione finale.
+
+## Correzioni di integrazione osservate — 16 novembre 2026
+
+La revisione del contratto reale ha rilevato e corretto mapping incompleti:
+lo storico usa `direction` come alternativa a `side`; il backtest fornisce
+`entry_fee`, mentre il ledger fornisce `entry_fee_alloc`. Entrambi ora sono
+mostrati senza ricostruire costi o fill. Il backtest resta giornaliero come il
+backend: il selettore intervallo è rimosso da quella pagina e la frequenza è
+esplicita. Finestre ammesse allineate all'API: breve 1–198, lunga 2–199.
+
+I valori conto usano `account.currency`; un conto MT5 EUR non è etichettato
+USD. Le posizioni MT5 mostrano volume in lotti, prezzo di apertura/corrente e
+profit forniti dal terminale. Gli ordini mostrano campi terminale disponibili,
+volume iniziale/residuo e codici tipo/stato espliciti, senza dedurre quantità
+eseguite. Per prezzi/backtest MT5 la valuta strumento non attestata resta
+`valuta strumento N/D`; il volume del feed MT5 implementato è dichiarato in tick.
+Le posizioni Demo non espongono valore/P&L per singola posizione: rimangono N/D,
+senza attribuire il totale del conto a una riga.
+
+Il crosshair conserva solo identità del contesto e timestamp; i valori OHLC
+vengono riletti dalle barre correnti. Barre vuote, errori e cambio contesto non
+lasciano più un valore del vecchio hover visibile; il refresh di una barra ne
+aggiorna anche i valori nel riepilogo OHLC.
+
+La prova nativa del coordinatore ha riprodotto la differenza PID del bootloader
+PyInstaller onefile e del worker Python. L'handshake ora ammette il PID diretto
+oppure `supervisor_pid` uguale al Child posseduto, sempre con worker PID positivo.
+Il backend dichiara supervisor_pid soltanto nel pacchetto frozen; resta opzionale
+per l'avvio script. Nessun PID ricevuto viene usato per terminare processi:
+shutdown e kill restano esclusivamente sul Child handle originariamente avviato.
+
+Regressioni RED/GREEN osservate per mapping/valuta, intervallo, hover e supervisor.
+Verifiche finali di questa correzione: lint, typecheck, build riusciti; Vitest
+**17 passati, 0 falliti**; cargo test **1 passato, 0 falliti**, cargo check riuscito.
+La prova nativa completa del nuovo handshake e il feed MT5 autentico rimangono
+separati: il primo è in corso al coordinatore, il secondo richiede Windows.
+
+### Metadati barre preservati nell'integrazione
+
+Market.metadata mantiene gli attrs originali restituiti dall'API; il parser
+accetta assenza come oggetto vuoto per compatibilità, rifiuta array/valori
+malformati e non ricostruisce calendari. Il grafico mostra quality, calendario
+e contratto barre disponibili; N/D se assenti. Test di regressione API Python
+e consumer TypeScript riprodotti rossi e poi verdi. MT5 è ora limitato a conti
+Demo verificati oltre che read-only; errore esplicito senza dati vecchi.
+
+
+## Consolidamento completion
+
+Polling single-flight e abort al cambio identità; context/symbol/interval della
+proposta devono coincidere con la selezione. Scadenza assente/invalida/passata
+rende la proposta NO_TRADE e nasconde i livelli. Indicatori calcolati dal backend,
+selezionabili e inizialmente spenti; SMA/EMA prezzo, RSI pane separato.
+La pagina Automazione legge il backend e invia solo comandi dry-run espliciti,
+con pulsanti coerenti allo stato. Nessun effetto finanziario da rendering/polling.
+Operazioni virtuali persistono chiave/payload incerto in localStorage fino a
+conferma; rifiuto definitivo libera il form, timeout/5xx preserva identità.
+Cambio porta cambia origine: dopo riavvio verificare storico prima di nuova richiesta.
+P/L realizzato giornalieroUTC distinto dal totale mancante. Backtest SMA singolo
+campione con OOS non eseguito; metriche mancanti restanoN/D.

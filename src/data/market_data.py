@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import zlib
 
 import numpy as np
 import pandas as pd
@@ -18,7 +19,8 @@ def generate_demo_prices(
         raise ValueError("periods must be positive")
 
     rng = np.arange(periods)
-    noise = np.random.default_rng(42).normal(0.0, volatility, periods)
+    # Deterministic per symbol: a fixed seed made every instrument show the same fake series.
+    noise = np.random.default_rng(zlib.crc32(symbol.encode('utf-8'))).normal(0.0, volatility, periods)
     trend = rng * drift
     prices = start_price * (1.0 + (trend / 100.0) + noise)
 

@@ -1,5 +1,118 @@
 # Matrice dei test e dell'evidenza
 
+## Candidata v1 — 27 novembre 2026 (PR #11)
+
+Esito: PASS = eseguito e superato; BLOCKED = richiede il proprietario; NON VERIFICATO = non eseguito.
+
+| Area | Prova | Dove | Esito |
+|---|---|---|---|
+| Python | compileall, pytest 927/2 saltati/1 warning, Ruff, pip check, pip-audit | macOS ARM locale | PASS |
+| Frontend | npm ci, Vitest 82, tsc, ESLint, build, npm audit | macOS ARM locale | PASS |
+| Rust | cargo test 4, cargo check, cargo audit (0 vulnerabilità, 3 avvisi) | macOS ARM locale | PASS |
+| CI | windows-tests, macos-tests, local-app ×3 sullo SHA finale | GitHub Actions | risultato nell'issue #9 e nella PR #11 |
+| MT5 conto | `company`, `trade_mode` e campi mancanti `N/D` | `test_snapshot_exposes_dashboard_fields_and_null_for_missing_ones` | PASS |
+| Packaging | NOTICE nell'installer, licenza MetaQuotes nel sidecar Windows | `test_installer_ships_third_party_notices_and_the_metaquotes_license` | PASS |
+| Packaging | build Windows rifiutata senza SDK | `test_windows_build_refuses_to_ship_without_the_mt5_sdk` | PASS |
+| MT5 sidecar congelato | worker avviato con SDK incluso, stop a `terminal_not_running` | CI `local-app (windows-latest)` | PASS in CI (nessun terminale) |
+| MT5 Demo reale | script 9 passi + conto nell'app | Windows 11 del proprietario | BLOCKED |
+| Installer firmato, notarizzazione | — | certificati del proprietario | BLOCKED |
+| Disinstallazione e conservazione dati | — | Windows 11 | NON VERIFICATO |
+
+## Esito infrastruttura CI — successivo alla fotografia15:35UTC
+
+Tentativo1 del run44113161618: tre jobSUCCESS;local-appMac CANCELLED prima
+che un runner fosse assegnato. Run globaleFAILURE. Annotazione GitHub:
+"The job was not acquired by Runner of type hosted even after multiple attempts";
+segnalata capacità limitata dei runner macOSarm64. Non è un fallimento di
+compilazione/test: nessuno step di quel job è partito. Avviato soltanto il
+retry di quel job sullo stesso SHA codicee06d29f, tentativo2 in coda nella
+verifica15:39UTC. Nessuna alterazione workflow/runner/protezioni, nessun4/4
+attribuito. Build/sidecar/smokeMac locali giàPASS; testMacCI989PASS/1skip e
+Windows990PASS, packagingWindowsPASS confermati dai log del tentativo1.
+Il link canonico del run mostra l'eventuale esito successivo; stato remoto
+ancora parziale per disponibilità infrastruttura, non sostituito da un vecchio
+run verde. Questo commit resta solo documentazione, runtime identico a e06d29f.
+
+
+## Evidenza remota della consegna — 17 novembre
+
+Codice verificato/pubblicato: e06d29f68fb0dc2292c7b485fd1a6ec81d931837.
+Run: https://github.com/foffo09/AITradingBot/actions/runs/44113161618
+Log dei tre job conclusi letti via API GitHub, non dedotti dal solo badge:
+- Windows Server2025 AMD64/Python3.11.9:152miratiPASS6.05s;
+  990completiPASS/0skip/1warning181.93s; guard0/0, Proactor eseguito,
+  compileall/pipcheck/diffcheckPASS.
+- macOS26.7.2 arm64/Python3.11.9:152miratiPASS4.00s;
+  989completiPASS/1skipProactor/1warning120.05s; guard0/0,
+  compileall/pipcheck/diffcheckPASS.
+- local-appWindows:51frontendPASS,3RustPASS5.80s;lint/TypeScript/build,
+  smokeHTTP sorgente/frozen, wrapperPowerShell vero e NSIS unsigned
+  install/smoke/uninstallPASS. Retention sentinella separata non prova app-data
+  personale/upgrade/GUIWindows11; nessuna pubblicazione installer.
+- local-appMac è ancora QUEUED nella fotografia15:35UTC: non dichiarato4/4.
+  Build/smokeMac locali sullo stesso codice giàPASS; il run remoto resta
+  consultabile per il suo esito successivo. Nessun cambio runner/protezioni.
+
+Questa chiusura modifica solo documentazione: il tree runtime/test/manifest
+resta quello del commit e06d29f. Nessuna suite ripetuta per attribuire al testo
+un nuovo risultato runtime. NotionP4 aggiornato, storico conservato; Hub/P1–P3
+senza editor e Guide accesso negato. Gate5/13 invariati, releaseBLOCCATA.
+
+
+## Follow-up preferenze — risultati successivi alla prima pubblicazione
+
+- Python completo seriale:989PASS/1skipProactor/1warning40.64s; guard rete0,
+  credenziali0. API77PASS2.24s include18test preferenze e16route tipizzate.
+- Frontend51PASS: race GET sospesa riprodotta1FAIL/45PASS prima del fix,
+  poi46PASS;5casi parser invalidi aggiuntivi tuttiPASS.
+- Compileall,pipcheck,lint,typecheck,build,diffcheckPASS. PyInstaller/TauriMac
+  ricostruiti dopo il codice, sidecar bundle identico al binario finale.
+- Smoke HTTP source/frozenPASS; browser su due porte consecutive ripristina
+  light/compact/69, errori console[], child entrambi0, app-data temporanea.
+- GUI Tauri precedente documentata separatamente; nuova prova preferenze nel
+  browser e bundle ricostruito non equivalgono a nuovo collaudo GUIWindows11.
+
+
+## Missione master 17 novembre — nuova verifica locale
+
+- Python completo seriale969PASS/1skipProactor/1warning39.33s,guard0/0;
+  API57PASS2.19s, frontend42PASS, Rust3PASS3.05s.
+- Compileall/pipcheck/lint/typecheck/build/diffcheckPASS; source/frozenHTTP e
+  Tauri.app51.44MiB costruiti sul Mac. Nessun PASS trasferito a Windows11.
+-4timeoutAppTest15s durante esecuzioni concorrenti, elencati in MASTER_AUDIT;
+ 9casi interessatiPASS5.96s e suite serialePASS senza alterazioni dei test.
+- Nuovi28casi test_local_contracts:14routeOpenAPI,4snapshotmalformati,indicatori,
+  idempotenzadopofill,SDKJSON,BUYSELLincompleti,equitynull,Paperincompleto,
+ 2shapecomplete. Review ha riprodotto5RED aggiuntivi prima delle correzioni.
+-8casiApp.test nuovi: preferenza/persistenza,noPOST,6valori corrotti e storage
+  negato. Browserreale puntatore/tastiera/reload/390px/console[]PASS.
+- Backup/ripristino/integrità e isolamento provati ad hoc con SQLite temporaneo
+  e modelloledger esistente; non test di disinstallazione/retention personale.
+- CI nuova: consultare run sullo SHA pubblicato del branch master, mai dedurre
+  da queste proveMac un risultato Windows. Broker/MT5autentici non eseguiti.
+
+
+## Rilettura delle prove sul candidato a6d3f60 — 17 novembre 2026
+
+I risultati seguenti sono run già eseguiti sullo stesso SHA, ricontrollati senza
+riavviarli inutilmente. Owner QA P4; mock e dati temporanei, nessuna credenziale.
+Le sei prove manuali W11 del piano E2E sono BLOCKED, non eseguite sul Mac.
+
+| ID / descrizione | OS / SHA | Prerequisiti e comando effettivo | Atteso | Effettivo / evidenza / stato |
+| --- | --- | --- | --- | --- |
+| R17-PY-WIN: regressioni offline | Windows Server2025/Python3.11.9, a6d3f60 | Venv CI senza segreti; `python -m pytest -q -rs --junitxml=windows-test-results.xml` | Nessun fail, skip Proactor vietato, guard0/0 | 942PASS/0skip/1warning134.48s; run43976031716/job133680126181, **PASS** |
+| R17-PY-MAC: regressioni offline | macOS CI/Python3.11.9, a6d3f60 | Venv CI; `python -m pytest -q -rs --junitxml=macos-test-results.xml` | Nessun fail, solo skip OS previsto, guard0/0 | 941PASS/1skip/1warning117.66s; stesso run/job133680125993, **PASS** |
+| R17-APP: componenti/build/smoke | Runner Windows/macOS, a6d3f60 | `npm ci`, lint/typecheck/test/build; `cargo test --locked --manifest-path src-tauri/Cargo.toml`; smoke source/frozen e build del workflow | Componenti e artifact nativi funzionanti nel perimetro CI | Frontend34/Rust3 ciascuno, build/smoke PASS; job133680126056/133680125535, **PASS** |
+| R17-NSIS: installer CI | Windows Server2025, a6d3f60 | Build NSIS unsigned; `scripts/check_windows_installer.ps1` | Risorse installate, UI/sidecar HTTP smoke, uninstall e sentinella esterna intatta | Stringa NSIS PASS nei log del job Windows; **PASS** limitato, nessuna prova retention app-data reale |
+| R17-LOCAL: suite Mac privata | macOS27.2.1arm64/Python3.11.18, candidato a6d3f60 | `python -m pytest -q`; gruppo mirato esistente | Nessun fail, guard0/0 | Log locali:941PASS/1skip/1warning38.61s; mirati160PASS4.82s; **PASS** |
+| R17-LIC: integrità inventario | Mac, manifest a6d3f60 | Metadata ambiente/npm lock/Cargo metadata, lettura soli testi legali | Identità uniche, lock Cargo coerente, nessun percorso personale | 819 record unici; hash manifest/testi; assert passate; **PASS** raccolta, licenze distribuibili ancora BLOCKED |
+
+Link run: https://github.com/foffo09/AITradingBot/actions/runs/43976031716.
+Compilazione e pip check nello stesso run riusciti; nessun nuovo test applicativo
+aggiunto o rimosso dalla presente revisione documentale. Il warning noto è
+`websockets.legacy`; lo skip Mac è Windows Proactor. I documenti nuovi sono
+controllati separatamente, senza attribuirgli una nuova esecuzione di pytest.
+
 Legenda: **CODICE** = ispezionato; **TEST** = esecuzione automatica locale; **MOCK** = integrazione sostituita; **NON VERIFICATO** = manca una prova; **FUTURO** = proposta non implementata.
 
 Piattaforme effettivamente provate: macOS (`.venv` Python 3.12.14, esecuzioni storiche) e Windows (Python 3.11.9, suite completa del 2026-11-02). I numeri puntuali sono nel [WORKLOG](WORKLOG.md). I risultati sono specifici per piattaforma; la suite automatica Windows non certifica l'UX interattiva completa né integrazioni autentiche.
@@ -106,3 +219,261 @@ Il contratto aggiornato è [DASHBOARD_HANDOFF](../DASHBOARD_HANDOFF.md).
 Fonte sintetica controllata, non redditività di mercato. Nessuna verifica
 Windows/broker autentico in questa fase. Contratti e limiti nel
 [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md); esiti delle suite nel WORKLOG.
+
+## Sprint 02 — CI Windows / Python 3.11 (11 novembre 2026)
+
+Base ricontrollata: `fe988394d6ecdcb56763a81c627943b4cbe684e1`.
+Workflow: [windows-ci.yml](../.github/workflows/windows-ci.yml), runner
+`windows-latest`, Python `3.11`. Trigger PR verso `main` e `workflow_dispatch`;
+permesso unico `contents: read`, credenziali checkout non persistite, nessun
+secret broker. Contesto Demo, automazione/esecuzione disabilitate e dotenv
+spento. Nessuna modifica a codice, test, requisiti o guard di isolamento.
+
+| Sistema / prova | Stato | Evidenza |
+| --- | --- | --- |
+| macOS 27.2.1 arm64 / Python 3.11.18 | PASS baseline locale del 10 novembre | 152 mirati; suite 747 passati, 0 falliti, 1 skip Windows Proactor; guard rete/credenziali 0/0; compilazione, pip check e diff-check PASS. Non è una nuova esecuzione Sprint 02. |
+| macOS / Python 3.11.18 | PASS ricontrollo locale dell’11 novembre | Stesso codice base: 747 passati, 0 falliti, 1 skip Proactor in 34,87 s; guard 0/0. Compilazione e pip check PASS. Non è una prova Windows. |
+| Windows Server 2025 x64 / Python 3.11.9 / GitHub Actions | PASS esecuzione nativa dell’11 novembre | [Run 42920818052](https://github.com/foffo09/AITradingBot/actions/runs/42920818052): 152 mirati (6,59 s), suite 748 passati (193,30 s), 0 falliti e 0 saltati. Guard rete/credenziali 0/0 in entrambi i gruppi; Proactor presente e superato senza skip. Compilazione, pip check e diff-check PASS. |
+| Altri sistemi/versioni, broker autentico, multi-host e UI interattiva | NON VERIFICATO in questa consegna | Nessun avvio server, feed o trading. Restano valide le sole evidenze storiche già datate sopra. |
+
+La sequenza CI installa `requirements-dev.txt`, compila app/config/src/tests,
+esegue i sei file mirati assegnati e la suite completa `pytest -q -rs`, quindi
+pip check e diff-check. Il report JUnit verifica che il caso Windows Proactor
+sia presente, eseguito e non saltato. I log di entrambi i gruppi devono contenere
+il riepilogo del guard a zero; i controlli originali non sono alterati.
+Il controllo whitespace verifica anche il delta base/head della PR (e non
+solo il checkout pulito); nel dispatch verifica l’ultimo commit.
+I check di isolamento, dipendenze e whitespace proseguono anche dopo errori dei
+test per raccogliere evidenza, senza trasformare un fallimento in successo.
+
+Per il primo run è necessaria una PR: il dispatch manuale richiede che il
+workflow sia già presente sul branch predefinito. Questo incarico non autorizza
+il merge su main. [Documentazione GitHub sul dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+Le azioni ufficiali sono bloccate ai commit delle release
+[checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) e
+[setup-python v7.1.0](https://github.com/actions/setup-python/releases/tag/v7.1.0).
+
+Evidenza Windows: [PR #5](https://github.com/foffo09/AITradingBot/pull/5),
+head `065859dced4db1253172ea1f8c01081ad20cd496`, job `windows-tests`.
+Il label richiesto è `windows-latest`; il run ha usato l’immagine reale
+`windows-2025-vs2026`, versione `20261103.298.1`, Microsoft Windows Server 2025.
+Python effettivo `3.11.9`, verificato anche mediante `sys.platform == win32`.
+Il controllo JUnit riporta `Windows Proactor executed: PASS`; tutti gli step
+conclusi con successo. Un warning preesistente `websockets.legacy` per gruppo.
+Non è una prova dell’interfaccia su Windows 11 desktop o di broker autentici.
+Questa evidenza aggiorna la precedente assenza di CI: la pipeline ora è
+riconosciuta da GitHub Actions ed è stata eseguita su una PR senza merge.
+Il dispatch manuale è configurato ma non provato, poiché il workflow non è
+ancora sul branch predefinito e il merge resta fuori ambito.
+
+## Sprint 03 — CI multipiattaforma / Python 3.11 (12 novembre 2026)
+
+Base impilata: `5e759404ef574c1dacc22a79a417f29362a8a2ef`, branch remoto
+`agents/p4-windows-ci-20261110`, [PR #5](https://github.com/foffo09/AITradingBot/pull/5)
+ancora in bozza e non integrata. Nuovo branch
+`agents/p4-cross-platform-ci-20261112`; nessun merge su main.
+Solo workflow e questa matrice possono cambiare.
+
+Il job `windows-tests` e tutti i suoi step sono conservati integralmente.
+Aggiunto `macos-tests` indipendente su `macos-latest`, Python 3.11, shell Bash
+con `-e -o pipefail` fornita da Actions: un errore pytest non viene nascosto da
+`tee`. Stessi SHA ufficiali checkout/setup-python, permessi minimi, nessuna
+credenziale persistita e stesse impostazioni conservative dello Sprint 02.
+Il trigger PR verso `main` resta presente; è aggiunto esclusivamente il branch
+base della PR impilata per poter provare entrambi i job prima del merge della
+PR #5. `workflow_dispatch` resta presente, senza dichiararne una prova manuale.
+
+Controlli macOS: compilazione, sei file mirati, suite completa con JUnit,
+report rete/credenziali 0/0 in entrambi i gruppi, verifica dello skip Proactor
+con la motivazione condizionale originale, pip check e diff del delta base/head
+PR. Nessun test, requisito, guard, codice trading o soglia finanziaria modificati.
+I conteggi storici dello Sprint 02 non sostituiscono le nuove esecuzioni.
+
+| Sistema / nuova prova Sprint 03 | Stato | Evidenza |
+| --- | --- | --- |
+| Windows Server 2025 x64 / Python 3.11.9 | PASS | [Job windows-tests](https://github.com/foffo09/AITradingBot/actions/runs/43120507994/job/130859457869): 152 mirati, 0 falliti/skip, 1 warning, 4,38 s; suite 748 passati, 0 falliti/skip, 1 warning, 93,98 s. Guard 0/0 nei due gruppi; Proactor eseguito PASS. Compileall, pip check e diff-check PASS. |
+| macOS 26.7.2 arm64 / Python 3.11.9 | PASS | [Job macos-tests](https://github.com/foffo09/AITradingBot/actions/runs/43120507994/job/130859457482): 152 mirati, 0 falliti/skip, 1 warning, 6,26 s; suite 747 passati, 0 falliti, 1 skip, 1 warning, 97,81 s. Guard 0/0 nei due gruppi; solo skip Windows Proactor condizionale previsto. Compileall, pip check e diff-check PASS. |
+
+Limiti: Windows 11 desktop/UI, broker autentici, feed, trading, multi-host e
+dispatch manuale non sono verificati da questo incarico. Nessuna release o
+integrazione della PR #5 autorizzata.
+
+Nuova evidenza Sprint 03, 12 novembre 2026 Europe/Rome:
+[run 43120507994](https://github.com/foffo09/AITradingBot/actions/runs/43120507994)
+concluso SUCCESS, evento `pull_request` sulla
+[PR #6 impilata](https://github.com/foffo09/AITradingBot/pull/6).
+Head verificato `1e4346672a0508d5fb6a54187dbd49bd9112bc50`;
+checkout effettivamente testato da entrambi i job:
+`e3ac5e53717b57614b49308428ca636d226ee3d9`, ref temporaneo `refs/pull/6/merge`
+creato da GitHub per la prova PR. Non è un merge effettuato sul branch o su main.
+
+Runner Windows: label `windows-latest`, immagine `windows-2025-vs2026`,
+versione `20261103.298.1`, OS `10.0.26100`, Python AMD64.
+Runner macOS: label `macos-latest`, immagine `macos-26-arm64`, versione
+`20261102.0473.1`, OS build `25G332`, Python arm64.
+Tutti gli step dei due job sono conclusi SUCCESS; `pip check` riporta
+`No broken requirements found.`. Warning noto `websockets.legacy`, uno per
+gruppo su ciascuna piattaforma. Il JUnit macOS conferma la motivazione originale
+`Windows Proactor uses an IPv4 loopback self-pipe`; nessuno skip aggiunto.
+
+Ricontrollo locale dello Sprint 03: macOS/Python 3.11.18, 152 mirati (2,02 s),
+747 completi (33,44 s), 0 falliti, 1 skip Proactor solo nella suite completa e
+1 warning per gruppo; guard 0/0. Compileall, pip check e diff-check exit 0.
+Confronto testuale: intero job Windows invariato. YAML e Bash controllati;
+prova sintetica del nuovo checker: guard zero/skip atteso accettati, guard
+nonzero e skip con motivazione diversa rifiutati. Un primo avvio di questa
+prova locale mancava di Python nel PATH della shell figlia: ripetuto con il
+PATH della venv, senza modifiche al workflow o ai test.
+
+Il trigger `main` è verificato nel file; il run reale usa la base impilata
+prescritta. Nessuna ulteriore PR verso main aperta per questa prova. La nuova
+copertura è provata sui runner indicati, non sul desktop Windows 11. Le
+modifiche restano limitate ai due file autorizzati; PR #5 invariata e nessun
+merge/release. Il commit documentale successivo registra questa esecuzione:
+i numeri qui sopra restano attribuiti al relativo head e checkout, non a un
+commit futuro.
+
+
+## Missione December QA & Release — 16 novembre 2026
+
+Base documentale `3df4f8260fcbb85ea8ccf2c2b680f672adc89af4`; data/host audit:
+16 novembre, macOS 27.2.1 arm64, sessione iniziata 11:55:10 UTC.
+Unico [piano end-to-end](END_TO_END_QA_PLAN.md), **35 scenari**, con
+ID/owner/piattaforma/SHA/prerequisiti/fixture/passi/atteso/test/evidenza/stato.
+[Architettura target e decisioni](ARCHITETTURA_APP.md). Nessun candidato
+React/FastAPI/Tauri/MT5 integrato identificato: non attribuire al nuovo
+prodotto i PASS storici di Python/Streamlit.
+
+| Gruppo ID nel piano | Perimetro | Stato osservato in questa sessione |
+| --- | --- | --- |
+| QA-AUD-01 | Base, worktree, branch, ancestry, manifest | PASS solo audit documentale Git alla BASE |
+| QA-AUD-02 | Import diretti dei sei moduli src/strategy | PASS statico: nessun framework UI/API/broker; non prova transitiva/runtime |
+| QA-WEB-01..03 | Launcher, stessa UI/API, avvio offline | BLOCKED: nuovo stack non consegnato |
+| QA-SEC-01..04 | Bind/Host/Origin/CORS/CSRF/sessione/capabilities/segreti | BLOCKED, salvo SEC-04 NON VERIFICATO; manca artifact nuovo |
+| QA-LIF-01..03 | Start/health/timeout/crash/shutdown/cleanup | BLOCKED |
+| QA-CTX-01..03 | Demo/Sim/Paper/MT5 separati | BLOCKED per nuova UI/API; test legacy mappati, non rieseguiti qui |
+| QA-MT5-01..03 | Unsupported/unavailable/unverified/connected/stale, read-only | BLOCKED: nessun adattatore MT5 |
+| QA-DAT-01..02 | Dati/provenienza/tempi e risposte incomplete | BLOCKED sul nuovo contratto API |
+| QA-ORD-01..03 | Pagine, idempotenza, fill e panic | BLOCKED; recupero pieno post-fill non certificato |
+| QA-STR-01..02, QA-UI-01 | P3→P2 API→P1 UI e refresh | BLOCKED; proposta pura non è consumer integrato |
+| QA-BKT-01..02 | Causalità, costi, stop-first, OOS | BLOCKED per adapter nuovo; nessuna attestazione di profitti |
+| QA-PKG-01..03 | Build/installer nativi Windows/macOS | BLOCKED: manifest/artifact assenti |
+| QA-OSS-01 | Licenze, SBOM, lock e canoni | NON VERIFICATO; pin diretti Python non bastano |
+| QA-CI-01 | Stato dei run Python storici su head noti | PASS storico ricontrollato via GitHub, non build web/desktop |
+| QA-MAN-01, QA-REL-01 | UX Windows11/macOS e candidato esatto | BLOCKED |
+
+### Evidenza CI storica distinta dalla nuova release
+
+PR #5 OPEN/DRAFT, head `5e759404ef574c1dacc22a79a417f29362a8a2ef`, base
+main `fe988394d6ecdcb56763a81c627943b4cbe684e1`; check `windows-tests` SUCCESS:
+[run 42921890791](https://github.com/foffo09/AITradingBot/actions/runs/42921890791).
+PR #6 OPEN/DRAFT, head `97ff2966b9d8d82d6c6f10d30e9da125656e5259`, base
+branch #5 a `5e75940`; `windows-tests` e `macos-tests` SUCCESS:
+[run 43121098415](https://github.com/foffo09/AITradingBot/actions/runs/43121098415).
+Stati PR/check ricontrollati il 16 novembre; zero review e richieste review.
+I conteggi già documentati sono **storici**, non esecuzioni di oggi:
+Windows Server 2025 x64/Python 3.11.9 152 mirati/748 completi, 0 fail/skip;
+macOS 26.7.2 arm64/Python 3.11.9 152 mirati/747 completi, un solo skip Proactor.
+Guard 0/0 e compileall/pip/diff-check PASS nei run indicati, warning noto
+websockets.legacy. Nessuna build React/Tauri/Python sidecar in quel workflow.
+
+Per il prodotto nuovo, browser locale/desktop Windows/desktop macOS/build
+native/Windows11 manuale/MT5 autentico hanno SHA candidato NON ASSEGNATO e
+stato BLOCKED o NON VERIFICATO come nel piano. Le prove autentiche richiedono
+consenso separato e non possono inviare ordini. Il guard pytest esistente
+non viene indebolito per consentire E2E loopback: servirà harness distinto.
+
+## 16 novembre — nuovo candidato React/FastAPI/Tauri (85453ce)
+
+Questa esecuzione sostituisce lo stato «artifact assente» della ricognizione
+precedente per i soli casi sotto, preservandone lo storico.
+
+| Area | Ambiente / prova effettiva | Esito |
+|---|---|---|
+| Suite offline completa | Macarm64/Python3.11.18 |870PASS/1skipProactor/1warning; guard0/0|
+| API/runtime/launcher/provider/rischio/contratti | Mac, mock |225PASS/1warning; guard0/0|
+| Frontend | Node22.23.3, lint/TS/build/vitest |17PASS; audit0vulnerabilità|
+| HTTP sorgente + frozen | Macloopback, SQLite temporanea |PASS sessione/Origin/fill/contesti/backtest/shutdown|
+| Browser | Brave, Demo sintetica e Paper scollegato |PASS rendering/ledger/contesti/backtest;390px senza overflow|
+| Rust | nativo Macarm64 |1PASS;release/bundle.app riusciti|
+| Desktop | .app reale, ambiente temporaneo |PASS rendering/navigazione/backtest/close/porta chiusa|
+| Compile/pip/diff | Mac |PASS; nessun requisito rotto|
+| Windows11 GUI | PC non disponibile |NON VERIFICATO|
+| Alpaca/MT5 autentici | non collegati |NON VERIFICATO|
+| NuovaUI esecuzione/ripristino ordini | nessuna route ordine |NON COMPLETATO; automazione ferma|
+
+Output, limiti e SHA dei componenti in MASTER_AUDIT.md. Smoke reale separato
+negli script, non mescolato alla guard offline. Nessun invio broker nei test.
+
+Consolidamento successivo f737455: **876PASS/1skip/1warning** nella suiteMac,
+**18PASSfrontend**, **61PASS API/MT5**; guard0/0. Nuovi casi rossi→verdi:
+metadati persistiti API/consumer e cinque tipi contoMT5 nonDemo/nonverificabili.
+Smoke sorgente/frozen e build.app ripetuti con successo. La seconda rilettura
+GUI dell'ultimo bundle è temporaneamente bloccata dallo schermoMac bloccato;
+la provaGUI precedente sullo stesso lifecycle è documentata, non sostituisce
+una provaWindows11. CI corrente e SHA sono registrati nell'audit al completamento.
+
+Chiusura successiva: **877PASS/1skip/1warning36.10s**, API25PASS e18frontendPASS;
+Rust1PASS. Nuovo test verifica che NO_TRADE venga realmente dal motore con
+provenienza, non da fallback d'errore. SmokeHTTP sorgente/frozen rafforzatoPASS.
+Fault nativo: sidecar mancante→exit1 senzapanic; bundlegenerato ripristinato.
+SbloccoMacrisolto; finale LaunchServices + GUI con metadata/proposta corretti,
+chiusura normale/porta chiusa/processi assentiPASS. Dettagli e timeout15s
+residuo nell'audit; nessun PASSWindows11 o brokerautentico dedotto.
+
+
+## Completion — evidenze locali del 16 novembre
+
+Base37a3840 + diff isolato; gli SHA dei commit e runCI successivi vanno riferiti
+al candidato effettivo, senza attribuire la baseline storica al nuovoSHA.
+
+| Prova | macOS27.2.1arm64 | WindowsCI nuovoSHA | Windows11GUI |
+|---|---|---|---|
+| compileall/Python3.11.18 | PASS exit0 | NON VERIFICATO | NON VERIFICATO |
+| Suite Python | PASS929/skip1/warn1;40.09s;guard0/0 | NON VERIFICATO | NON VERIFICATO |
+| API/ledger/readonly mirati | PASS113 | NON VERIFICATO | NON VERIFICATO |
+| Frontend/Node22.23.3 | PASS34;lint/typecheck/build0 | NON VERIFICATO | NON VERIFICATO |
+| Rust/Tauri | PASS3 e bundle.app90.77MiB | NON VERIFICATO | NON VERIFICATO |
+| HTTPsource/frozen | PASS;loopback/temp/no broker | NON VERIFICATO | NON VERIFICATO |
+| pipcheck/diffcheck | PASS | NON VERIFICATO | NON VERIFICATO |
+| npm audit | PASS0 advisory | NON VERIFICATO | NON VERIFICATO |
+| pip-audit | FAIL42 advisoryPillow;releaseBLOCKED | NON VERIFICATO | NON VERIFICATO |
+| PSwrapper/NSIS | NON VERIFICATO | NON VERIFICATO | NON VERIFICATO |
+| MT5autentico/nativehang frozen | NON VERIFICATO | NON VERIFICATO | NON VERIFICATO |
+
+Regressioncases: idempotency/payload/restart/concurrency, ownershipprocesso,
+stati dry-run, partial/filled/canceled/rejected/expired/unknown, pagine incomplete/
+overlap, dati mancanti/futuri, timeout/crashMT5, staleproposal/pollsingleflight.
+Test nuovi non sostituiscono né rimuovono quelli esistenti.
+
+
+### Aggiornamento dopo dipendenze compatibili e bundle minimo
+
+Nuova venv privataPython3.11.18: **931PASS,1skip,1warning in48.69s**, guard0/0.
+compileall exit0; pipcheck `No broken requirements found.` Streamlit1.66.1,
+Pillow13.0.0: pip-audit `No known vulnerabilities found`; npm audit0.
+Frontend34PASS/Rust3PASS; coldstartfrozen prima15.229s/dopo5.6624s, health0.0079s,
+idle0% su2s, RSS121168KiB,shutdown0.2602s. Misure locali non attestano altriOS.
+RunCI43970361875 su03200f7: suiteWindowsPASS, wrapperPSFAIL; candidato aggiornato
+con testresetTCP e diagnostico. Risultato finale del nuovoSHA nella PR8/Actions.
+La vecchia riga FAILPillow è storica, superata da upgradecompatibile+auditzero.
+
+
+Ultimo controllo dopo protocolloWindows/buildhook:936PASS/1skip/1warning38.53s,
+guard0/0. La confermaWindows del redirector e del pacchetto rimane demandata alla
+CI del prossimoSHA. Cargo-audit0vulnerabilità/2warning non soppressi. GUIcorrente
+Maclocked NON VERIFICATO; backend nativo privato healthy e stop con porta chiusa.
+
+
+### CI nativa completa e GUI finale (16–17 novembre)
+
+Codice `daa5b86`, run43973548981: quattrojobSUCCESS. WindowsServer2025/Python3.11.9:
+937PASS/0skip/1warning165.19s; Mac26.7.2arm64/Python3.11.9:936PASS/1skip/1warning109.86s,
+guard0/0. TargetCI152PASS, frontend34 eRust3 su entrambi. Source/frozenHTTP,
+wrapperPS/doppioavvio/stop/restart e NSISunsigned install/installedUI/uninstallPASS.
+GUI suMaclocale27.2.1: Demo/fillvirtuale privato, Simulazione separata, backtest,
+dry-run echiusura/portachiusaPASS. Bundle51.43MiB, primo probehealthy13.4164s;
+non una garanzia coldstart universale o misura paintUI.
+IDfill rafforzato dopo questaCI: locale941PASS/1skip/1warning38.89s guard0/0.
+Il nuovoHEAD ha checkCI propri nella PR8. Windows11GUI/brokerautentici restano
+NON VERIFICATI, licenza/notice BLOCKED. Niente release o ordini.

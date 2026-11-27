@@ -220,3 +220,30 @@ consumer UI concordato, persistenza ID consumati, contabilità Paper verificata
 per peak/counter, rivalidazione esecutiva e prove Windows. Il replay sintetico
 non valida performance; quello protetto si blocca sui livelli non idonei.
 Vedere STRATEGY_HANDOFF.md prima dell'integrazione generale.
+
+## 16 novembre 2026 — percorso React/FastAPI/Tauri integrato
+
+Vedi MASTER_AUDIT.md e LOCAL_APPLICATION.md per le nuove prove sul candidato85453ce.
+Le limitazioni storiche sopra non sono rimosse soltanto perché la suite passa.
+Nuova UI/API realmente collegate e bundleMac avviato;870testoffline+17frontend.
+Priorità residue: (1)CI nativa sullo SHA finale e provaGUIWindows11; (2)verifica
+lettureAlpaca/MT5 con accountPaper/terminaleautorizzati; (3)snapshot rischio completo
+prima di proposte operative; (4)migrazione controllata esecutore/riconciliazione,
+mai abilitata come scorciatoia; (5)installer/firma e audit transitivo prima di release.
+Nessun nuovo mercato, ottimizzazione reddituale o ordine autentico aggiunto.
+
+
+## Completion — priorità successive
+
+- P1 release: eliminare il conflitto Streamlit/Pillow vulnerabile con aggiornamento
+  compatibile e regressioni; completare licenza progetto/notice native/SBOM.
+- P1 verifica: collaudoWindows11GUI e cleanup frozen durante hangMT5, retention
+  appdata, install/upgrade/uninstall su macchina dedicata. CI non sostituisceGUI.
+- P2: riconciliazione autentica da adapter verificato e ledger/risk_snapshot completo
+  restano separati dal protocollo dry-run. Nessuna abilitazione finanziaria implicita.
+- Nessun ulteriore indicatore/strategia o riscritturaUI richiesti per il presente scope.
+
+
+Aggiornamento: bloccoPillow risolto con pin compatibili Streamlit1.66.1/Pillow13
+ed audit0. Restano prioritarie licenza/notice e proveWindows11; avvio alleggerito
+misurato5.6624s, non garanzia su ogni host.

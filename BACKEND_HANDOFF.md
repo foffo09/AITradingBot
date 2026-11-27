@@ -1,5 +1,73 @@
 # Backend e market data — consegna al coordinatore
 
+## Preferenze grafiche durevoli — follow-up 17 novembre
+
+API v1 ora espone 16 route tipizzate. GET/POST `/api/v1/preferences` usano
+session cookie, stesso Origin per POST e il lock locale esistente. Envelope:
+`{api_version:"1", preferences:{theme,density,analysis_width}, stored:boolean}`.
+Solo dark/light, comfortable/compact e intero50–75; campi extra/finanziari
+respinti422. GET senza file restituisce default68/storedfalse senza creare
+cartelle, conti o ledger; il client conserva la cache legacy. Il primo cambio
+esplicito salva soltanto queste tre preferenze. JSON UTF-8 in app-data, limite4KiB,
+file temporaneo chiuso/fsync e os.replace atomico, aliasfile409; corruzione503
+senza reset o payload. Errori di scrittura preservano il file precedente.
+Non è configurazione finanziaria, sincronizzazione multiprocesso o backup conti.
+18test nuovi +2schema route: gruppo API77PASS, rete/credenziali0/0.
+
+
+## Consolidamento implementato — missione master 17 novembre
+
+Branch `agents/master-consolidation-20261117`, base `a6d3f60`. La lacuna output
+annotata nella fotografia precedente è ora corretta nel ramo dedicato del
+coordinatore, senza riscrivere il branch P2. `src/api/schemas.py` definisce DTO
+per tutte le 14 route, error envelope e record provider estensibili JSON-safe.
+I response_model sono applicati anche al bootstrap cookie: session restituisce
+un corpo validato, con le proprietà HttpOnly/SameSite conservate. OpenAPI si
+ottiene con `app.openapi()`; docs/openapi HTTP restano disabilitati.
+
+ResponseValidationError produce 503 con solo detail generico, senza payload,
+traceback o header di rifiuto definitivo. Dopo un fill virtuale già registrato,
+il client mantiene la stessa UUID e il retry recupera il fill senza duplicarlo.
+Oggetti SDK in posizioni/ordini vengono convertiti con jsonable_encoder prima
+alla validazione: UUID/Decimal/datetime conservano la rappresentazione JSON SDK.
+Record annidati non finiti vengono respinti, non sostituiti silenziosamente con
+null. I record finanziari rimangono estensibili; la validazione di conto/feed
+resta nel provider esistente, non viene duplicato un RiskManager nei DTO.
+
+BUY/SELL PAPER_PROPOSAL richiedono contesto Paper, ID/tipo ingresso, timestamp
+con timezone e vita positiva, valori calcolati completi/positivi/finiti. DTO
+valido non significa feed autentico, fresco o autorizzazione di invio: il gate
+resta nel motore e il consumer deve verificarne la scadenza. Risposte legacy
+parziali mantengono soltanto il default prudenziale WAIT/NO_TRADE e la ragione;
+non possono promuovere una proposta incompleta. Equity backtest richiede numeri;
+i null di riscaldamento restano ammessi solo negli indicatori.
+
+Prove: 28 casi nuovi in test_local_contracts, tutti offline; gruppo API 57PASS.
+RED osservato prima dei fix. Nessuna credenziale, ordine o nuova dipendenza.
+Contatori completi/piattaforme e limiti sono nel verbale MASTER_AUDIT.
+
+
+## Riesame integrazione — 17 novembre 2026
+
+Candidato `a6d3f60`, PR #8 sopra #7. Backend già consegnato da P2 (`1f1389b`)
+e consolidato nel ramo integrazione: non rifare il servizio o la paginazione.
+Questo aggiornamento QA non cambia il contratto o il codice degli owner.
+
+Limite effettivo da trattare nella missione P2 esistente: `create_local_app`
+usa Pydantic per gli input, ma i route handler restituiscono dict/JSONResponse
+senza response_model o annotazioni di risposta. `app.openapi()` è generabile,
+mentre gli endpoint pubblici docs/openapi sono deliberatamente disabilitati;
+non confondere generazione dello schema con uno schema completo delle risposte.
+Richiesta tecnica per P2: completare gli schemi output/errori v1 senza esporre
+docs via HTTP, cambiare campi, serializzare SDK o aggiungere autorità finanziaria;
+verificare schema e fixture con il parser TypeScript esistente e test degli
+errori/null/provenance/UTC. Non modificare React o motore per adattarli a schemi
+incompatibili. Non è un nuovo task assegnato né un'autorizzazione a pubblicare.
+
+Health `ready` attesta il servizio locale, non account, feed o rischio utilizzabili.
+MT5 rimane read-only, opzionale e non verificato con terminale autentico. Il
+collaudo Windows e i residui di packaging sono nel piano QA e nei release gates.
+
 ## Base e perimetro
 
 Base concordata: `67f6a47085905b523ff11828866efdb653ccb744`.
@@ -328,3 +396,208 @@ Per ripetere i nuovi casi su PowerShell, dopo l'installazione già descritta:
 .\.venv\Scripts\python.exe -m pytest -q tests/test_backend_integration.py tests/test_backend_contract.py tests/test_bar_timing.py tests/test_fx_rates.py tests/test_paper_automation.py tests/test_paper_safety.py
 .\.venv\Scripts\python.exe -m pytest -q -rs
 ```
+
+## Desktop API v1 — 2026-11-16
+
+Nuovo servizio indipendente in `src/api/local_app.py`, senza importare il factory
+Omega o avviare worker. Runtime `python -m src.runtime.local_service --port 0
+--ui-dir ABSOLUTE_UI --data-dir ABSOLUTE_APPDATA`. Il processo tiene lo stesso
+socket 127.0.0.1 dalla bind alla chiusura. Readiness stdout dopo startup:
+`{port,pid,instance_id}`; stdin `shutdown`, EOF, segnali e POST shutdown fermano
+solo questo processo. UI statica stesso origin; proxy headers/websocket spenti.
+`data-dir` obbligatoria: usare appdata `AITradingBot/local-service` distinto dai
+vecchi DB. File locali `local-v1-demo.sqlite3` e `local-v1-simulation.sqlite3`;
+symlink/hardlink rifiutati all'avvio e all'accesso. Nessuna inizializzazione conto
+su GET, nessun reset. Il ledger originale e i suoi limiti di rischio/costi sono
+riusati. Input capitale USD: conversione identità interna esplicita; campi legacy
+EUR/FX non esposti come saldi o fixing. Equity da `summary.current_capital`.
+Statistiche senza campione e valori non finiti diventano null, non saldi zero.
+
+Contratto:
+
+- GET `/api/v1/health`: `{api_version:'1',status:'ready'}`.
+- GET `/api/v1/identity`: `{pid,instance_id}`, identità processo non segreta.
+- GET `/api/v1/session`: stesso envelope health e cookie HttpOnly SameSite=strict,
+  token effimero di processo solo nel cookie. Richiede Origin esatto oppure
+  `Sec-Fetch-Site:same-origin` più `X-Local-Request:1` per fetch browser stesso origin.
+- Tutte le altre route API richiedono cookie; Host esatto `127.0.0.1:porta`.
+  Origin presente deve coincidere; mutazioni richiedono sempre Origin esatto più
+  `X-Local-Request:1`. Nessun CORS aperto, frontend dev tramite proxy stesso origin.
+- GET state `?context=demo|simulation|paper|mt5`: `{api_version,context,
+  connection:{status,reason},account|null,positions,orders,trades,
+  automation:{state:'stopped',reason}}`. Demo/Sim `account` comprende cash,
+  initial_cash, equity, currency USD e statistiche ledger; posizioni native
+  `{symbol,quantity,average_entry,market_price,mark_timestamp,mark_source}`.
+  Trade history conserva campi originali `entry_fee_alloc`, `exit_fee`,
+  `entry_data_source`/`exit_data_source`; nessun P/L per posizione inventato.
+- GET instruments: `{api_version,instruments:[{symbol,name}]}` dal catalogo.
+- GET market `?context&symbol&interval`: `{api_version,context,symbol,interval,
+  status,reason,source,as_of,bars:[{time:epoch_seconds,open,high,low,close,volume}],
+  quote|null}`. Intervalli 1Min/5Min/15Min/1Hour/1Day/1Week. Demo/Sim esplicitamente
+  `source:'synthetic-demo'`, quote null; Paper mai fallback sintetico.
+- POST local-account `{context:demo|simulation,initial_cash:number}`: state;
+  seconda inizializzazione 409, capitale finito positivo e non booleano.
+- POST local-trades `{context:demo|simulation,symbol,side:buy|sell,quantity}`:
+  state più fill ledger locale, prezzo sintetico corrente dichiarato. Nessun
+  broker coinvolto, niente short. Limiti/costi originali AppSettings espliciti.
+- POST backtest `{context,symbol,short_window,long_window}`: `{api_version,
+  context,symbol,source,metrics,trades,equity:[{time,value}]}`. Motore originale,
+  dati Demo espliciti o storico reale solo dopo connessione; capitale del motore
+  separato dal conto locale, dichiarato `metrics.initial_capital`.
+- GET proposal `?context&symbol&interval`: delega pura P3 `evaluate_proposal`,
+  metadata preservati, risk_snapshot=None finché non attestabile; NO_TRADE
+  motivato se wrapper/dati/rischio indisponibile. Nessuna formula finanziaria
+  duplicata, nessun submit. Integrare commit P3 prima di build finale.
+- POST connections/paper, senza body: credenziali solo variabili di processo
+  ALPACA_API_KEY/ALPACA_SECRET_KEY, mai from_env/.env; paper=True nello SDK,
+  paper_trading_enabled=False e trasporto trading ulteriormente read_only=True.
+  GET successivi fanno soltanto letture conto/dati. Nessuna route ordini broker.
+- POST connections/mt5: optional import solo Windows; initialize/account_info/
+  positions_get/orders_get/copy_rates_from_pos/shutdown. Nessun order_send.
+  Mac unsupported esplicito. La presenza di modulo/terminale non è promessa.
+- POST shutdown: stesso cookie/Origin/header delle mutazioni, callback processo.
+- Errori `{detail:string}`; 401 sessione, 403 confine locale/CSRF, 422 input,
+  409 conto/rischio/operazione indisponibile, 503 storage. Errori SDK mai restituiti.
+
+Packaging: `scripts/build_backend.py`, requirements/entrypoint/README in
+`packaging/backend`; PyInstaller nativo onefile, nome target triple per Tauri
+`aitradingbot-service`. Build aarch64-apple-darwin osservata riuscita (27,8s),
+`--help` del binario exit 0; nessun server avviato. Binario e cache dist non
+committati; ricostruire dopo integrazione P3 e ultime modifiche API. Optional MT5
+hidden import deve essere disponibile nel build Windows. Firma/notarizzazione e
+Windows runtime non verificati. Logging legacy mantiene formato ma crea directory
+solo quando richiesto, runtime usa appdata/logs invece di scrivere nel bundle.
+
+Prove: 26 nuovi casi API/runtime/packaging/logging offline, rossi osservati prima
+delle implementazioni, poi verdi; guard rete/credenziali 0/0. Suite completa
+osservata al primo giro: 770 passati, 1 saltato Windows Proactor, warning legacy
+websockets; successivamente aggiunte regressioni storage/statistiche/USD.
+Compileall e pip check riusciti. Nessuna credenziale o DB personale aperti,
+nessun ordine o server avviato. Paginazione ordini affrontata nel commit seguente.
+
+### Paginazione ordini Paper — successiva consegna
+
+`AlpacaClient.get_orders()` conserva firma e oggetti restituiti. Prima pagina
+ALL/500/direction=desc; se satura, verifica ID univoci, submitted_at con timezone,
+ordine discendente e cursore. `until` è esclusivo: la richiesta successiva usa
+il penultimo timestamp distinto, sovrapponendo l'intero gruppo più vecchio.
+Gli ID sovrapposti devono ricomparire con lo stesso submitted_at e vengono
+deduplicati; una pagina corta dimostra la fine entro il contratto endpoint.
+Nessun incremento temporale artificiale e nessun ordine saltato al confine.
+
+Fonte primaria verificata: [Alpaca Get All Orders](https://docs.alpaca.markets/us/reference/getallorders-1),
+parametri after/until esclusivi e direction; SDK installato 0.44.0 espone
+quei parametri ma non i nuovi cursori before_order_id/after_order_id.
+
+Blocchi prudenziali preservati: metadati assenti/incoerenti, pagine fuori ordine,
+ID duplicati/cambiati, overlap mancante, cursore ignorato/ripetuto, errore fra
+pagine, 500 ordini allo stesso timestamp e budget massimo 100 richieste.
+In quei casi errore senza storico parziale, verifica conto invalidata; non
+si dichiara completo il risultato ambiguo. Il vecchio test 500 record senza
+metadati continua a bloccare. Nessun cambiamento ai retry o alle scritture.
+Snapshot REST resta non atomico: modifiche contemporanee allo stato di ordini
+possono avvenire fra letture; non viene promesso uno snapshot transazionale.
+
+TDD: 3 regressioni fallite prima della modifica; gruppo backend/Paper/paginazione
+99 passati, 1 warning, guard 0/0. I 15 casi includono 1200 ordini su tre pagine,
+collisioni recuperabili, collisioni ambigue e budget finito.
+
+### MT5 — validazione letture e limiti nativi
+
+L'adapter opzionale ora richiede `terminal_info.connected is True`, login valido,
+server/currency non mancanti e balance/equity numerici finiti, mai booleani o
+stringhe. Collections mancanti/malformate e numeri non finiti nelle posizioni o
+negli ordini rendono l'intero snapshot unavailable: account null, liste vuote,
+nessun riuso di valori vecchi. `account.updated_at` è l'osservazione locale UTC,
+**non** un timestamp attestato dal server broker; source e valuta sono espliciti.
+
+`symbol_info_tick` fornisce bid/ask validati e midpoint, timestamp da time_msc UTC,
+fonte `MetaTrader 5 terminal tick`. Età accettata 0..120s. Tick assente/invalidato
+non diventa close storico; tick vecchio/futuro restituisce status stale con
+quote null e bars vuote nella risposta market. Le barre storiche controllano
+OHLC coerente, prezzi positivi finiti non booleani, volume non negativo,
+timestamp UTC ordinati unici non futuri; volume esplicito in tick, non azioni.
+Il terminale può usare simboli diversi dal catalogo: nessun alias inventato e
+nessun fallback su altro strumento/provider.
+
+Whitelist aggiunta: terminal_info e symbol_info_tick; restano solo initialize,
+shutdown, account_info, positions_get, orders_get, copy_rates_from_pos e costanti
+intervallo. Nessuna funzione di invio o modifica ordini chiamata/esposta.
+
+[Documentazione initialize MetaQuotes](https://www.mql5.com/en/docs/python_metatrader5/mt5initialize_py):
+timeout connessione in millisecondi, ora esplicito 5000. L'SDK può avviare il
+terminale installato e riutilizzare l'ultimo conto configurato solo dopo il POST
+connessione dell'utente. Non legge file credenziali dal servizio Python e nessun
+terminale autentico è stato aperto durante questo lavoro. **Le letture native e
+shutdown non offrono un timeout per chiamata documentato: non è garantita una
+deadline globale o la reattività in caso di blocco della DLL.** Serve isolamento
+di processo prima di prometterle. Il timeout initialize non risolve quel limite.
+
+[PyPI ufficiale MetaTrader5](https://pypi.org/project/metatrader5/) verificato:
+5.0.6231 ha wheel CPython3.11 WindowsAMD64. Aggiunto file optional
+`packaging/backend/requirements-mt5.txt` con marker Windows/AMD64; non installato
+su Mac, nessun import MetaTrader5 su Mac. La build nativa include hidden import
+quando il modulo è disponibile. Windows/SDK/DLL/terminale reali non verificati.
+
+TDD: 29 casi rossi prima della validazione e un ulteriore rosso booleani OHLC;
+32 nuovi casi totali e gruppo desktop di 58 verdi, guard 0/0. Casi API provano
+che dopo un tick buono un tick scaduto non conserva bid/ask/barre precedenti.
+
+### Revisione integrazione — fallback proposta e errori visibili
+
+Il fallback `/proposal` riusa direttamente `SignalProposal.to_dict()` originale,
+con direction WAIT, validation_state NO_TRADE e reason leggibile, tutti i campi
+DTO presenti e operativi null. Rimossa l'alternativa action=NO_TRADE che non
+rispettava il parser frontend. Market e connessione Paper non hanno più
+`except Exception: pass`: restituiscono esplicitamente unavailable, senza
+valori precedenti o diagnostica SDK. Connessione rifiutata è unavailable anche
+quando verify_connection restituisce connected=False senza sollevare eccezioni.
+Tre regressioni rosse osservate e poi verdi; gruppo desktop 61 passati, guard0/0.
+
+### Native onefile ownership handshake
+
+La readiness aggiunge `supervisor_pid`: getppid() dal sistema operativo soltanto
+se sys.frozen è True, altrimenti null. Il campo pid resta il processo servizio
+che risponde anche a `/identity`; non viene sostituito con il bootloader.
+PyInstaller onefile può mantenere un supervisore separato dal processo Python.
+Il consumer verifica che pid oppure supervisor_pid nativo corrisponda al Child
+che possiede; quel Child resta l'unico handle da terminare, nessun kill di PID
+arbitrari ricavati da una porta o da un file. Instance_id e cookie invariati.
+Due test startup con server/socket simulati sono rossi senza il campo e verdi
+con entrambi i casi script/frozen. Nessun server o broker è stato avviato qui;
+la verifica del pacchetto autentico è svolta dal coordinatore separatamente.
+
+### Consolidamento del coordinatore — metadati e Demo MT5
+
+`GET /api/v1/market` conserva gli attrs originali in `metadata`, oltre a source,
+interval/as_of e quote originali. Il consumatore React preserva l'oggetto e
+mostra quality/bar_calendar/bar_time_contract, senza inventare valori mancanti.
+Su errore l'oggetto viene svuotato insieme alle barre; i metadati non autorizzano
+operatività da soli e il motore continua a usare il gate esistente.
+
+MT5 accetta soltanto `account_info().trade_mode == ACCOUNT_TRADE_MODE_DEMO` con
+tipi verificati: real/contest/missing/bool/string vengono rifiutati. Il controllo
+è ripetuto per ogni lettura e dopo la connessione, per non riusare dati dopo un
+cambio conto. Nessun cambio/login dell'account o ordine viene effettuato dal
+programma. Enum e significato dalla [documentazione ufficiale MetaQuotes](https://www.mql5.com/en/docs/constants/environment_state/accountinformation).
+I mock dichiarano esplicitamente il conto Demo; nessun terminale vero testato.
+
+
+## Contratti completion — API locale v1
+
+Base37a3840, branch agents/codex-completion-20261116. `POST local-trades` richiede
+idempotency_key UUID e vincola contesto/simbolo/lato/quantità al fill esistente.
+409 con X-Request-Outcome=rejected è un rifiuto definitivo senza commit; 409 senza
+header, timeout e5xx richiedono mantenimento dell’identità e verifica dello storico.
+`POST automation` accetta context demo/simulation, command start/pause/stop/cycle,
+request_id UUID; restituisce State. `state.automation` contiene stato maiuscolo,
+mode=dry-run, execution_enabled=false, timestamp/null, contatori e riconciliazione.
+Nessun endpoint di scrittura broker o import di snapshot/recovery.
+`market.indicators[]`: id,label,pane(price/rsi),unit,method,parameters,points(timeUTC
+in secondi,value finito/null). Attrs originali conservati. Quote/barre non diventano
+operative per la presenza di indicatori. `proposal` riporta sempre context/symbol/
+interval coerenti. `backtest` aggiunge strategy/parameters/interval/sample/validation.
+Account locale aggiunge daily_realized_pnl/pnl_day/pnl_timezone=UTC, senza cambiare
+le formule finanziarie. MT5Process ha la stessa API pubblica del reader,5s per
+scambio completo; errore/crash richiede riconnessione. SDK opzionale non incluso
+nel pacchettoCI standard. Vedere LOCAL_APPLICATION e MASTER_AUDIT per limiti.

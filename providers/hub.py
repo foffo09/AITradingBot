@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
 
 import httpx
 
 from config.providers import ProviderSettings
 from core.state import Market
-from providers.common import HistorySink, QuoteSink, error_code
+from providers.common import error_code
 from providers.crypto import CCXTData, HyperliquidData
 from providers.solana import SolanaData
 from providers.tradfi import AlpacaData, FinnhubData, IBData, PolygonData, YahooData

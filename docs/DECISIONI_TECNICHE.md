@@ -1,5 +1,29 @@
 # Decisioni tecniche
 
+## 17 novembre — preferenze senza dipendenza dalla porta
+
+Persistire solo tre campi UI in JSON atomico validato, nessuna nuova dipendenza.
+Sessione/Origin/lock riusati. Non usare SQLite finanziario per queste preferenze.
+Controlli UI disabilitati durante GET iniziale, così una modifica non cancella
+campi durevoli ancora ignoti; scritture serializzate/accorpate. Nessun retry
+finanziario, reset silenzioso di file corrotto o salvataggio di credenziali.
+
+
+## D17 — DTO di uscita e pannelli, missione 17 novembre
+
+Envelope APIv1 tipizzati con Pydantic senza cambiare endpoint o sblocco di ordini.
+Record provider estensibili JSON-safe; dati non finiti o forma invalida503 generico,
+mai payload/traceback. Esito di scrittura virtuale non verificabile resta ambiguo:
+UUID conservata, niente header rejected inventato. JSON SDK normalizzato prima
+del DTO per non perdere UUID/Decimal/datetime. BUY/SELL richiedono forma completa,
+non si ricostruiscono livelli o rischio; default legacy incompleto solo NO_TRADE.
+
+Pannelli di analisi ripartibili con range HTML accessibile e CSSvariables,
+preferenza locale delimitata, fallback a colonna. Scartata libreria di docking:
+non necessaria per il requisito corrente. Nessuna formula, broker o rischio in UI.
+La validità del DTO non sostituisce gate operativo/freschezza o coordinatore.
+
+
 ## D1 — Separare contesti e fonti
 
 Stato: confermato da codice e test. Demo, ledger, backtest e Alpaca Paper non condividono capitale. I percorsi DB sono verificati anche per identità del file. L'alternativa di un unico saldo aggregato è rifiutata perché mescola contabilità diverse.
@@ -144,3 +168,75 @@ OHLC ambiguo. Replay con livelli non validi fallisce, senza disattivare protezio
 Tranche fisse training/validation/OOS non sovrapposte e chiusura per-row esplicita.
 Nessuna validazione statistica, cambio UI o attivazione di trading impliciti.
 Dettagli: [STRATEGY_HANDOFF](../STRATEGY_HANDOFF.md).
+
+## D15 — Rerun solo quando cambia il contenuto del riepilogo
+
+Stato: verificato con AppTest e fragment invocati direttamente. La revisione
+dello snapshot Paper confronta account, posizioni e ordini; un nuovo
+`updated_at` da solo viene mostrato dal monitor ma non forza un rerun completo.
+Stato di verifica, errori e contenuti diversi continuano a riallineare le
+superfici esterne ai fragment. I flag monouso evitano la seconda lettura.
+
+Motivo: il timestamp descrive l'acquisizione, non una variazione dei valori
+esposti fuori dal fragment. Includerlo nella revisione provocava rerun anche
+quando il contenuto era identico e poteva interrompere un'azione UI in corso.
+Quote e OHLC mantengono invece timestamp e metadati propri; nessuna fonte viene
+fusa in uno snapshot atomico.
+
+## D16 — UI condivisa, servizio locale senza autorità di ordine
+
+Mandato master16novembre: React/TypeScript/Vite e Tauri2 aggiunti senza rimuovere
+Streamlit. FastAPIv1 serve asset/API stessa origine127.0.0.1 su socket mantenuto
+aperto dal bind; cookieHttpOnly/SameSiteStrict, Host/Origin/X-Local-Request.
+GET non crea capitale né invia ordini. POST virtuali espliciti e ledger separati;
+Paper è lettura con trasporto non scrivibile, MT5 read-only solo Demo verificata.
+Proposta pura riusa il gate originale e non deduce peak/counter del rischio:
+NO_TRADE quando lo snapshot non è verificato. Metadati attrs conservati fino al
+consumer React; qualità/storico non diventano automaticamente feed operativo.
+
+Shell possiede Child/pipe, mai PID arbitrari daHTTP; PyInstalleronefile comunica
+PIDworker e supervisorOS per handshake. Browser e desktop hanno directoryapp
+distinte e non sommano capitali. Chiusura/EOF termina il sidecar. Nessun deploy,
+mainmerge o release impliciti; Windows11/conti autentici richiedono prove distinte.
+
+
+## Completion — decisioni del 16 novembre 2026
+
+- Base37a3840, nuovo branch agents/codex-completion-20261116. Nessun merge o
+  modifica ai branch Persona1–4, PR7 o main.
+- Automazione limitata ad armamento/cicli espliciti dry-run. Nessun timer finanziario,
+  adapter scrittura o snapshot rischio inventato. Stati STOPPED/STARTING/RUNNING/
+  PAUSING/PAUSED/STOPPING/ERROR/RECOVERY_REQUIRED; riavvio attivo blocca, mai riparte.
+- Intent creati/validati/dry_run_completed; protocollo offline pending/acknowledged/
+  partial/filled/rejected/canceled/expired/unknown/reconciliation_required. Quantità
+  cumulative da executionID univoci, niente denaro contabilizzato nel diario.
+  Pagine mancanti/cicliche, riferimenti ambigui, fill futuri o saldo/posizioni
+  divergenti impediscono sblocco. Nessun endpoint pubblico importa prove sintetiche.
+- Operazioni virtuali richiedono UUID stabile: modifica intenzionale al contratto
+  input v1 e aggiornamento di tutti i chiamanti. Rifiuto definitivo distinguibile
+  dall’esito incerto; chiave non riutilizzabile per un payload differente.
+- MT5 in processo posseduto: deadline completa5s, allowlist di letture, invalidazione
+  su timeout/crash. ShutdownTauri20s giustificato dalle letture/close limitate; startup15s
+  invariato. SIGKILL padre/native hang frozenWindows restano gate non certificati.
+- Totale giornaliero N/D; soltanto realizzatoUTC verificabile. Indicatori riusati
+  da strategiePython; backtest singolo campione dichiarato, nessuna provaOOS inventata.
+- Nessun upgrade forzato Pillow13 contro il vincolo Streamlit<13. Vulnerabilità e
+  licenza progetto mancante bloccano la release; nessuna licenza del titolare inventata.
+
+
+Aggiornamento successivo alla prima decisionePillow: verificati metadata ufficiali
+Streamlit1.66.1 (`pillow<14`), quindi aggiornati solo Streamlit ePillow13.0.0.
+Nuova venv nel worktree per non cambiare ambienti di altri; pip-audit ripetuto0.
+Esclusi dal solo sidecar PIL/pyarrow inutilizzati; misura avvio da15.229 a5.6624s,
+senza cambiare deadline15s. Nessuna rimozione di funzionalitàlegacy.
+
+## D17 — Dismissione di Streamlit (issue #9, 24 novembre)
+
+React/TypeScript + FastAPI + Tauri 2 diventano l'unico prodotto. Rimossi `app.py`, i launcher
+Streamlit, `src/ui/` e le dipendenze streamlit/plotly/pillow. Parità: walk-forward, watchlist e stato
+sistema portati nella nuova UI/API; esclusi per mandato l'automazione Paper con invio ordini,
+l'azzeramento del ledger, il conto in EUR con cambio esterno e il link TradingView.
+Lock per contesto (M1): una lettura broker lenta non blocca Demo/Simulazione. Tema chiaro predefinito.
+Dettagli e mappatura dei test rimossi: `docs/STREAMLIT_RETIREMENT_REPORT.md`.
+Alternativa rifiutata: archiviare `app.py` con test saltati se Streamlit manca, perché avrebbe lasciato
+test silenziosamente non eseguiti e un secondo percorso di avvio.

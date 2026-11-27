@@ -1,0 +1,5 @@
+# Install after the repository runtime requirements; build only on the target OS/architecture.
+uvicorn==0.54.0
+PyInstaller==6.16.0
+# Pin the builder too: setuptools79 triggers a broken pkg_resources/backports hook.
+setuptools==84.2.1

@@ -1,5 +1,171 @@
 # Registro del lavoro
 
+## 27 novembre — Claude: audit finale e preparazione al merge (PR #11)
+
+Nessun nuovo branch. Audit dei 27 branch remoti (`MASTER_AUDIT.md`): 26 già nella candidata, `mie-modifiche`
+escluso. Commit Codex `11696c1`/`b7eb4b3` inesistenti su GitHub. Conto MT5: broker e tipo conto verificato.
+Wheel MetaTrader5 ispezionato: MIT completa; ora la nota viaggia nel sidecar e nell'installer, che prima non
+conteneva alcun NOTICE. Suite locali tutte PASS. Codex e Gemini: revisione richiesta, nessuna risposta.
+
+## 25 novembre (sera) — Claude: SDK MetaTrader5 nell'installer Windows
+
+Decisione del proprietario: l'installer Windows include l'SDK MetaTrader5. `build_backend.py` ora si ferma su
+Windows x64 se l'SDK manca, così non esce un installer senza MT5. NOTICE, guida Windows e report aggiornati.
+
+## 25 novembre (pomeriggio) — Claude: stabilizzazione v1 (issue #9)
+
+Codex senza risposta né branch pubblicati: presi in carico (annunciato nell'issue) formatter, test Windows
+instabile, script MT5, schema SQLite e NOTICE, su `agents/claude-v1-stabilization-20261125`. Integrato il
+diff formatter di Codex invariato, poi precisione dei prezzi dello strumento (MT5 `digits`), controllo
+strutturato dei dati del conto nella diagnostica, `check_mt5_api` in 9 passi, versione/backup del ledger.
+pytest 924/2 saltati, Vitest 82. Decisione: v1.0 non approvata (prova MT5 reale, review Codex, licenze).
+
+## 25 novembre — Claude: review del formatter Codex, rischio ora server MT5, documenti v1 (issue #9)
+
+Revisione del diff formatter pubblicato da Codex nell'issue #9 (branch Codex non sul remote): timestamp ok
+(sonda su tutte le risposte API, nessun orario senza offset), precisione insufficiente per forex a 5 decimali.
+R8: ora del server MT5 trattata come UTC; errori con scarto misurato, `check_mt5_api --symbol` legge quota e
+barre. Nuovi `V1_RELEASE_REPORT.md`, `INSTALLATION_WINDOWS.md`, `INSTALLATION_MACOS.md`. Decisione: v1.0 non
+ancora approvata (MT5 reale, revisione Codex, formato prezzi, schema SQLite). Branch `agents/claude-v1-review-20261124`.
+
+## 24 novembre — Claude: audit macOS, correzioni M1/L1–L6, dismissione Streamlit (issue #9)
+
+Codex irraggiungibile (TLS verso chatgpt.com intercettato dalla rete); lavoro eseguito da Claude su
+richiesta dell'utente, in branch propri: audit `agents/claude-macos-audit-20261124`, correzioni
+`agents/claude-macos-m1-fix-20261124`, modernizzazione `agents/claude-complete-modernization-20261124`.
+M1 (lock globale) e L1–L6 corretti con test RED→GREEN; walk-forward, watchlist e stato sistema portati
+in React/FastAPI; Streamlit, `app.py`, launcher legacy e `src/ui` rimossi; DMG macOS arm64 costruito e
+installato in cartella isolata. Suite Python 880 passed/1 skipped da ambiente pulito senza Streamlit,
+frontend 59, Rust 4. Correzioni scritte e verificate dallo stesso agente: serve revisione indipendente.
+Dettagli: `docs/CLAUDE_MODERNIZATION_REPORT.md`, `docs/STREAMLIT_RETIREMENT_REPORT.md`,
+`docs/MACOS_QA_AUDIT.md`. Notion non accessibile da questa sessione.
+
+## Esito infrastruttura CI — successivo alla fotografia15:35UTC
+
+Tentativo1 del run44113161618: tre jobSUCCESS;local-appMac CANCELLED prima
+che un runner fosse assegnato. Run globaleFAILURE. Annotazione GitHub:
+"The job was not acquired by Runner of type hosted even after multiple attempts";
+segnalata capacità limitata dei runner macOSarm64. Non è un fallimento di
+compilazione/test: nessuno step di quel job è partito. Avviato soltanto il
+retry di quel job sullo stesso SHA codicee06d29f, tentativo2 in coda nella
+verifica15:39UTC. Nessuna alterazione workflow/runner/protezioni, nessun4/4
+attribuito. Build/sidecar/smokeMac locali giàPASS; testMacCI989PASS/1skip e
+Windows990PASS, packagingWindowsPASS confermati dai log del tentativo1.
+Il link canonico del run mostra l'eventuale esito successivo; stato remoto
+ancora parziale per disponibilità infrastruttura, non sostituito da un vecchio
+run verde. Questo commit resta solo documentazione, runtime identico a e06d29f.
+
+
+## Chiusura remota — 17 novembre
+
+Push codicee06d29f riuscito. CI44113161618:Windows990PASS,Mac989PASS/1skip;
+local-appWindowsPASS,51frontend/3Rust e wrapper/NSIS. Logletti;local-appMac
+ancoraQUEUED15:35UTC,non dichiarato4/4. Maclocale build/smokePASS.
+NotionP4 aggiornato;Hub/P1–P3/Guide limitati. Follow-up solo documentale,
+nessun runtime/test/manifest cambiato dopo e06d29f. Main/PR7/8 invariati.
+
+
+## 17 novembre — chiusura preferenze durevoli nel branch master
+
+Dopo tre commit iniziali pubblicati, individuato limite di localStorage su porta
+dinamica. Correzione minima API/UI,18test backend,2schema e9frontend aggiuntivi.
+Review ha rilevato race caricamento/scrittura: RED→GREEN e controlli sospesi fino
+all'esito iniziale. Suite989PASS/1skip,frontend51PASS, guard0/0. Build/smokeMac
+ripetuti e riavvio browser su nuova porta provato con dati temporanei. Nessun
+branch owner/main modificato. CI finale e Notion riportati nella chiusura.
+
+
+## Missione master — codice e QA, 17 novembre
+
+Nuovo worktree/branch agents/master-consolidation-20261117 dalla basea6d3f60,
+fetch e ownership verificati; copiati soltanto i dieci documenti nostri precedenti,
+sorgente lasciata intatta. Nuovo mandato autorizza commit/push branch dedicato;
+main/PR7/PR8/branchowner preservati. GuideNotion accesso negato confermato.
+
+Implementati DTOoutput14route e errori503 sanificati; SDKJSONpreservato, no
+nonfiniti→null silenzioso, idempotenza dopo fill verificata. RangeHTML pannelli
+persistente50–75%, fallbackresponsive/storagecorrotto/negato. Zero dipendenze.
+Review indipendente: proposta incompleta poteva conservare BUY; aggiunto guard
+condizionale senza rifare RiskManager. EquityPoint separato dai nullindicatori.
+5nuove riproduzioniRED→GREEN;2shapecomplete verificano compatibilità. Il secondo
+rilievo, classificatoMinor dalla review, è trattato come completamento del
+contratto richiesto: equitynull causa rifiuto dell'intero backtest nel consumer.
+Non sostituisce gate dati/rischio; NO_TRADE resta il default legacy incompleto.
+
+Suite finale seriale969PASS/1skip/1warning39.33s,guard0/0;API57PASS2.19s,
+mirati278PASS/1skip9.03s prima degli ultimi7casi API;frontend42PASS;Rust3PASS3.05s;
+compileall/pipcheck/lint/typecheck/build/diffcheck0. Quattro timeoutAppTest15s
+osservati con build/suite concorrenti,9casi rieseguitiPASS5.96s e completa
+serialePASS senza cambiare test/timeout. Dettagli nel MASTER_AUDIT, non occultati.
+
+Source/frozenHTTPpass e bundleMac51.44MiB costruito; sidecar finale nel bundle
+confrontato byte-per-byte con dist. Cargo iniziale richiedeva sidecar non ancora
+preparato: costruito e ripetuto, nessun controllo rimosso. Adhoc backup/restore
+con capitale1000/cash900/posizione1/storico1,integritàok,originale invariato e
+Simvuota. Helper iniziale senza3parametri rischio fallivaTypeError, corretto con
+settingspreesistenti; nessun cambiamento alle soglie o dati personali.
+
+Browserprivato:click68→62,Right→63,reload63;390pxsenzaoverflow,colonna358px e
+console[].Backendchiusoexit0. GUI.app privata: data-dir/worker/porta58351
+attestati prima di getApp,primohealth13.5305s(nonpaint);puntatore+tastiera→63.
+DopoCmdQ, la letturaAX ha riaperto l'app con porta58403: nessuna azione eseguita
+nella nuovaistanza; chiusa subito senza ulteriori lettureAX che la rilanciassero.
+Originaleopenexit0,nessun processo del bundle rimasto; non si afferma che appdata
+standard non sia stata letta dal renderer. Nessuna operazione finanziaria,
+credenziale o DBpersonale aperto da CLI; screenshotprivato salvato prima.
+
+Auditpip e npm0advisory. Licenza progetto/NOTICE/Windows11/MT5nativo/retention
+restano gate espliciti. NativeUI provaMac non trasferita aWindows. Commit e
+push finali devono includere soltanto i18file previsti, senza artifact/cache/env.
+
+
+## 17 novembre 2026 — audit di readiness, nuovo mandato
+
+- Worktree Codex completion riusato pulito, branch agents/codex-completion-20261116,
+  HEAD/upstream a6d3f60. Fetch senza prune riuscito. Main remoto fe98839 e checkout
+  personale main2b2d35a con17modificati/2untracked preesistenti preservati.
+- PR5/6/7/8 rilette: tutte draft/CLEAN, review e richieste review vuote. #8 dipende
+  da#7, #6 da#5; nessun merge/retarget/push/review/dispatch eseguito.
+- Log già eseguiti sullo stessoSHA riletti, senza nuova suite inutile:
+  run43976031716 quattrojobSUCCESS, WindowsServer942PASS/0skip/1warning134.48s,
+  MacCI941PASS/1skip/1warning117.66s, frontend34/Rust3 ciascuno,guard0/0.
+  Locale941PASS/1skip38.61s e160mirati4.82s. Compileall/pipcheck/build/smoke/NSIS
+  rimangono prove del loro run, non nuove esecuzioni di questa fase documentale.
+- Notion: letti Hub/P1–P4, Guide non leggibile e link Nessun accesso. Hub/P1–P3
+  senza editor; P4 aggiornata nello stesso report conservando lo storico.
+  Reload+rilettura body: titolo aggiornamento una sola volta e storico presente;
+  screenshot conservato fuoriGit. Query iniziale main dopo reload non valida,
+  corretta con body; nessun falso PASS o cambio permessi/abbonamento.
+- Inventory819record:120Pythoninstallati/270npmlock/429Cargolock,729con testi
+  legali raccolti e hash. Cargo metadata confrontati al lock; identità uniche e
+  assenza percorsi personali controllate con assert. Artifact fuoriGit.
+  Licenza progetto/attribuzioni complete/binariWindows ancoraBLOCKED.
+- ASTlocalAPI:14route,0response_model,0annotazionioutput; lacuna P2 documentata.
+  P1 temi/densità presenti, nessun controllo resizepannelli individuato nel
+  rendering/CSS; annotato nell'incarico esistente, nessun nuovo prompt assegnato.
+  MT5AST:nessuna chiamata diretta operativa nei due moduli; prova solo statica.
+- Aggiornati trehandoff, audit, architettura, matrice, pianoQA con6casiWindows,
+  progress e20releasegates.12/20PASS(60%dei criteri delimitati),releaseBLOCKED.
+  CopiaGit separata non basta a isolare appdata: richiesto profilo di prova.
+- NessunWindows11 esposto dagli strumenti: chiesto metodo di accesso al
+  responsabile,senza credenziali. Nessun ordine/server/broker autentico o
+  automazione finanziaria. Solo documentazione modificata; nessuno staging,
+  commit,push,merge,installer pubblico o release nel nuovo mandato.
+- Alcuni tentativi apply_patch documentali con contesto errato sono stati
+  rifiutati prima della scrittura; corretti i contesti e applicati i soli file
+  previsti. Nessun file perso o test alterato; verifica finale separata sotto.
+
+Verifica finale effettiva: validatore documentale exit0. Perimetro esatto10file
+Markdown, tutti gli originali conservati (diff con sole inserzioni), link nuovi
+relativi risolti, nessun markerconflitto o segreto letterale sospetto nel testo
+aggiunto.20gate unici=12PASS/7BLOCKED/1NONVERIFICATO;6casiW11 presenti e non
+eseguiti.819identità licenze uniche,729con testi, hash artifact e sei manifest
+coincidenti. `git diff --check`:exit0/outputvuoto. Index vuoto, nessun untracked
+nel worktree, HEAD invariato; workingtree non pulito per i10documenti voluti.
+File: BACKEND_HANDOFF, DASHBOARD_HANDOFF, STRATEGY_HANDOFF; docs/ARCHITETTURA_APP,
+CODEX_MASTER_PROGRESS, END_TO_END_QA_PLAN, MASTER_AUDIT, MATRICE_TEST,
+RELEASE_GATES e WORKLOG (tutti .md). Nessun codice prodotto modificato.
+
 Le voci registrano risultati osservati, non promesse. I percorsi personali sono omessi; il checkout macOS indicato è `outputs/codex_omega_bot`, distinto da quello Windows.
 
 ## 2026-10-29 — Revisione di qualità precedente
@@ -500,3 +666,230 @@ Gli output seguenti comprendono il lavoro precedente; la stat non include i file
   già presenti, con protezioni più forti, nella release. Worktree agente e
   repository principale lasciati intatti; nessun ordine, server, automazione
   o push.
+
+## 2026-11-09 — Sincronizzazione refresh e vista compatta
+
+- Workspace: branch `agents/p1-dashboard-refresh-20261109`, base verificata
+  `fe988394d6ecdcb56763a81c627943b4cbe684e1`. La worktree attiva è isolata,
+  ma annidata un livello più in profondità rispetto al percorso inizialmente
+  richiesto; il precedente tentativo di spostamento è fallito per permessi.
+  Nessun altro checkout è stato modificato.
+- Refresh Paper: confronto del contenuto di account, posizioni e ordini;
+  il solo timestamp nuovo non provoca un rerun completo. Variazioni di stato,
+  errore o contenuto mantengono il rerun one-shot e saltano la richiesta
+  duplicata. Aggiunto un test in cui timestamp-only refresh non rilancia la
+  dashboard. Gli errori snapshot con timestamp invalido/scaduto restano visibili
+  come warning anche dopo il rerun.
+- UI: tema scuro ardesia/viola più compatto, padding e KPI ridotti, grafico OHLC
+  da 650/760 a 420/500 px e selettore temporale indaco. Le notifiche non sono
+  nascoste, i dati mancanti restano N/D secondo il contratto di progetto; non
+  sono stati inventati bot, metriche o azioni non supportati.
+- Test mirati UI/refresh/contesti: **98 passati, 0 falliti, 0 saltati, 1 warning**
+  (deprecazione `websockets.legacy`). Suite Windows/Python 3.11: **756 passati,
+  0 falliti, 0 saltati, 1 warning, 390,30 s**; guard isolamento rete/credenziali
+  **0/0**. `compileall` exit 0, `pip check` senza requisiti rotti e
+  `git diff --check` senza errori.
+- Nessun server Streamlit, broker, ordine o automazione avviati. Screenshot e
+  verifica visuale browser non eseguiti. Prossimo passo concreto: controllo
+  manuale locale della responsività desktop/mobile senza attivare operazioni
+  Paper.
+
+
+## 2026-11-16 — Persona 4, missione unica December QA & Release
+
+- Direttiva prioritaria Notion letta nella scheda Brave: lo Sprint 06 precedente
+  è assorbito nel piano unico React/FastAPI/Tauri + packaging Python + MT5 read-only.
+  Scadenze prioritarie 18/24/30 novembre, 7/14/18 dicembre; poi solo blocker.
+- Ambiente audit: macOS 27.2.1 (26B131) arm64; sessione iniziata 11:55:10 UTC /
+  12:55:10 Europe/Rome. Fetch origin senza prune. Base attesa e osservata:
+  `3df4f8260fcbb85ea8ccf2c2b680f672adc89af4`. Nuovo branch locale
+  `agents/p4-december-qa-release-20261116`; worktree dedicato
+  `AITradingBot.worktrees/p4-december-qa-release-20261116`, inizialmente pulito.
+  Nessun branch/cartella preesistente riusato, nessun lavoro altrui modificato.
+- File: creati ARCHITETTURA_APP.md e END_TO_END_QA_PLAN.md; append alla matrice,
+  release gates e a questo worklog. Nessun codice, test, dipendenza o workflow
+  modificato. Documenti preparati localmente; nessun nuovo commit/push in questa
+  fase, non richiesti esplicitamente dalla direttiva corrente. HEAD resta BASE.
+- Audit Git: main fe988394d6ecdcb56763a81c627943b4cbe684e1; PR5 head
+  5e759404ef574c1dacc22a79a417f29362a8a2ef; PR6 head
+  97ff2966b9d8d82d6c6f10d30e9da125656e5259. Base PR6 = branch PR5, non main.
+  API GitHub: entrambe OPEN/DRAFT, review/richieste review vuote, check correnti
+  SUCCESS. Sono le sole due PR aperte nella lettura (100 risultati richiesti).
+  Branch main protected=false; endpoint regole/rulesets [], protezione classica
+  404: nessuna protezione applicata rilevata, non dedotta dal solo errore 404.
+- Audit delle consegne: feature/backend-market-data 1a68d5b, feature/dashboard-ui
+  432ecdd e feature/strategy-engine 93fde78 sono antenati main. P1 refresh
+  e1bd306d2f1e6c5b7db9b90bf1fdacf9ad4d7b24 è separato, delta 9 file legacy.
+  Nessun manifest React/Cargo/Tauri/MT5 nei tree osservati; nessun nuovo report
+  migrazione P1/P2/P3 ricevuto nei materiali P4 letti. Non equivale a dichiarare
+  non iniziato il lavoro locale degli altri. Nuovi contratti/candidato BLOCKED.
+- Sorgenti ispezionate senza import runtime: main.py:23-43 lega FastAPI a
+  127.0.0.1, legge configurazione locale e sceglie runtime; ui/control_box.py:
+  123-187 inizializza e avvia worker nel lifespan, usa token nell'HTML e API
+  legacy stato/controlli/comando. Nessun launcher avviato. Il nuovo contratto
+  applicativo/sessione non si deduce da questa console.
+- Script AST sui sei moduli src/strategy, eseguito in memoria, ha prodotto:
+
+```text
+STRATEGY_DIRECT_IMPORTS 6 modules; violations= []
+```
+
+  PASS solo per import diretti UI/API/broker vietati nel perimetro ispezionato;
+  non prova transitiva/runtime o consumer P3→P2 API→P1 UI integrato.
+- Comandi audit effettivi: git fetch/rev-parse/branch/for-each-ref/ls-tree,
+  merge-base --is-ancestor, diff --stat/--name-status; rg e AST senza eseguire
+  applicazione; gh pr view/list e API GET branch/rules/rulesets. Output:
+  base 3df4f82 corretta, feature storiche antenate, nuovo stack assente nei tree.
+- Evidenza CI solo storica riletta via statusCheckRollup: PR5 windows-tests
+  SUCCESS su5e75940 (run42921890791); PR6 windows-tests/macos-tests SUCCESS
+  su97ff296 (run43121098415). Conteggi OS/Python/guard dei run precedenti
+  conservati nella matrice, non riportati come nuovi test della migrazione.
+- Context7 ha risposto Unknown tool; consultate fonti ufficiali Tauri sidecar e
+  capabilities, FastAPI CORS, PyInstaller operating mode. Nessun pacchetto
+  installato. Architettura proposta, decisioni aperte A01..A07 e 35 scenari con
+  fixture, passi, test legacy mappati e test futuri esplicitamente non implementati.
+- Blocker ordinati B01 consegne/candidato, B02 sessione/lifecycle/API, B03
+  paginazione/riconciliazione/consumer, B04 build/manuali, B05 licenze/lock/costi,
+  B06 review/policy integrazione. Nessun task assegnato o duplicato.
+- In fase documentale non eseguiti pytest/compileall/pip check o build native:
+  manca il candidato identificato dal responsabile. Nessun PASS nuovo del prodotto,
+  nessun server, broker/feed/MT5 autentico, ordine o automazione. Windows11
+  manuale e MT5 reale restano fuori da prove Mac; consenso separato necessario.
+- Esito: documentazione QA pronta; prodotto migrato e release readiness BLOCKED.
+  Controlli documentali e stato finale sono registrati nella chiusura sotto.
+
+
+### Chiusura documentale osservata — 16 novembre
+
+Validatore Python eseguito in memoria, senza import applicativi né file helper:
+
+```text
+PASS DOC-01: scope esatto 5 file; index vuoto; nessun file applicativo cambiato
+PASS DOC-02: storici matrice/gates/worklog preservati
+PASS DOC-03: 28 link relativi esistenti; Markdown bilanciato; test referenziati presenti
+PASS DOC-04: 35 ID unici e campi completi; stati: {'PASS': 3, 'BLOCKED': 30, 'NON VERIFICATO': 2}
+PASS DOC-05: diagramma/confini presenti; nessun segreto letterale rilevato
+PRODOTTO: nessun test runtime/build eseguito, candidato non assegnato
+```
+
+Due tentativi iniziali del solo validatore documentale hanno evidenziato suoi
+limiti: regex ID non comprensiva di MT5 e confronto maiuscole/minuscole per
+Shutdown. Corretti nel controllo in memoria e rieseguito; nessun test di prodotto
+alterato o cancellato. I 3 PASS del catalogo sono audit Git, import diretti e
+CI storica, non 3 nuove prove runtime della migrazione.
+
+`git diff --check` e `git diff --no-index --check /dev/null` per ciascuno dei due
+nuovi documenti: exit 0 e output vuoto. Index vuoto. Stato locale atteso:
+
+```text
+ M docs/MATRICE_TEST.md
+ M docs/RELEASE_GATES.md
+ M docs/WORKLOG.md
+?? docs/ARCHITETTURA_APP.md
+?? docs/END_TO_END_QA_PLAN.md
+```
+
+HEAD/base resta 3df4f8260fcbb85ea8ccf2c2b680f672adc89af4, nessun nuovo commit o
+push. Solo questi cinque documenti; nessun dato personale letto. Il report
+Notion distingue consegna documentale pronta e candidato/prodotto BLOCKED.
+Prossimo passo: il responsabile conferma contratti/report e SHA candidato;
+solo allora esecuzioni native/browser/desktop e suite offline con evidenza esatta.
+
+## 2026-11-16 — Mandato master, implementazione e integrazione
+
+Nuovo mandato utente sostituisce il perimetro solo documentale precedente.
+Worktree isolati P1/P2/P3, coordinamento su integration/local-web-desktop-20261116.
+Integrati React/Vite/Tauri, APIv1FastAPI, quattro contesti, runtime/packaging,
+launcherPowerShell, wrapperstrategia e correzione sizingrestrittiva. Legacy
+Streamlit conservato con il refresh già committato P1. Nessun mainmerge.
+
+Candidato applicativo85453ce:870pytestPASS/1skip/1warning37.58s guard0/0;
+225miratiPASS;17frontendPASS;lint/typecheck/build/auditnpm0;Rust1PASS;
+compileall/pipcheck/diffcheck0. Browserreale e .appMacnativa provati con dati
+sintetici e storage temporaneo, backtest, separazione conti, shutdown/cleanup.
+Difetto reale bootloaderPID riprodotto e corretto mantenendo ownership Child.
+Comandi iniziali di controllo con nome test inesistente e filtro processi che
+includeva la propria shell sono stati corretti e rieseguiti, non test oscurati.
+
+Nuova CI aggiunge smokeHTTP sorgente/frozen e compilazioneTauri Windows/macOS;
+risultato remoto ancora da osservare. MASTER_AUDIT.md contiene evidenza e limiti,
+LOCAL_APPLICATION.md installazione/avvio. NotionP4 aggiornato e riletto dopo reload,
+nessun duplicato task o cancellazione storico. Windows11GUI/brokerautentici,
+esecuzioneautomatica e release restano non verificati/non completati.
+
+Consolidamento f737455 pubblicato sulla PRdraft#7: metadata originale conservato
+API→React e gateMT5 soloDemo verificato ripetuto a ogni lettura. Test nuovi
+riprodotti fallenti prima del fix; poi876PASS/1skip/1warning34.78s guard0/0,
+18frontendPASS e61API/MT5PASS. SmokeHTTPfrozen e build.app nuovamente riusciti.
+Ultima GUItemporaneamente indisponibile per schermoMac bloccato; chiesto sblocco,
+non aggirato. Guida completa/decisioni aggiornate, main e lavoro preesistente intatti.
+
+Dopo sblocco: individuata e corretta regressione nostra (keywordarg metadata
+non previsto dal wrapperP3). NO_TRADE fallivachiusa ma mascherava il consumer
+rotto: testrosso dedicato e smokeHTTP ora assertano motivo/provenienza.
+877pytestPASS/1skip/1warning36.10s guard0/0; API25PASS;18frontendPASS;Rust1PASS;
+compileall/pipcheck/diffcheck0. Native setup failure riprodotto panic, corretto
+nel setuphook, faulttest sidecarassente→exit1senza panicPASS. Bundle90.62MiB,
+smokefrozen rafforzatoPASS e GUI nativa finaleLaunchServicesconcorrettomotivoP3,
+chiusuranormale/nessunorfano/porta65260chiusaPASS. Timeoutavvio15snon disabilitato.
+Nessuna modifica a soglie, credenziali, main o automazioni.
+
+
+## 16 novembre — completion isolato da37a3840
+
+Nuovo mandato autonomo su agents/codex-completion-20261116, worktree separato.
+Preservati main,PR7,quattrobranch e checkoutpersonale. Audit con tre revisioni
+indipendenti iniziali e review finale. Implementati: idempotenzaAPI/ledger,
+deadlineMT5 inprocesso, dry-run/controljournal e riconciliazione sintetica,
+contrattiUI/indicatori/metriche/backtest, launcherrecovery e monitor sidecar,
+CIwrapperPS e NSIS install/uninstall. Nessun ordine o automazione finanziaria.
+Mac:929PASS/1skip/1warning guard0/0;frontend34;Rust3;compileall/pipcheck/diffcheck0;
+source/frozenHTTP e build.app riusciti. EvidenzeGUI/CI finali da completare.
+VulnerabilitàPillow12.3 rilevate42;fix13incompatibileStreamlit<13. ReleaseBLOCCATA
+anche per licenza progetto/notice e proveWindows11/firma/nativehangmancanti.
+Dettagli e scelte in MASTER_AUDIT, LOCAL_APPLICATION e CODEX_MASTER_PROGRESS.
+
+
+Completion successivo: verificato Streamlit1.66.1 permettePillow13, quindi upgrade
+mirato e ambienteprivato. Suite931PASS/1skip/1warning48.69s guard0/0, pipcheck0 e
+pip-audit0. Il bundle non include piùPIL/Arrow inutilizzati: smokePASS e coldstart
+5.6624s contro15.229s, senza aumentare15s. Corretto stop con resetTCP transitorio.
+PRdraft8 pubblicata su branchcompletion, baseintegration; nessun mainmerge.
+NotionBrave debuggerunattached e fallbackIAB richiedeaccesso: report non salvato.
+GUI iniziale: riapertura involontaria in appdatastandard, dry-run fermato/appchiusa;
+nuovo diario di controllo conservato, nessun conto o ordine creato. Dettagli audit.
+
+
+Nuovi logCI hanno distinto startupWindowsValueError dal precedente rifiuto atteso;
+protocollo supervisor per redirectorvenv, test ownership invariati/estesi. Bundle
+esclude anche buildtoolruntime; diagnosticofrozen pubblica solo modulo mancante.
+SuiteMac936PASS/1skip/1warning38.53s guard0/0; compileall/pipcheck/diffcheck0.
+Cargo-audit0vulnerabilità,2warning non soppressi (proc-macro-error/glibLinux).
+SecondaGUIprivata impedita da schermo bloccato; backendhealthy privato fermato.
+
+
+## 17 novembre — chiusura completion
+
+Run43973548981/daa5b86 tuttoverde4/4: WindowsServer2025 937PASS,MacCI936PASS/1skip,
+frontend34/Rust3 entrambe, guard0/0. ProvewrapperPowerShell eNSISinstall/smoke
+UIinstallata/uninstall riuscite; nessuna pubblicazioneartifact. GUIprivataMac
+finale riuscita dopo sblocco: Demo/fillfittizio, Simulazioneseparata, backtest,
+dry-runstop, exit0/portachiusa. Bundle51.43MiB. Notionancoraindisponibile.
+Ultima guardia esecuzioni senzaIDstabile:5RED→GREEN, suite941PASS/1skip/1warning
+38.89s. Commitfinale invia questa guardia e la documentazione alla nuovaCI;
+checkdellaPR8 attestano il nuovoHEAD. Workingtree da lasciare pulito.
+ReleaseBLOCKED: licenza/notice, Windows11GUI/retention/firma/nativehang nonprovati.
+Nessun ordine, brokerautentico, merge main, deploy o release. Primo diario dry-run
+standardcreato duranteQA resta conservato, come segnalato all’utente.
+
+## 24 novembre — MT5 tramite servizio e review v1 (Claude Code)
+
+Causa del fallimento MT5 via API dimostrata su Windows: il thread `watch_stdin` in `ReadFile` sincrono sulla pipe
+di stdin bloccava l'avvio del worker spawn (prova A/B CI 45454479694: 0,08 s / timeout / 0,08 s). Correzione
+`shutdown_stream()` in `src/runtime/local_service.py`; deadline separate, macchina a stati, diagnostica, crash con
+exit code. Branch `agents/claude-emergency-delivery-20261124`, CI 45455628867 verde su tutti i 5 job
+(Windows 907 PASS / 2 skip). UI: invito al conto virtuale, conto MT5 in Panoramica.
+Review v1 (`agents/claude-v1-review-20261124`): SDK MT5 assente dal venv del launcher e dal sidecar Windows
+(ora in requirements-dev, solo Windows AMD64), CI che verifica servizio e sidecar congelato fino a
+`terminal_not_running`; decodifica `tasklist` robusta; percorsi diagnostici senza profilo utente.
+Non verificato: terminale MT5 reale (gate 5, PC del proprietario). Nessun ordine, merge o release.
