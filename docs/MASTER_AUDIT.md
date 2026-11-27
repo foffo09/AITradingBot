@@ -1,5 +1,54 @@
 # Audit e integrazione applicazione locale — 16 novembre 2026
 
+## Audit dei branch remoti — 27 novembre 2026, candidata `49079ab`
+
+Inventario rieseguito dopo `git fetch` (senza prune): 27 branch remoti più `origin/HEAD`. Confronto con
+`git merge-base --is-ancestor <branch> 49079ab` e `git rev-list --count 49079ab..<branch>`.
+
+| Branch | HEAD | Data | Nella candidata | Commit fuori dalla candidata |
+|---|---|---|---|---|
+| `main` | `fe98839` | 08/11 | sì (base della PR #11) | 0 |
+| `agents/claude-complete-modernization-20261124` | `cd75cba` | 24/11 | sì | 0 |
+| `agents/claude-emergency-delivery-20261124` | `e2ccaca` | 24/11 | sì | 0 |
+| `agents/claude-macos-audit-20261124` | `644ab56` | 24/11 | sì | 0 |
+| `agents/claude-macos-complete-fix-20261124` | `d5c4b04` | 24/11 | sì | 0 |
+| `agents/claude-macos-m1-fix-20261124` | `3884104` | 24/11 | sì | 0 |
+| `agents/claude-v1-mt5-bundle-20261125` | `49079ab` | 25/11 | sì (stesso commit) | 0 |
+| `agents/claude-v1-review-20261124` | `49079ab` | 25/11 | è la candidata (PR #11) | 0 |
+| `agents/claude-v1-stabilization-20261125` | `1aeba37` | 25/11 | sì | 0 |
+| `agents/codex-completion-20261116` | `a6d3f60` | 17/11 | sì | 0 |
+| `agents/master-consolidation-20261117` | `8a4d740` | 17/11 | sì | 0 |
+| `agents/p1-dashboard-refresh-20261109` | `e1bd306` | 09/11 | sì | 0 |
+| `agents/p1-react-tauri-migration-20261116` | `0598b57` | 16/11 | sì | 0 |
+| `agents/p2-fastapi-local-service-20261116` | `1f1389b` | 16/11 | sì | 0 |
+| `agents/p3-december-strategy-20261116` | `37afa86` | 16/11 | sì | 0 |
+| `agents/p4-cross-platform-ci-20261112` | `97ff296` | 12/11 | sì | 0 |
+| `agents/p4-december-qa-release-20261116` | `1542dce` | 16/11 | sì | 0 |
+| `agents/p4-release-gates-20261113` | `3df4f82` | 13/11 | sì | 0 |
+| `agents/p4-windows-ci-20261110` | `5e75940` | 11/11 | sì | 0 |
+| `chore/prepare-safe-commits` | `f74a961` | 29/10 | sì (storico, precede `main`) | 0 |
+| `feature/backend-market-data` | `1a68d5b` | 06/11 | sì (storico) | 0 |
+| `feature/dashboard-ui` | `432ecdd` | 07/11 | sì (storico) | 0 |
+| `feature/strategy-engine` | `93fde78` | 07/11 | sì (storico) | 0 |
+| `integration/local-web-desktop-20261116` | `37a3840` | 16/11 | sì | 0 |
+| `integration/release-20261108` | `9a30b2f` | 08/11 | sì (storico) | 0 |
+| `prova-ai-locale` | `87ece83` | 12/10 | sì (storico) | 0 |
+| `mie-modifiche` | `1afd8fb` | 03/11 | **no** | 1 (`1afd8fb`) |
+
+Esito:
+- 26 branch su 27 sono già interamente contenuti nella candidata: nessun lavoro da integrare di nuovo e
+  nessuna PR precedente da integrare separatamente.
+- `mie-modifiche` diverge (più basi di merge). Il commit `1afd8fb` tocca 15 file (+2219/−165): `app.py`
+  Streamlit, `src/strategy/auto_selector.py`, `src/trading/paper_automation.py`, `bar_timing`, `alpaca_client`
+  e i relativi test. È la linea OMEGA/Streamlit con automazione Paper: **escluso dalla v1** per direttiva
+  (Streamlit dismesso, nessuna automazione, nessun nuovo sistema di esecuzione). Conservato intatto.
+- Commit Codex `11696c1` (handshake versionato) e `b7eb4b3` (migrazioni SQLite): **non esistono** né nel
+  clone né su GitHub (API: "No commit found for SHA"), e il branch `agents/codex-v1-integration-20261124` non
+  è sul remote. Non revisionabili, quindi non integrati. La candidata copre gli stessi temi in modo
+  autonomo: `api_version: '1'` in ogni risposta e identità del processo nel lifecycle; `PRAGMA user_version`,
+  `quick_check`, backup e rifiuto delle versioni future nel ledger. Chiesto a Codex se restano necessari.
+- PR #11: OPEN, draft, base `main` (`fe98839`), `mergeable: MERGEABLE`, stato `CLEAN`; 90 commit sopra `main`.
+
 ## Esito infrastruttura CI — successivo alla fotografia15:35UTC
 
 Tentativo1 del run44113161618: tre jobSUCCESS;local-appMac CANCELLED prima

@@ -1,5 +1,23 @@
 # Matrice dei test e dell'evidenza
 
+## Candidata v1 — 27 novembre 2026 (PR #11)
+
+Esito: PASS = eseguito e superato; BLOCKED = richiede il proprietario; NON VERIFICATO = non eseguito.
+
+| Area | Prova | Dove | Esito |
+|---|---|---|---|
+| Python | compileall, pytest 927/2 saltati/1 warning, Ruff, pip check, pip-audit | macOS ARM locale | PASS |
+| Frontend | npm ci, Vitest 82, tsc, ESLint, build, npm audit | macOS ARM locale | PASS |
+| Rust | cargo test 4, cargo check, cargo audit (0 vulnerabilità, 3 avvisi) | macOS ARM locale | PASS |
+| CI | windows-tests, macos-tests, local-app ×3 sullo SHA finale | GitHub Actions | risultato nell'issue #9 e nella PR #11 |
+| MT5 conto | `company`, `trade_mode` e campi mancanti `N/D` | `test_snapshot_exposes_dashboard_fields_and_null_for_missing_ones` | PASS |
+| Packaging | NOTICE nell'installer, licenza MetaQuotes nel sidecar Windows | `test_installer_ships_third_party_notices_and_the_metaquotes_license` | PASS |
+| Packaging | build Windows rifiutata senza SDK | `test_windows_build_refuses_to_ship_without_the_mt5_sdk` | PASS |
+| MT5 sidecar congelato | worker avviato con SDK incluso, stop a `terminal_not_running` | CI `local-app (windows-latest)` | PASS in CI (nessun terminale) |
+| MT5 Demo reale | script 9 passi + conto nell'app | Windows 11 del proprietario | BLOCKED |
+| Installer firmato, notarizzazione | — | certificati del proprietario | BLOCKED |
+| Disinstallazione e conservazione dati | — | Windows 11 | NON VERIFICATO |
+
 ## Esito infrastruttura CI — successivo alla fotografia15:35UTC
 
 Tentativo1 del run44113161618: tre jobSUCCESS;local-appMac CANCELLED prima

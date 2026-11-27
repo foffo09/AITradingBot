@@ -1,5 +1,20 @@
 # Gate di integrazione e release
 
+## Gate v1 — 27 novembre 2026, PR #11
+
+| Gate | Stato |
+|---|---|
+| Architettura React/FastAPI/Tauri, nessun Streamlit | PASS |
+| Suite complete locali (Python, frontend, Rust) | PASS (macOS ARM) |
+| CI Windows/macOS sullo SHA finale | vedi issue #9 / PR #11 (non si usano SHA precedenti) |
+| Sidecar Windows con SDK MT5 e sua licenza | PASS in CI (build e import del worker) |
+| MT5 Demo reale su Windows 11 | BLOCKED (proprietario) |
+| Revisione Codex / Gemini | NON VERIFICATO (richieste, nessuna risposta) |
+| Licenza del progetto | BLOCKED (manca `LICENSE`, decide il proprietario) |
+| Testi completi delle licenze delle dipendenze nell'installer | BLOCKED per release pubblica; non necessario per collaudo privato |
+| Firma Windows, Developer ID, notarizzazione | BLOCKED (certificati del proprietario) |
+| Merge su `main` | BLOCKED (approvazione esplicita del proprietario) |
+
 ## Missione master — tredici gate distinti, 17 novembre
 
 Valutazione conservativa dopo le prove Mac: **5/13 COMPLETATA (38,46%)**,

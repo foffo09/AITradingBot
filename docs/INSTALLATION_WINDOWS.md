@@ -58,6 +58,16 @@ git pull
 
 Lo script è solo lettura: non invia ordini, non tocca posizioni e non attiva automazioni.
 
+5. Avvia l'app (`.\avvia_web.ps1 -Build`, oppure l'app desktop installata) con MT5 ancora aperto.
+6. Apri **Connessioni** e premi **Verifica MetaTrader 5**. Atteso: stato `connected`. Se non lo è, il
+   messaggio e il riquadro diagnostico indicano la fase (stessa numerazione dello script).
+7. Seleziona il contesto **MetaTrader 5** e apri **Panoramica**. Nel riquadro "Conto MT5" controlla, confrontandoli
+   con il terminale: Server, Broker, Tipo conto "Demo (verificato dal terminale)", Balance, Equity, Margine
+   libero e la valuta del conto. Un valore che il terminale non fornisce compare come `N/D`, mai come 0.
+
+Nell'issue #9 basta scrivere "passi 5–7 OK" oppure quale valore non coincide. Non incollare né il numero di
+conto né la password: l'app non li chiede e non li mostra.
+
 Come leggere i `FAIL` più probabili:
 - `1 SDK` → manca il pacchetto: ripeti il `pip install`.
 - `2 terminale` → MT5 non è aperto, o è un'installazione diversa da quella predefinita.

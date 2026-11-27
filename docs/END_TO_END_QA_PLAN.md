@@ -1,5 +1,16 @@
 # Piano QA end-to-end unico — December QA & Release
 
+## Verbale Windows 11 per la v1 — 27 novembre 2026 (sostituisce le priorità precedenti)
+
+Candidata: PR #11, branch `agents/claude-v1-review-20261124`, SHA indicato nell'issue #9.
+Procedura completa in `INSTALLATION_WINDOWS.md`, sezione "Verifica MT5":
+1. aprire MT5 e accedere **solo** a un conto Demo;
+2. `.\.venv\Scripts\python.exe -m scripts.check_mt5_api --symbol EURUSD` → 9 righe PASS;
+3. avviare l'app; Connessioni → **Verifica MetaTrader 5** → `connected`;
+4. contesto MetaTrader 5 → Panoramica → Server, Broker, Tipo conto, Balance, Equity, valuta uguali al terminale;
+5. chiudere l'app e controllare che la porta sia libera e che non restino processi `aitradingbot-service`.
+Esito da riportare nell'issue #9, senza numero di conto né password.
+
 ## Candidato della missione master — 17 novembre, successivo ad a6d3f60
 
 Usare branch agents/master-consolidation-20261117 e SHA del rapporto finale per

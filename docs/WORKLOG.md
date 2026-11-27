@@ -1,5 +1,12 @@
 # Registro del lavoro
 
+## 27 novembre — Claude: audit finale e preparazione al merge (PR #11)
+
+Nessun nuovo branch. Audit dei 27 branch remoti (`MASTER_AUDIT.md`): 26 già nella candidata, `mie-modifiche`
+escluso. Commit Codex `11696c1`/`b7eb4b3` inesistenti su GitHub. Conto MT5: broker e tipo conto verificato.
+Wheel MetaTrader5 ispezionato: MIT completa; ora la nota viaggia nel sidecar e nell'installer, che prima non
+conteneva alcun NOTICE. Suite locali tutte PASS. Codex e Gemini: revisione richiesta, nessuna risposta.
+
 ## 25 novembre (sera) — Claude: SDK MetaTrader5 nell'installer Windows
 
 Decisione del proprietario: l'installer Windows include l'SDK MetaTrader5. `build_backend.py` ora si ferma su

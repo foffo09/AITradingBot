@@ -1,10 +1,11 @@
-# AITradingBot v1.0 — report di release (aggiornato al 25 novembre 2026)
+# AITradingBot v1.0 — report di release (aggiornato al 27 novembre 2026)
 
-**Decisione: V1.0 NON APPROVATA.** Il software è pronto per il collaudo del proprietario. Mancano tre
-condizioni che nessun agente può soddisfare da solo:
-1. la prova MT5 reale su Windows 11;
-2. la revisione di Codex sulle modifiche di Claude;
-3. la licenza del progetto, la firma e l'approvazione del merge da parte del proprietario.
+**Decisione: V1.0 NON APPROVATA per la release pubblica; candidata privata pronta per il collaudo del
+proprietario.** I controlli tecnici eseguibili dagli agenti sono PASS (sotto). Restano aperti:
+1. la prova MT5 Demo reale su Windows 11 (BLOCKED: solo il proprietario);
+2. le revisioni indipendenti di Codex e Gemini (NON VERIFICATO: richieste, nessuna risposta);
+3. licenza del progetto, firma Authenticode / Developer ID, notarizzazione, approvazione del merge
+   (BLOCKED: decisioni del proprietario).
 
 L'SDK MetaTrader5 viene incluso nell'installer Windows (decisione del proprietario, 25/11/2026).
 
@@ -24,10 +25,16 @@ Nessun merge su `main`, nessuna release. Trading reale disattivato, MT5 solo let
   - `f54279d`: versione di schema e backup del ledger;
   - `9e0898d`: NOTICE con MetaTrader5;
   - `1aeba37`: chiusura del servizio su Windows senza traceback;
-  - build Windows che rifiuta di produrre l'installer senza l'SDK MetaTrader5.
-- **Non integrati**, perché non pubblicati sul remote e quindi non revisionabili: branch Codex
-  `agents/codex-v1-integration-20261124`, commit `11696c1` (handshake versionato UI/sidecar) e `b7eb4b3`
-  (migrazioni SQLite Codex).
+  - `49079ab`: build Windows che rifiuta di produrre l'installer senza l'SDK MetaTrader5.
+- **Stabilizzazione del 27/11** (stessa PR, senza nuovi branch): conto MT5 con broker (`company`) e tipo conto
+  verificato; licenza MIT di MetaTrader5 verificata nel wheel e spedita nel sidecar (`--copy-metadata`);
+  `THIRD_PARTY_NOTICES.md` incluso nell'installer.
+- **Non integrati:** commit Codex `11696c1` (handshake versionato) e `b7eb4b3` (migrazioni SQLite). Il 27/11
+  non esistono né nel clone né su GitHub ("No commit found for SHA"); il branch
+  `agents/codex-v1-integration-20261124` non è sul remote. La candidata copre gli stessi temi
+  (`api_version`, identità del processo; `user_version`, backup e rifiuto delle versioni future).
+- **Branch:** audit dei 27 branch remoti in `MASTER_AUDIT.md`. 26 sono già interamente nella candidata;
+  `mie-modifiche` (Streamlit/OMEGA con automazione Paper) resta escluso e intatto.
 
 ## Correzioni del 25/11
 | Problema | Correzione | Prova |
@@ -39,13 +46,30 @@ Nessun merge su `main`, nessuna release. Trading reale disattivato, MT5 solo let
 | Ledger SQLite senza versione né backup | `PRAGMA user_version = 1`, `quick_check` e backup SQLite prima di migrare; un ledger più recente viene rifiutato senza toccarlo | `tests/test_ledger_schema.py` |
 | MetaTrader5 assente dai NOTICE | nota nel generatore e nel file: licenza dichiarata MIT su PyPI, modulo binario nativo, redistribuzione da confermare | `THIRD_PARTY_NOTICES.md` |
 
+## Licenze e distribuzione (27/11)
+| Controllo | Esito |
+|---|---|
+| Wheel distribuito `metatrader5-5.0.6231-cp311-cp311-win_amd64.whl` (sha256 `1e0fb5e4…918f918d`, 7 file, include `_core.cp311-win_amd64.pyd`) | ispezionato |
+| `LICENSE.txt` nel wheel | **MIT completa**, "Copyright 2000-2025 MetaQuotes Ltd.": consente la redistribuzione se la nota di copyright e di permesso accompagna ogni copia |
+| Pagine ufficiali (PyPI, documentazione MQL5 Python) | MIT su PyPI; nessuna restrizione di redistribuzione né EULA specifica del pacchetto. I "Terms and Conditions" del sito MQL5 non sono stati letti: riguardano il sito e il terminale, che l'app non distribuisce |
+| Nota MIT nell'installer | prima: **assente** (nessun NOTICE nel bundle). Ora: `THIRD_PARTY_NOTICES.md` con il testo MIT di MetaQuotes nelle risorse Tauri e `LICENSE.txt` originale nel sidecar Windows |
+| Dipendenze Python, npm, Rust | inventario rigenerato: nessuna licenza non dichiarata, nessuna GPL/AGPL. I testi completi delle altre licenze (MIT/BSD/Apache) **non** sono ancora inclusi: necessari prima di una release pubblica |
+| Audit vulnerabilità | pip-audit 0, npm audit 0, cargo audit 0 vulnerabilità; 3 avvisi su dipendenze indirette di Tauri: `chrono` e `proc-macro-error` non mantenuti, `glib` 0.18 (solo Linux/GTK) "unsound" |
+| Licenza del progetto | **manca `LICENSE`**: decisione del proprietario, non inventata |
+
+Questo non è un parere legale. Per una candidata privata di test il blocco MetaTrader5 è risolto;
+per la release pubblica servono la licenza del progetto e i testi completi delle licenze delle dipendenze.
+
 Correzioni precedenti (R1–R7: worker MT5 su Windows, SDK nel `.venv` e nel sidecar, crash/timeout,
 `tasklist` localizzato, profilo utente nella diagnostica): in `MT5_CONNECTION_FIX_REPORT.md` e
 `EMERGENCY_DELIVERY_REPORT.md`.
 
-## Test sull'albero candidato (macOS ARM, 25/11/2026)
-- **Python:** pytest 926 passati / 2 saltati (solo Windows) · Ruff ok.
-- **Frontend:** Vitest 82 · `tsc` ok · `npm run lint` ok · `npm run build` ok.
+## Test sull'albero candidato (macOS ARM, 27/11/2026)
+- **Python:** compileall ok · pytest 927 passati / 2 saltati (solo Windows) / 1 warning (`websockets.legacy`
+  deprecato, da uvicorn) · Ruff ok · `pip check` ok · pip-audit 0 vulnerabilità.
+- **Frontend:** `npm ci` · Vitest 82 · `tsc` ok · `npm run lint` ok · `npm run build` ok · npm audit 0.
+- **Rust:** `cargo test` 4 passati · `cargo check` ok · cargo audit 0 vulnerabilità, 3 avvisi (sopra).
+- `git diff --check` ok. Su 25/11 (`1aeba37`, `49079ab`) i risultati restano attribuiti a quegli SHA.
 - **CI Windows/macOS:** sullo SHA finale della PR #11, risultato nell'issue #9. Non si usano risultati di
   commit precedenti.
 
@@ -63,15 +87,16 @@ Correzioni precedenti (R1–R7: worker MT5 su Windows, SDK nel `.venv` e nel sid
 | 9 | MT5 read-only su Windows | ⏳ solo il proprietario può provarlo (`INSTALLATION_WINDOWS.md`) |
 | 10 | Sicurezza | ✅ nessun segreto, nessun endpoint di scrittura broker, diagnostica senza dati del conto |
 | 11 | CI verde sul candidato finale | vedi issue #9 |
-| 12 | Revisione reciproca | ⏳ Claude ha revisionato e integrato il diff Codex pubblicato; Codex non ha ancora revisionato R1–R8 né le correzioni del 25/11 |
+| 12 | Revisione reciproca | NON VERIFICATO: Codex (issue #9) e Gemini (brief nell'issue #9, da consegnare) non hanno risposto. Il silenzio non vale come approvazione |
 | 13 | Documentazione | ✅ questo report, `ARCHITECTURE.md`, `INSTALLATION_WINDOWS.md`, `INSTALLATION_MACOS.md`, `MT5_CONNECTION_FIX_REPORT.md`, `WORKLOG.md` |
 
 ## Cosa serve per approvare
 1. **Proprietario, su Windows 11 con MT5 Demo aperto:** `.\.venv\Scripts\python.exe -m scripts.check_mt5_api --symbol EURUSD`,
    poi l'output incollato nell'issue #9. Se il passo 8 mostra uno scarto (es. +7200 s), si decide la
    correzione dell'ora del server su quella prova.
-2. **Codex:** revisione del branch di stabilizzazione e di R1–R8; pubblicazione di `11696c1`/`b7eb4b3` se
-   ancora utili.
-3. **Proprietario:** licenza del progetto; firma; approvazione del merge.
+   Poi i passi 5–7 della stessa guida: Connessioni → Verifica MetaTrader 5 → conto in Panoramica.
+2. **Codex e Gemini:** revisione indipendente di questo SHA (richiesta e brief nell'issue #9).
+3. **Proprietario:** licenza del progetto; firma e notarizzazione (o candidata solo privata); approvazione
+   esplicita del merge.
 
 Installazione, aggiornamento e backup: `INSTALLATION_WINDOWS.md`, `INSTALLATION_MACOS.md`.
