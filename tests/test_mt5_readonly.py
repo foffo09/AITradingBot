@@ -256,6 +256,9 @@ def test_snapshot_exposes_dashboard_fields_and_null_for_missing_ones(terminal):
     assert account['balance'] == 1000 and account['profit'] == 1 and account['margin_free'] == 980
     assert account['margin_level'] is None, 'non-finite stays N/D'
     assert account['server'] == 'Offline broker' and 'login' not in account
+    assert account['trade_mode'] == 'demo' and account['company'] is None, 'missing company stays N/D'
+    state.account.company = ' Offline Broker Ltd '
+    assert reader.snapshot()['account']['company'] == 'Offline Broker Ltd'
 
 
 def test_reader_and_worker_expose_no_write_operation():

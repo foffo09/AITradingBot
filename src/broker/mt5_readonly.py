@@ -157,9 +157,12 @@ class MT5ReadOnly:
                 value = getattr(account, name, None)
                 return float(value) if isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value) else None
             details = {name: optional(name) for name in ('profit', 'margin', 'margin_free', 'margin_level')}
+            company = getattr(account, 'company', None)
             return {'connection': {'status': 'connected', 'reason': self._reason},
                     'account': {'cash': cash, 'balance': cash, 'equity': equity, **details, 'currency': account.currency,
-                                'server': account.server, 'source': SOURCE, 'updated_at': _now_iso()},
+                                'server': account.server, 'trade_mode': 'demo',
+                                'company': company.strip() if isinstance(company, str) and company.strip() else None,
+                                'source': SOURCE, 'updated_at': _now_iso()},
                     'positions': positions, 'orders': orders}
         except Exception:
             return {'connection': {'status': 'unavailable', 'reason': 'Terminal account or snapshot is not verifiable.'}, 'account': None, 'positions': [], 'orders': []}

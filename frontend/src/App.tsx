@@ -630,6 +630,8 @@ function Mt5Account({ state }: { state: State | null }) {
       )}
       <div className="metrics">
         <Metric label="Server" value={null} caption={typeof account?.server === "string" ? account.server : "N/D"} />
+        <Metric label="Broker" value={null} caption={typeof account?.company === "string" ? account.company : "N/D"} />
+        <Metric label="Tipo conto" value={null} caption={account?.trade_mode === "demo" ? "Demo (verificato dal terminale)" : "N/D"} />
         <Metric label="Balance" value={account?.balance ?? account?.cash} unit={currency} caption="Terminale MT5" />
         <Metric label="Equity" value={account?.equity} unit={currency} caption="Terminale MT5" />
         <Metric label="Profitto" value={account?.profit} unit={currency} caption="Posizioni aperte" />
